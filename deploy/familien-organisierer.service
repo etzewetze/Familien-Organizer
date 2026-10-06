@@ -1,0 +1,24 @@
+[Unit]
+Description=Familien Organisierer
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=family-organizer
+Group=family-organizer
+WorkingDirectory=/opt/familien-organisierer
+ExecStart=/opt/familien-organisierer-node/bin/node /opt/familien-organisierer/server.mjs
+Environment=NODE_ENV=production
+Environment=DATA_DIR=/var/lib/familien-organisierer
+Environment=PATH=/opt/familien-organisierer-node/bin:/usr/bin:/bin
+EnvironmentFile=-/opt/familien-organisierer/.env
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

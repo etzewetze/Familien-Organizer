@@ -1,0 +1,23 @@
+import { DatabaseSync, backup } from 'node:sqlite';
+import { resolve, join } from 'node:path';
+import { existsSync, mkdirSync, copyFileSync, cpSync, writeFileSync, chmodSync, readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const root = fileURLToPath(new URL('../', import.meta.url));
+if (existsSync(join(root, '.env'))) process.loadEnvFile(join(root, '.env'));
+const data = resolve(process.env.DATA_DIR || join(root, 'data'));
+const photos = resolve(process.env.PHOTO_DIR || join(data, 'photos'));
+const targetRoot = resolve(process.argv[2] || process.env.BACKUP_DIR || join(root, 'backups'));
+if (targetRoot === data || targetRoot.startsWith(data + '/')) throw new Error('Sicherungen müssen außerhalb des Datenordners liegen.');
+if (targetRoot === photos || targetRoot.startsWith(photos + '/')) throw new Error('Sicherungen müssen außerhalb des Bilderordners liegen.');
+if (!existsSync(join(data, 'family.sqlite'))) throw new Error('Keine Datenbank gefunden. DATA_DIR prüfen.');
+const target = join(targetRoot, 'family-' + new Date().toISOString().replace(/[:.]/g, '-'));
+mkdirSync(target, { recursive: true, mode: 0o700 }); chmodSync(target, 0o700);
+const db = new DatabaseSync(join(data, 'family.sqlite'), { readOnly: true });
+try { await backup(db, join(target, 'family.sqlite')); } finally { db.close(); }
+copyFileSync(join(data, 'master.key'), join(target, 'master.key'));
+if (existsSync(join(root, '.env'))) copyFileSync(join(root, '.env'), join(target, '.env'));
+if (existsSync(photos)) cpSync(photos, join(target, 'photos'), { recursive: true, dereference: false });
+const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
+writeFileSync(join(target, 'backup.json'), JSON.stringify({ version, createdAt: new Date().toISOString(), photosIncluded: existsSync(photos), sourcePhotoDirectory: photos }, null, 2), { mode: 0o600 });
+for (const name of readdirSync(target)) if (name !== 'photos') chmodSync(join(target, name), 0o600);
+console.log(target);

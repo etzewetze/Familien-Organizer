@@ -1,0 +1,440 @@
+const $ = (selector, root = document) => root.querySelector(selector);
+const E = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const paths = {
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 11h18m-13 4h2m4 0h2m-8 3h2"/>',
+  home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-8h6v8"/>',
+  tasks: '<rect x="4" y="3" width="16" height="18" rx="3"/><path d="m8 9 1 1 2-2m3 1h3m-9 6 1 1 2-2m3 1h3"/>',
+  food: '<path d="M4 3v5a3 3 0 0 0 6 0V3M7 3v18m12-18c-3 2-4 5-4 8h4m0-8v18"/>',
+  lists: '<path d="M9 6h12M9 12h12M9 18h12m-17-12h.01M4 12h.01M4 18h.01"/>',
+  notes: '<path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9m-10 5 2-5 6-6a2 2 0 0 1 3 3l-6 6Z"/>',
+  photos: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+  settings: '<path d="m9 3 1 3h4l1-3 3 2-1 3 2 3 3 1-1 4-3-1-3 2-1 4h-4l-1-4-3-2-3 1-1-4 3-1 2-3-1-3Z"/><circle cx="12" cy="12" r="3"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="m5 12 4 4L19 6"/>',
+  left: '<path d="m14 6-6 6 6 6"/>', right: '<path d="m10 6 6 6-6 6"/>',
+  close: '<path d="m6 6 12 12M6 18 18 6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>',
+  people: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-16a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5"/>',
+  shield: '<path d="m12 3 8 4v6c0 4-8 8-8 8s-8-4-8-8V7Z"/><path d="m8 12 3 3 5-6"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  expand: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+  edit: '<path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/>',
+  trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',
+  pin: '<path d="m16 3 5 5-5 2-3 6-2-2-6 7m0-16 2-2 5 5-6 3Z"/>',
+  download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+  upload: '<path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5"/>',
+  refresh: '<path d="M20 7a9 9 0 0 0-15-2L3 8m0-5v5h5m-4 9a9 9 0 0 0 15 2l2-3m0 5v-5h-5"/>',
+  server: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6h.01M7 17h.01m4-11h6m-6 11h6"/>',
+  phone: '<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/>',
+  network: '<rect x="8" y="3" width="8" height="6" rx="1"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/><path d="M12 9v4H5v3m7-3h7v3"/>',
+  pause: '<path d="M8 5v14m8-14v14"/>', play: '<path d="m8 4 12 8-12 8Z"/>',
+  logout: '<path d="M9 3H4v18h5m3-9h9m-4-4 4 4-4 4"/>',
+  book: '<path d="M12 5C8 2 4 3 2 4v15c4-2 7-1 10 1 3-2 6-3 10-1V4c-2-1-6-2-10 1Zm0 0v15"/>',
+};
+const I = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.calendar}</svg>`;
+const nav = [['home', 'Übersicht', 'home'], ['calendar', 'Kalender', 'calendar'], ['tasks', 'Aufgaben', 'tasks'], ['meals', 'Essen & Rezepte', 'food'], ['lists', 'Listen & Einkauf', 'lists'], ['notes', 'Notizen', 'notes'], ['photos', 'Bilderrahmen', 'photos']];
+const app = $('#app'), editor = $('#editor'), confirmDialog = $('#confirm');
+let S, status, route = location.hash.slice(1) || 'home', cursor = '', filter = '', online = true, editing = null, busy = false;
+let calendarMode = innerWidth < 760 ? 'agenda' : 'week', taskMode = 'all', activeList = 'shopping';
+let photoSource = localStorage.getItem('photoSource') || 'local', photoItems = [], photoLoaded = false, photoLoading = false, photoAlbum = localStorage.getItem('photoAlbum') || '', albums = [], photoUrls = new Map();
+let slideTimer, slideIndex = 0, slidePaused = false, slideActive = false;
+const ds = date => new Date(date + 'T12:00:00');
+const addDays = (date, count) => { const d = ds(date); d.setDate(d.getDate() + count); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const monday = date => addDays(date, -((ds(date).getDay() + 6) % 7));
+const shortDate = date => ds(date).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+const weekCaption = date => `${shortDate(monday(date))} – ${shortDate(addDays(monday(date), 6))}`;
+const weekday = date => ds(date).toLocaleDateString('de-DE', { weekday: 'short' });
+const member = id => S?.members.find(m => m.id === id);
+const personStyle = id => { const color = member(id)?.color || '#6366f1'; return `--person:${E(color)};--person-bg:${E(color)}16`; };
+const avatar = (id, size = '') => { const m = member(id); return `<span class="avatar ${size}" style="${personStyle(id)}">${E((m?.name || 'Alle').slice(0, 1).toUpperCase())}</span>`; };
+const btn = (label, action, icon = '', css = '', attrs = '') => `<button class="button ${css}" data-action="${action}" ${attrs}>${icon ? I(icon) : ''}${E(label)}</button>`;
+const iconBtn = (label, action, icon, attrs = '') => `<button class="icon-button" title="${E(label)}" aria-label="${E(label)}" data-action="${action}" ${attrs}>${I(icon)}</button>`;
+const empty = (title, description, icon = 'calendar', action = '') => `<div class="empty">${I(icon)}<h3>${E(title)}</h3><p>${E(description)}</p>${action}</div>`;
+const visibleEvents = date => S.events.filter(e => e.startDate <= date && e.endDate >= date && (!filter || e.memberId === filter || !e.memberId)).sort((a, b) => (a.allDay ? '00:00' : a.startTime).localeCompare(b.allDay ? '00:00' : b.startTime));
+function due(task, date) {
+  if (task.startDate && date < task.startDate) return false;
+  const day = ds(date).getDay();
+  return task.repeat === 'daily' || task.repeat === 'weekdays' && day > 0 && day < 6 || task.repeat === 'weekly' && day === ds(task.startDate).getDay() || task.repeat === 'none';
+}
+const completion = (task, date = cursor) => S.completions.find(c => c.task_id === task.id && c.day === (task.repeat === 'none' ? 'once' : date));
+const visibleTasks = date => S.tasks.filter(t => due(t, date) && (!filter || t.memberId === filter || !t.memberId) && (taskMode === 'all' || taskMode === 'routines' && t.repeat !== 'none' || taskMode === 'todos' && t.repeat === 'none'));
+const meal = date => S.meals.find(m => m.date === date);
+const recipeFor = date => S.recipes.find(r => r.id === meal(date)?.recipeId);
+const quantity = n => n ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 }).format(n) : '';
+const clockText = () => new Intl.DateTimeFormat('de-DE', { timeZone: S?.settings.timezone || 'Europe/Berlin', hour: '2-digit', minute: '2-digit' }).format(new Date());
+function toast(message, error = false) {
+  const element = document.createElement('div'); element.className = 'toast' + (error ? ' error' : ''); element.textContent = message;
+  $('#toasts').append(element); setTimeout(() => element.remove(), error ? 7500 : 4000);
+}
+async function api(path, method = 'GET', data) {
+  const options = { method, headers: { 'X-Family-Request': '1' } };
+  if (data !== undefined) { options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(data); }
+  let response;
+  try { response = await fetch('/api' + path, options); }
+  catch { throw new Error('Der Server ist gerade nicht erreichbar. Bitte die Verbindung prüfen.'); }
+  const output = await response.json();
+  if (!response.ok) { if (response.status === 401 && S) { S = null; renderAuth(true); } throw new Error(output.error || 'Die Anfrage ist fehlgeschlagen.'); }
+  return output;
+}
+async function refresh(renderView = true) {
+  const next = await api('/state');
+  const changed = !S || S.revision !== next.revision || S.serverDate !== next.serverDate || !online;
+  if (S && cursor === S.serverDate && S.serverDate !== next.serverDate) cursor = next.serverDate;
+  S = next; online = true; cursor ||= S.serverDate;
+  if (renderView && changed && !editor.open && !confirmDialog.open && !document.activeElement?.closest('form')) render();
+}
+async function mutate(path, method, data, message) {
+  await api(path, method, data); await refresh(false); render(); if (message) toast(message);
+}
+function go(next) { if (!nav.some(n => n[0] === next) && next !== 'settings') next = 'home'; if (route === next) { render(); return; } location.hash = next; }
+function renderAuth(login = false) {
+  const art = `<aside class="auth-art"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong></div></div><h1>Ein Ort für<br>euren Alltag.</h1><p>Gemeinsam planen, Aufgaben teilen und mehr Zeit füreinander haben.</p><div class="auth-feature">${I('calendar')}Eure Termine auf einen Blick</div><div class="auth-feature">${I('tasks')}Kleine Aufgaben. Gemeinsame Erfolge.</div><div class="auth-feature">${I('shield')}Bei euch zu Hause gespeichert</div></aside>`;
+  app.innerHTML = `<div class="auth-page">${art}<main class="auth-form-wrap"><form class="auth-form" id="auth-form"><h2>${login ? 'Willkommen zurück' : 'Hallo, liebe Familie.'}</h2><p>${login ? 'Melde dich mit eurem Familienpasswort an.' : 'Richtet eure eigene Familienzentrale ein. Namen und Farben könnt ihr später jederzeit ändern.'}</p>${login ? '' : `<label class="form-field">Name eurer Familie<input name="familyName" value="Unsere Familie" required maxlength="60" autocomplete="organization"></label><label class="form-field">Familienmitglieder<textarea name="names" rows="3" placeholder="Ein Name pro Zeile" required></textarea><span class="field-hint">Ein bis zwanzig Personen, jeweils in einer eigenen Zeile.</span></label>`}<label class="form-field">Familienpasswort<input type="password" name="password" required ${login ? '' : 'minlength="12"'} maxlength="200" autocomplete="${login ? 'current-password' : 'new-password'}">${login ? '' : '<span class="field-hint">Mindestens 12 Zeichen. Dieses Passwort gilt für eure Geräte.</span>'}</label>${login ? '' : '<label class="checkbox-field"><input type="checkbox" name="demo">Beispiele zum Ausprobieren hinzufügen</label>'}<p class="form-error" id="auth-error" role="alert"></p><button class="button primary" type="submit">${login ? 'Anmelden' : 'Familienzentrale einrichten'}</button><p class="auth-version">Familien Organisierer · Version 0.1 · Selbst gehostet</p></form></main></div>`;
+  $('#auth-form').addEventListener('submit', async event => {
+    event.preventDefault(); const form = event.currentTarget, data = Object.fromEntries(new FormData(form));
+    const button = $('button[type=submit]', form); button.disabled = true;
+    try { if (!login) { data.names = data.names.split('\n').map(n => n.trim()).filter(Boolean); data.demo = !!data.demo; } await api(login ? '/login' : '/setup', 'POST', data); await refresh(false); render(); }
+    catch (error) { $('#auth-error').textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+}
+function filters() {
+  return `<div class="family-filters"><button class="filter ${!filter ? 'active' : ''}" data-filter="">${I('people')}Alle</button>${S.members.map(m => `<button class="filter ${filter === m.id ? 'active' : ''}" data-filter="${m.id}">${avatar(m.id)}${E(m.name)}</button>`).join('')}</div>`;
+}
+function pageHead(title, subtitle, action = '') {
+  return `<div class="page-head"><div><h1>${E(title)}</h1>${subtitle ? `<p>${E(subtitle)}</p>` : ''}</div><div class="head-actions">${action}</div></div>`;
+}
+function navigation() {
+  return `<aside class="rail" id="rail"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong><small>Unser Alltag. Zusammen.</small></div></div><div><div class="rail-label">Familienzentrale</div><nav class="nav-list" aria-label="Hauptnavigation">${nav.map(([id, label, icon]) => `<button class="nav-item ${route === id ? 'active' : ''}" data-nav="${id}" ${route === id ? 'aria-current="page"' : ''}>${I(icon)}${label}</button>`).join('')}<button class="nav-item" disabled>${I('book')}Stundenpläne<span class="badge">Später</span></button></nav></div><div class="nav-bottom"><button class="nav-item ${route === 'settings' ? 'active' : ''}" data-nav="settings">${I('settings')}Einstellungen</button></div><div class="self-hosted"><strong>${I('shield')}Euer eigener Server</strong>Familien Organisierer · 0.1</div></aside>`;
+}
+function render() {
+  if (!S) return;
+  if (!nav.some(n => n[0] === route) && route !== 'settings') route = 'home';
+  const pages = { home: homePage, calendar: calendarPage, tasks: tasksPage, meals: mealsPage, lists: listsPage, notes: notesPage, photos: photosPage, settings: settingsPage };
+  app.innerHTML = `<div class="shell">${navigation()}<div class="workspace"><header class="topbar">${iconBtn('Menü öffnen', 'menu', 'menu')}<span class="family-title">${E(S.settings.familyName)}</span><div class="spacer"></div><span class="local-clock">${clockText()}</span><span class="divider"></span><span class="connection ${online ? '' : 'offline'}" id="connection">${online ? 'Verbunden' : 'Verbindung fehlt'}</span>${iconBtn('Bilderrahmen öffnen', 'photos', 'photos')}${iconBtn('Vollbild', 'fullscreen', 'expand')}</header>${online ? '' : '<div class="offline-banner">Verbindung zum Server fehlt. Änderungen sind erst nach der Verbindung möglich.</div>'}<main class="main" id="main">${pages[route]()}</main></div></div><nav class="mobile-nav" aria-label="Schnellnavigation">${[['home', 'Heute', 'home'], ['calendar', 'Kalender', 'calendar'], ['tasks', 'Aufgaben', 'tasks'], ['meals', 'Essen', 'food']].map(([id, label, icon]) => `<button data-nav="${id}" class="${route === id ? 'active' : ''}">${I(icon)}${label}</button>`).join('')}<button data-action="menu">${I('menu')}Mehr</button></nav>`;
+  $('[data-action="menu"]', $('.topbar')).classList.add('mobile-menu');
+  $('[data-action="photos"]', $('.topbar')).classList.add('picture-shortcut');
+  document.querySelectorAll('#settings-family,#settings-photos').forEach(form => { form.dataset.revision = S.revision; });
+  if (route === 'photos' && !photoLoaded && !photoLoading) void loadPhotos();
+  updateDisabled();
+}
+function updateDisabled() { if (!online) document.querySelectorAll('[data-edit],[data-complete],[data-check-item],[data-redeem],form button[type=submit]').forEach(el => el.disabled = true); }
+function eventCard(e, compact = false) {
+  const person = member(e.memberId)?.name || 'Alle';
+  return `<button class="event-card" style="${personStyle(e.memberId)}" data-edit="events" data-id="${e.id}" title="${E(e.title)}"><span class="event-time">${e.allDay ? 'Ganztägig' : E(e.startTime)}</span><strong>${E(e.title)}</strong>${compact ? '' : `<span class="event-person">${E(person)}${e.googleAccountId ? ' · Google' : ''}</span>`}</button>`;
+}
+function weekGrid(date, includeMeals = false) {
+  return `<div class="week-scroll"><div class="week-grid">${Array.from({ length: 7 }, (_, i) => {
+    const day = addDays(monday(date), i), events = visibleEvents(day), recipe = recipeFor(day);
+    return `<div class="day-column ${day === S.serverDate ? 'today' : ''}"><div class="day-top">${weekday(day)}<strong>${ds(day).getDate()}</strong></div>${events.map(e => eventCard(e)).join('')}<button class="day-add" data-edit="events" data-date="${day}" aria-label="Termin am ${E(shortDate(day))} hinzufügen">${I('plus')}</button>${includeMeals && recipe ? `<button class="day-meal" data-recipe="${recipe.id}">${I('food')}<span>${E(recipe.title)}</span></button>` : ''}</div>`;
+  }).join('')}</div></div>`;
+}
+function taskRow(task, date, compact = false) {
+  const done = !!completion(task, date);
+  const repeats = { daily: 'Täglich', weekdays: 'Mo–Fr', weekly: 'Wöchentlich', none: 'Einmalig' };
+  return `<div class="todo-row ${done ? 'done' : ''}"><button class="check-button ${done ? 'checked' : ''}" data-complete="${task.id}" data-date="${date}" role="checkbox" aria-checked="${done}" aria-label="${E(task.title)} ${done ? 'wieder öffnen' : 'abhaken'}">${done ? I('check') : ''}</button><div class="spacer"><div class="todo-title">${E(task.title)}</div><div class="todo-detail">${E(member(task.memberId)?.name || 'Alle')}${compact ? '' : ` · ${repeats[task.repeat]}`}${task.repeat === 'none' && task.startDate && task.startDate < date && !done ? ' · Überfällig' : ''}</div></div>${task.points ? `<span class="points-tag">${I('star')}${task.points}</span>` : ''}${compact ? avatar(task.memberId, 'round') : `<div class="task-buttons">${iconBtn('Aufgabe bearbeiten', 'edit-task', 'edit', `data-edit="tasks" data-id="${task.id}"`)}</div>`}</div>`;
+}
+function homePage() {
+  const date = S.serverDate, tasks = visibleTasks(date), complete = tasks.filter(t => completion(t, date)).length;
+  const todayRecipe = recipeFor(date), todayMeal = meal(date);
+  const headingDate = ds(date).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const openShopping = S.items.filter(i => i.listId === 'shopping' && !i.checked).length;
+  return `${pageHead('Alles für eure Woche.', headingDate, `<button class="button primary" data-edit="events">${I('plus')}<span>Termin</span></button>`)}${filters()}<div class="summary-row"><div class="summary-card"><div class="summary-icon">${I('calendar')}</div><div><strong>${visibleEvents(date).length}</strong><span>Termine heute</span></div><span class="summary-hint">Euer Tag im Blick</span></div><div class="summary-card"><div class="summary-icon orange">${I('tasks')}</div><div><strong>${complete}<span style="display:inline;font-size:1rem"> / ${tasks.length}</span></strong><span>Aufgaben erledigt</span></div><span class="summary-hint">Schritt für Schritt</span></div><div class="summary-card"><div class="summary-icon green">${I('lists')}</div><div><strong>${openShopping}</strong><span>Auf der Einkaufsliste</span></div><span class="summary-hint">Für euren Einkauf</span></div></div><div class="panel"><div class="panel-head"><div class="flex">${I('calendar')}<h2>Euer Wochenkalender</h2></div><div class="week-toolbar"><span class="week-caption">${weekCaption(cursor)}</span><div class="day-switch">${iconBtn('Vorherige Woche', 'prev', 'left')}${iconBtn('Nächste Woche', 'next', 'right')}</div><button class="panel-link" data-nav="calendar">Öffnen</button></div></div>${weekGrid(cursor, true)}</div><div class="home-grid"><section class="panel"><div class="panel-head"><div class="flex">${I('tasks')}<h2>Heute zu erledigen</h2><span class="tag orange">${tasks.length - complete} offen</span></div><button class="panel-link" data-nav="tasks">Alle Aufgaben</button></div><div class="panel-body">${tasks.length ? `<div class="flex between small muted"><span>${complete} von ${tasks.length} geschafft</span><span>${Math.round(complete / tasks.length * 100)} %</span></div><div class="mini-progress" style="margin:10px 0 4px"><div style="width:${complete / tasks.length * 100}%"></div></div>${tasks.slice(0, 7).map(t => taskRow(t, date, true)).join('')}` : empty('Alles frei für heute', 'Legt eine Aufgabe oder Routine für eure Familie an.', 'tasks', btn('Aufgabe hinzufügen', 'new-task', 'plus', 'subtle', 'data-edit="tasks"'))}</div></section><div class="home-side stack"><section class="panel meal-preview"><div class="panel-head"><div class="flex">${I('food')}<h2>Was gibt’s heute?</h2></div><button class="panel-link" data-nav="meals">Wochenplan</button></div><div class="panel-body">${todayRecipe ? `<span class="meal-label">${E(todayRecipe.category)}</span><h3>${E(todayRecipe.title)}</h3><div class="meal-meta"><span>${I('clock')}${todayRecipe.minutes} Min.</span><span>${I('people')}${todayMeal.servings} Portionen</span></div><button class="button" data-recipe="${todayRecipe.id}">${I('book')}Zum Rezept</button>` : `<h3>Heute noch nichts geplant</h3><p class="small muted">Sucht gemeinsam etwas Leckeres aus.</p><button class="button" data-action="plan-meal" data-date="${date}">${I('plus')}Essen auswählen</button>`}</div></section>${S.notes.length ? `<section class="panel"><div class="panel-body"><div class="flex between"><h3>${E((S.notes.find(n => n.pinned) || S.notes[0]).title)}</h3>${I('pin')}</div><div class="note-preview">${E((S.notes.find(n => n.pinned) || S.notes[0]).body.slice(0, 260))}</div><button class="panel-link" data-nav="notes">Unsere Notizen</button></div></section>` : ''}</div></div>`;
+}
+function calendarPage() {
+  const modes = [['week', 'Woche'], ['month', 'Monat'], ['agenda', 'Liste']];
+  const dateText = calendarMode === 'month' ? ds(cursor).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }) : weekCaption(cursor);
+  let content;
+  if (calendarMode === 'week') content = weekGrid(cursor);
+  else if (calendarMode === 'month') {
+    const first = cursor.slice(0, 8) + '01', start = monday(first);
+    content = `<div class="month-scroll"><div class="month-grid">${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(d => `<div class="month-label">${d}</div>`).join('')}${Array.from({ length: 42 }, (_, i) => {
+      const date = addDays(start, i), events = visibleEvents(date);
+      return `<div class="month-cell ${date.slice(0, 7) !== cursor.slice(0, 7) ? 'outside' : ''} ${date === S.serverDate ? 'today' : ''}"><button class="date-num" data-edit="events" data-date="${date}" aria-label="Termin am ${E(shortDate(date))} hinzufügen">${ds(date).getDate()}</button>${events.slice(0, 3).map(e => eventCard(e, true)).join('')}${events.length > 3 ? `<button class="small muted" data-action="agenda-day" data-date="${date}">+${events.length - 3} weitere</button>` : ''}</div>`;
+    }).join('')}</div></div>`;
+  } else content = Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(monday(cursor), i), events = visibleEvents(date);
+    return `<section class="agenda-day"><div class="flex between"><h3>${ds(date).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}${date === S.serverDate ? ' · Heute' : ''}</h3>${iconBtn('Termin hinzufügen', 'new-event', 'plus', `data-edit="events" data-date="${date}"`)}</div>${events.length ? events.map(e => `<button class="agenda-event" data-edit="events" data-id="${e.id}"><span class="agenda-time">${e.allDay ? 'Ganztägig' : E(e.startTime)}</span><span class="agenda-line" style="${personStyle(e.memberId)}"></span><span class="spacer"><strong>${E(e.title)}</strong><span class="todo-detail" style="display:block">${E(member(e.memberId)?.name || 'Alle')}${e.location ? ' · ' + E(e.location) : ''}</span></span>${e.googleAccountId ? '<span class="tag">Google</span>' : ''}</button>`).join('') : '<p class="small muted" style="margin-bottom:0">Keine Termine.</p>'}</section>`;
+  }).join('');
+  return `${pageHead('Unser Kalender', 'Gemeinsam wissen, was ansteht.', `<button class="button primary" data-edit="events">${I('plus')}<span>Termin</span></button>`)}${filters()}<div class="panel section-gap"><div class="panel-head"><div class="week-toolbar">${iconBtn('Vorheriger Zeitraum', 'prev', 'left')}<span class="week-caption">${E(dateText)}</span>${iconBtn('Nächster Zeitraum', 'next', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><div class="view-switch">${modes.map(([id, label]) => `<button data-mode="${id}" class="${calendarMode === id ? 'active' : ''}">${label}</button>`).join('')}</div></div>${content}</div>${S.pendingSync.length ? '<p class="small muted section-gap">Google: Änderungen warten auf Synchronisierung. Details unter Einstellungen.</p>' : ''}`;
+}
+function tasksPage() {
+  const tasks = visibleTasks(cursor), groups = [...S.members.map(m => ({ id: m.id, name: m.name })), { id: '', name: 'Für alle' }];
+  const selected = filter || S.members.find(m => m.role === 'child')?.id || S.members[0]?.id;
+  return `${pageHead('Zusammen schaffen wir’s.', 'Aufgaben abhaken, Punkte sammeln und Routinen pflegen.', `<button class="button primary" data-edit="tasks">${I('plus')}<span>Aufgabe</span></button>`)}<div class="flex between wrap">${filters()}<div class="view-switch">${[['all', 'Alle'], ['todos', 'To-dos'], ['routines', 'Routinen']].map(([id, name]) => `<button data-task-mode="${id}" class="${taskMode === id ? 'active' : ''}">${name}</button>`).join('')}</div></div><div class="task-layout"><div><div class="flex between" style="margin-bottom:16px"><h2>${cursor === S.serverDate ? 'Heute' : shortDate(cursor)}</h2><div class="day-switch">${iconBtn('Vorheriger Tag', 'prev-day', 'left')}${btn('Heute', 'today', '', 'subtle')}${iconBtn('Nächster Tag', 'next-day', 'right')}</div></div>${tasks.length ? groups.filter(g => tasks.some(t => t.memberId === g.id)).map(g => `<section class="panel member-tasks"><div class="panel-head"><div class="flex">${avatar(g.id)}<h2>${E(g.name)}</h2></div><span class="small muted">${tasks.filter(t => t.memberId === g.id && completion(t)).length} / ${tasks.filter(t => t.memberId === g.id).length}</span></div><div class="panel-body" style="padding-top:3px;padding-bottom:3px">${tasks.filter(t => t.memberId === g.id).map(t => taskRow(t, cursor)).join('')}</div></section>`).join('') : `<section class="panel">${empty('Keine Aufgaben für diesen Tag', 'Einmalige Aufgaben und wiederkehrende Routinen könnt ihr hier hinzufügen.', 'tasks', btn('Aufgabe hinzufügen', 'new-task', 'plus', 'primary', 'data-edit="tasks"'))}</section>`}</div><div class="task-side stack"><section class="panel"><div class="panel-head"><div class="flex">${I('star')}<h2>Unsere Punkte</h2></div></div><div class="panel-body" style="padding-top:3px;padding-bottom:3px">${S.members.map(m => `<div class="points-member">${avatar(m.id, 'large')}<div class="spacer"><strong class="small">${E(m.name)}</strong><div class="todo-detail">${S.points[m.id].earned} gesammelt · ${S.points[m.id].spent} eingelöst</div></div><div class="point-value">${S.points[m.id].available}<span class="todo-detail" style="display:block;text-align:right;font-weight:400">Punkte</span></div></div>`).join('')}</div></section><section class="panel"><div class="panel-head"><div class="flex">${I('star')}<h2>Belohnungen</h2></div>${iconBtn('Belohnung hinzufügen', 'new-reward', 'plus', 'data-edit="rewards"')}</div><div class="panel-body"><label class="form-field">Punkte einlösen für<select id="reward-member">${S.members.map(m => `<option value="${m.id}" ${m.id === selected ? 'selected' : ''}>${E(m.name)} · ${S.points[m.id].available} Punkte</option>`).join('')}</select></label>${S.rewards.length ? S.rewards.map(r => `<div class="reward-row"><div class="flex between"><strong class="small">${E(r.title)}</strong><button class="panel-link" data-edit="rewards" data-id="${r.id}" aria-label="${E(r.title)} bearbeiten">${I('edit')}</button></div>${r.description ? `<p class="todo-detail">${E(r.description)}</p>` : ''}<span class="points-tag">${I('star')}${r.cost} Punkte</span><div><button class="button subtle" data-redeem="${r.id}">Einlösen</button></div></div>`).join('') : '<p class="small muted section-gap">Legt eure eigenen Belohnungen an.</p>'}</div></section>${S.redemptions.length ? `<section class="panel"><div class="panel-head"><h2>Zuletzt eingelöst</h2></div><div class="panel-body">${S.redemptions.slice(0, 5).map(r => `<div class="todo-row"><div class="spacer"><div class="todo-title">${E(r.title)}</div><div class="todo-detail">${E(member(r.member_id)?.name || '')} · ${new Date(r.redeemed_at).toLocaleDateString('de-DE')}</div></div><span class="small muted">−${r.cost}</span></div>`).join('')}</div></section>` : ''}</div></div>`;
+}
+function mealsPage() {
+  return `${pageHead('Was kommt auf den Tisch?', 'Eure Woche planen. Lieblingsrezepte behalten.', `<button class="button primary" data-edit="recipes">${I('plus')}<span>Rezept</span></button>`)}<div class="flex between wrap"><div class="week-toolbar">${iconBtn('Vorherige Woche', 'prev', 'left')}<strong class="week-caption">${weekCaption(cursor)}</strong>${iconBtn('Nächste Woche', 'next', 'right')}${btn('Diese Woche', 'today', '', 'subtle')}</div>${btn('Zutaten auf die Einkaufsliste', 'generate-shopping', 'lists')}</div><div class="week-scroll"><div class="meal-week">${Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(monday(cursor), i), r = recipeFor(date), m = meal(date);
+    return `<section class="meal-day ${date === S.serverDate ? 'today' : ''}"><div class="day-name">${weekday(date)} · ${ds(date).getDate()}.</div>${r ? `<button data-recipe="${r.id}" style="text-align:left;padding:0"><h3>${E(r.title)}</h3><span class="small muted">${r.minutes} Min. · ${m.servings} Pers.</span></button><button class="meal-add" data-action="plan-meal" data-date="${date}">${I('edit')}Ändern</button>` : `<span class="small muted">Noch offen</span><button class="meal-add" data-action="plan-meal" data-date="${date}">${I('plus')}Auswählen</button>`}</section>`;
+  }).join('')}</div></div><div class="flex between" style="margin-bottom:18px"><h2>Unsere Rezepte <span class="muted small">${S.recipes.length}</span></h2></div>${S.recipes.length ? `<div class="recipe-grid">${S.recipes.map(r => `<article class="panel recipe-card"><span class="tag ${r.category === 'Vegetarisch' ? 'green' : ''}">${E(r.category)}</span><h3>${E(r.title)}</h3><div class="recipe-meta"><span>${I('clock')} ${r.minutes} Min.</span><span>${I('people')} ${r.servings} Portionen</span></div><div class="recipe-bottom flex between"><button class="panel-link" data-recipe="${r.id}">Rezept ansehen</button>${iconBtn('Rezept bearbeiten', 'edit-recipe', 'edit', `data-edit="recipes" data-id="${r.id}"`)}</div></article>`).join('')}</div>` : `<div class="panel">${empty('Platz für eure Lieblingsrezepte', 'Speichert Zutaten und Zubereitung. Aus dem Wochenplan entsteht eure Einkaufsliste.', 'food', btn('Erstes Rezept anlegen', 'new-recipe', 'plus', 'primary', 'data-edit="recipes"'))}</div>`}`;
+}
+function listsPage() {
+  const list = S.lists.find(l => l.id === activeList) || S.lists[0]; activeList = list.id;
+  const items = S.items.filter(i => i.listId === activeList), categories = [...new Set(items.map(i => i.category))].sort((a, b) => a.localeCompare(b, 'de'));
+  return `${pageHead('Nicht vergessen.', 'Einkauf, Packlisten und alles, was ihr euch merken möchtet.', `<button class="button primary" data-edit="lists">${I('plus')}<span>Liste</span></button>`)}<div class="list-layout"><aside class="panel list-nav">${S.lists.map(l => `<button data-list="${l.id}" class="${l.id === activeList ? 'active' : ''}">${I(l.id === 'shopping' ? 'food' : 'lists')}<span class="spacer">${E(l.title)}</span><span class="tag">${S.items.filter(i => i.listId === l.id && !i.checked).length}</span></button>`).join('')}</aside><section class="panel"><div class="panel-head"><div><h2>${E(list.title)}</h2><span class="small muted">${items.filter(i => !i.checked).length} offen · ${items.filter(i => i.checked).length} erledigt</span></div><div class="flex">${activeList !== 'shopping' ? iconBtn('Liste bearbeiten', 'edit-list', 'edit', `data-edit="lists" data-id="${list.id}"`) : ''}${iconBtn('Eintrag mit Menge hinzufügen', 'new-item', 'plus', 'data-edit="items"')}</div></div><div class="panel-body"><form id="quick-item" class="inline-add"><input name="title" placeholder="${activeList === 'shopping' ? 'Was brauchen wir noch?' : 'Neuer Eintrag …'}" aria-label="Neuer Listeneintrag" required maxlength="160"><button class="button primary" type="submit" aria-label="Eintrag hinzufügen">${I('plus')}</button></form>${items.length ? categories.map(category => `<div class="list-category">${E(category)}</div>${items.filter(i => i.category === category).sort((a, b) => Number(a.checked) - Number(b.checked)).map(item => `<div class="todo-row ${item.checked ? 'done' : ''}"><button class="check-button ${item.checked ? 'checked' : ''}" role="checkbox" aria-checked="${item.checked}" aria-label="${E(item.title)} ${item.checked ? 'wieder öffnen' : 'abhaken'}" data-check-item="${item.id}">${item.checked ? I('check') : ''}</button><div class="spacer"><div class="todo-title">${E(item.title)}</div>${item.generatedWeek ? '<span class="todo-detail">Aus dem Essensplan</span>' : ''}</div>${item.quantity || item.unit ? `<span class="small muted">${quantity(item.quantity)} ${E(item.unit)}</span>` : ''}<div class="task-buttons">${iconBtn('Eintrag bearbeiten', 'edit-item', 'edit', `data-edit="items" data-id="${item.id}"`)}</div></div>`).join('')}`).join('') : empty('Hier ist noch Platz', activeList === 'shopping' ? 'Zutaten aus dem Essensplan übernehmen oder Artikel selbst hinzufügen.' : 'Fügt euren ersten Eintrag hinzu.', 'lists')}</div></section></div>`;
+}
+function notesPage() {
+  return `${pageHead('Für später. Für alle.', 'Gedanken, Ideen und wichtige Familieninfos.', `<button class="button primary" data-edit="notes">${I('plus')}<span>Notiz</span></button>`)}${S.notes.length ? `<div class="notes-grid">${[...S.notes].sort((a, b) => Number(b.pinned) - Number(a.pinned)).map(n => `<article class="panel note-card ${n.pinned ? 'pinned' : ''}"><div class="flex between"><h3>${E(n.title)}</h3>${n.pinned ? I('pin') : ''}</div><div class="note-body">${E(n.body)}</div><div class="note-footer"><button data-edit="notes" data-id="${n.id}" aria-label="${E(n.title)} bearbeiten">${I('edit')}</button></div></article>`).join('')}</div>` : `<div class="panel">${empty('Ein gemeinsamer Platz für Gedanken', 'Wichtige Infos, kleine Ideen und große Pläne finden hier ihren Platz.', 'notes', btn('Notiz hinzufügen', 'new-note', 'plus', 'primary', 'data-edit="notes"'))}</div>`}`;
+}
+function photosPage() {
+  const sources = [['local', 'Nur auf diesem Gerät', 'phone', 'Kein Upload zum Server'], ['server', 'Container-Speicher', 'server', 'Fotos von eurem Server'], ['remote', 'Netzwerkadresse', 'network', 'Bilder über eine IP oder URL'], ['immich', 'Immich', 'photos', 'Ein Album eurer Fotobibliothek']];
+  return `${pageHead('Eure schönsten Momente.', 'Ein Bilderrahmen für euer Zuhause.', btn('Diashow starten', 'start-slides', 'play', 'primary', photoItems.length ? '' : 'disabled'))}<div class="photo-sources">${sources.map(([id, name, icon, hint]) => `<button class="source-card ${photoSource === id ? 'active' : ''}" data-photo-source="${id}">${I(icon)}<strong>${name}</strong><small>${hint}</small></button>`).join('')}</div><div class="panel"><div class="panel-head"><h2>${E(sources.find(s => s[0] === photoSource)?.[1] || '')}</h2><span class="small muted">${photoItems.length} Bilder</span></div><div class="panel-body"><div class="photo-toolbar">${['local', 'server'].includes(photoSource) ? `<label class="button primary upload-button">${I('plus')}${photoSource === 'local' ? 'Fotos auf diesem Gerät auswählen' : 'Fotos zum Server hochladen'}<input type="file" id="photo-upload" accept="image/jpeg,image/png,image/webp,image/gif" multiple></label>` : ''}${photoSource === 'immich' ? `<select id="immich-album" aria-label="Immich-Album"><option value="">Album auswählen</option>${albums.map(a => `<option value="${E(a.id)}" ${photoAlbum === a.id ? 'selected' : ''}>${E(a.name)} (${a.count})</option>`).join('')}</select>` : ''}${btn('Neu laden', 'reload-photos', 'refresh')}${['remote', 'immich'].includes(photoSource) ? '<button class="panel-link" data-nav="settings">Quelle einrichten</button>' : ''}</div>${photoLoading ? '<div class="empty"><span class="loader"></span><p>Bilder werden geladen …</p></div>' : photoItems.length ? `<div class="photo-grid">${photoItems.map((p, i) => `<div class="photo-thumbnail" data-slide="${i}" role="button" tabindex="0" aria-label="${E(p.name)} in Diashow öffnen"><img src="${E(p.url)}" alt="${E(p.name)}" loading="lazy"><span class="photo-caption">${E(p.name)}</span>${photoSource === 'local' ? `<button class="photo-delete" data-remove-local="${E(p.id)}" aria-label="${E(p.name)} vom Gerät entfernen">${I('trash')}</button>` : ''}</div>`).join('')}</div>` : empty('Hier kommen eure Fotos hin', photoSource === 'local' ? 'Ausgewählte Fotos bleiben in diesem Browser auf diesem Gerät gespeichert.' : photoSource === 'server' ? 'Ladet Fotos hoch oder legt sie im Bilderordner eures Containers ab.' : photoSource === 'immich' ? 'Verbindet Immich in den Einstellungen und wählt ein Album aus.' : 'Tragt in den Einstellungen eine Adresse ein, die eure Bilderliste liefert.', 'photos')}<p class="small muted section-gap">${photoSource === 'local' ? 'Beim Löschen der Browserdaten werden auch diese lokalen Fotos entfernt.' : 'Die Bilderquelle bleibt innerhalb eures eigenen Netzes. API-Schlüssel werden nur auf dem Server gespeichert.'} Wechsel alle ${S.settings.photoInterval} Sekunden.</p></div></div>`;
+}
+function settingsPage() {
+  return `${pageHead('Euer Zuhause. Eure Einstellungen.', 'Familie, Kalender und Bilderquellen verwalten.')}<div class="settings-grid"><section class="panel"><div class="panel-head"><h2>Unsere Familie</h2>${iconBtn('Familienmitglied hinzufügen', 'new-member', 'plus', 'data-edit="members"')}</div><div class="panel-body"><form id="settings-family" class="stack"><label class="form-field">Name der Familie<input name="familyName" value="${E(S.settings.familyName)}" required maxlength="60"></label><label class="form-field">Zeitzone<input name="timezone" value="${E(S.settings.timezone)}" required placeholder="Europe/Berlin"></label><div><button class="button primary" type="submit">Speichern</button></div></form><div class="section-gap">${S.members.map(m => `<div class="member-edit">${avatar(m.id, 'large')}<div class="spacer"><strong class="small">${E(m.name)}</strong><div class="todo-detail">${m.role === 'child' ? 'Kind' : 'Erwachsen'}</div></div>${iconBtn('Familienmitglied bearbeiten', 'edit-member', 'edit', `data-edit="members" data-id="${m.id}"`)}</div>`).join('')}</div><p class="field-hint section-gap">Die Auswahl „Kind“ wird zur Anzeige verwendet. In Version 0.1 haben alle angemeldeten Geräte dieselben Bearbeitungsrechte.</p></div></section><section class="panel"><div class="panel-head"><h2>Google Kalender</h2>${btn('Synchronisieren', 'google-sync', 'refresh')}</div><div class="panel-body"><p class="small muted">Mehrere Google-Konten verbinden und für jeden Kalender ein Familienmitglied auswählen. Abgleich automatisch alle 5 Minuten.</p>${btn('Google-Konto verbinden', 'google-connect', 'plus', 'primary')}${!status.googleConfigured ? '<div class="info-box section-gap">Zuerst Google-Zugangsdaten und die Adresse dieser Familienzentrale auf dem Server einrichten. Die Schritte stehen in der Installationsanleitung.</div>' : ''}${S.google.map(a => `<section class="integration-card"><div class="integration-heading"><span class="google-logo">G</span><div class="spacer"><strong class="small">${E(a.email)}</strong><div class="todo-detail">${a.lastSync ? `Letzter Abgleich: ${new Date(a.lastSync).toLocaleString('de-DE')}` : 'Noch nicht synchronisiert'}</div></div>${iconBtn('Konto trennen', 'google-disconnect', 'close', `data-account="${a.id}"`)}</div><form data-calendar-form="${a.id}">${a.calendars.map(c => `<div class="calendar-setting"><label class="checkbox-field"><input type="checkbox" name="cal-${E(c.id)}" value="${E(c.id)}" ${c.selected ? 'checked' : ''}><span>${E(c.title)}${!['owner', 'writer'].includes(c.accessRole) ? '<span class="todo-detail" style="display:block">Nur lesen</span>' : ''}</span></label><select data-cal-member="${E(c.id)}" aria-label="Familienmitglied für ${E(c.title)}"><option value="">Alle</option>${S.members.map(m => `<option value="${m.id}" ${c.memberId === m.id ? 'selected' : ''}>${E(m.name)}</option>`).join('')}</select></div>`).join('')}<div class="form-actions"><button type="button" class="button" data-action="google-refresh" data-account="${a.id}">Kalender neu laden</button><button class="button primary" type="submit">Auswahl speichern</button></div></form>${a.error ? `<p class="integration-error">${E(a.error)}</p>` : ''}</section>`).join('')}${S.pendingSync.length ? `<div class="info-box section-gap">${S.pendingSync.length} Änderung(en) warten auf Google.${S.pendingSync.filter(p => p.error).map(p => `<div class="integration-error">${E(p.error)}</div>`).join('')}</div>` : ''}</div></section><section class="panel"><div class="panel-head"><h2>Bilderrahmen & Quellen</h2></div><div class="panel-body"><form id="settings-photos"><div class="form-grid">${field('Bildwechsel (Sekunden)', 'photoInterval', S.settings.photoInterval, 'number', 'min="3" max="300" required')}${selectField('Darstellung', 'photoFit', S.settings.photoFit, [['contain', 'Ganzes Bild'], ['cover', 'Bildschirm ausfüllen']])}${field('Netzwerk-Bilderliste (URL)', 'remoteManifestUrl', S.settings.remoteManifestUrl, 'url', 'placeholder="http://192.168.1.20:8090/photos.json"', true)}${field('Immich-Adresse', 'immichUrl', S.settings.immichUrl, 'url', 'placeholder="http://192.168.1.30:2283"', true)}${field('Immich-API-Schlüssel', 'immichKey', '', 'password', `autocomplete="off" placeholder="${S.immichConfigured ? 'Gespeichert · leer lassen zum Behalten' : 'Schlüssel eintragen'}"`, true)}<p class="field-hint" style="grid-column:1/-1;margin:0">Beim Ändern der Immich-Adresse den Schlüssel erneut eingeben. Die Netzwerkadresse muss eine JSON-Liste von Bildadressen liefern.</p></div><div class="form-actions"><button class="button primary" type="submit">Speichern</button></div></form></div></section><section class="panel"><div class="panel-head"><h2>Daten & Zugang</h2></div><div class="panel-body"><p class="small muted">Alle gemeinsamen Daten liegen auf eurem Server. Ein Export enthält eure Familiendaten, aber keine Passwörter oder API-Schlüssel.</p><a class="button" href="/api/export" download>${I('download')}Familiendaten exportieren</a><p class="field-hint section-gap">Für eine vollständig wiederherstellbare Sicherung den Datenordner mit Datenbank und Schlüssel sichern. Anleitung: docs/LXC.md.</p><form id="password-form" class="stack section-gap"><h3>Familienpasswort ändern</h3>${field('Bisheriges Passwort', 'currentPassword', '', 'password', 'required autocomplete="current-password"')}${field('Neues Passwort', 'newPassword', '', 'password', 'required minlength="12" maxlength="200" autocomplete="new-password"')}<div><button class="button" type="submit">Passwort ändern</button></div></form><div class="section-gap">${btn('Auf diesem Gerät abmelden', 'logout', 'logout')}</div></div></section></div>`;
+}
+
+function field(label, name, value = '', type = 'text', attrs = '', full = false) {
+  return `<label class="form-field ${full ? 'full' : ''}">${E(label)}<input name="${name}" type="${type}" value="${E(value)}" ${attrs}></label>`;
+}
+function selectField(label, name, value, options, full = false) {
+  return `<label class="form-field ${full ? 'full' : ''}">${E(label)}<select name="${name}">${options.map(([id, title]) => `<option value="${E(id)}" ${String(id) === String(value) ? 'selected' : ''}>${E(title)}</option>`).join('')}</select></label>`;
+}
+function textareaField(label, name, value, attrs = '', hint = '') {
+  return `<label class="form-field full">${E(label)}<textarea name="${name}" ${attrs}>${E(value)}</textarea>${hint ? `<span class="field-hint">${E(hint)}</span>` : ''}</label>`;
+}
+function memberOptions() { return [['', 'Für alle'], ...S.members.map(m => [m.id, m.name])]; }
+function dialog(title, body, footer = '') {
+  editor.innerHTML = `<div class="dialog-header"><h2 id="editor-title">${E(title)}</h2>${iconBtn('Schließen', 'close-editor', 'close')}</div><div class="dialog-body">${body}${footer}</div>`;
+  if (!editor.open) editor.showModal();
+}
+function editRecord(kind, id = '', defaults = {}) {
+  const old = id ? S[kind]?.find(r => r.id === id) : null;
+  if (id && !old) throw new Error('Dieser Eintrag ist nicht mehr vorhanden.');
+  const record = old || { ...defaults };
+  editing = { kind, old };
+  const required = 'required maxlength="160"';
+  let fields = '', title;
+  const titles = { events: 'Termin', tasks: 'Aufgabe', recipes: 'Rezept', lists: 'Liste', items: 'Listeneintrag', notes: 'Notiz', rewards: 'Belohnung', members: 'Familienmitglied' };
+  title = titles[kind] + (old ? ' bearbeiten' : ' hinzufügen');
+  if (kind === 'events') {
+    const calendars = [['', 'Nur Familienkalender']];
+    for (const account of S.google) for (const c of account.calendars.filter(c => c.selected && ['owner', 'writer'].includes(c.accessRole))) calendars.push([JSON.stringify([account.id, c.id]), `${c.title} · ${account.email}`]);
+    fields = `${field('Titel', 'title', record.title, 'text', required, true)}${selectField('Für wen?', 'memberId', old ? record.memberId || '' : record.memberId || filter, memberOptions(), true)}${field('Datum', 'startDate', record.startDate || cursor, 'date', 'required')}${field('Enddatum', 'endDate', record.endDate || record.startDate || cursor, 'date', 'required')}<label class="checkbox-field" style="grid-column:1/-1"><input type="checkbox" name="allDay" ${record.allDay ? 'checked' : ''}>Ganztägig</label>${field('Beginn', 'startTime', record.startTime || '09:00', 'time', record.allDay ? 'disabled' : 'required')}${field('Ende', 'endTime', record.endTime || '10:00', 'time', record.allDay ? 'disabled' : 'required')}${field('Ort', 'location', record.location, 'text', 'maxlength="300"', true)}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="5000"')}${old?.googleAccountId ? `<div class="info-box" style="grid-column:1/-1">${record.googleReadOnly ? 'Dieser Google-Kalender ist schreibgeschützt.' : 'Änderungen werden auch in Google Kalender gespeichert.'}</div>` : selectField('Kalender', 'googleTarget', '', calendars, true)}`;
+  } else if (kind === 'tasks') fields = `${field('Aufgabe', 'title', record.title, 'text', required, true)}${selectField('Für wen?', 'memberId', old ? record.memberId || '' : record.memberId || filter, memberOptions())}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${selectField('Wiederholung', 'repeat', record.repeat || 'none', [['none', 'Einmalig'], ['daily', 'Täglich'], ['weekdays', 'Montag bis Freitag'], ['weekly', 'Wöchentlich']])}${field('Fällig / erster Tag', 'startDate', record.startDate || S.serverDate, 'date')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}`;
+  else if (kind === 'recipes') fields = `${field('Rezeptname', 'title', record.title, 'text', required, true)}${field('Portionen', 'servings', record.servings || 4, 'number', 'min="1" max="100" step="1" required')}${field('Zeit in Minuten', 'minutes', record.minutes ?? 30, 'number', 'min="0" max="1440" step="1" required')}${field('Kategorie', 'category', record.category || 'Hauptgericht', 'text', 'maxlength="60"', true)}${textareaField('Zutaten · eine pro Zeile', 'ingredientsText', (record.ingredients || []).map(i => `${i.quantity} | ${i.unit} | ${i.name} | ${i.category}`).join('\n'), 'rows="5" placeholder="500 | g | Nudeln | Vorrat"', 'Menge | Einheit | Zutat | Kategorie. Dezimalzahlen mit Punkt oder Komma sind möglich.')}${textareaField('Zubereitung', 'instructions', record.instructions, 'rows="5" maxlength="15000"')}${field('Link zur Quelle (optional)', 'sourceUrl', record.sourceUrl, 'url', '', true)}`;
+  else if (kind === 'members') fields = `${field('Name', 'name', record.name, 'text', 'required maxlength="50"', true)}${field('Farbe', 'color', record.color || '#6366f1', 'color', 'required')}${selectField('Anzeige', 'role', record.role || 'adult', [['adult', 'Erwachsen'], ['child', 'Kind']])}`;
+  else if (kind === 'lists') fields = field('Name der Liste', 'title', record.title, 'text', required, true);
+  else if (kind === 'items') fields = `${field('Eintrag', 'title', record.title, 'text', required, true)}${field('Menge (optional)', 'quantity', record.quantity || '', 'number', 'min="0" max="100000" step="any"')}${field('Einheit', 'unit', record.unit, 'text', 'maxlength="30"')}${field('Kategorie', 'category', record.category || 'Sonstiges', 'text', 'maxlength="50"', true)}`;
+  else if (kind === 'notes') fields = `${field('Titel', 'title', record.title, 'text', required, true)}${textareaField('Notiz', 'body', record.body, 'rows="8" maxlength="20000"')}<label class="checkbox-field" style="grid-column:1/-1"><input type="checkbox" name="pinned" ${record.pinned ? 'checked' : ''}>Oben anheften</label>`;
+  else if (kind === 'rewards') fields = `${field('Belohnung', 'title', record.title, 'text', required, true)}${field('Benötigte Punkte', 'cost', record.cost || 25, 'number', 'min="1" max="100000" step="1" required', true)}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="1000"')}`;
+  const deletable = old && kind !== 'members' && !(kind === 'lists' && old.id === 'shopping') && !old.googleReadOnly;
+  dialog(title, `<form id="record-form"><div class="form-grid">${fields}</div><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${deletable ? '<button class="button danger" type="button" data-action="delete-record">Löschen</button><div class="spacer"></div>' : ''}<button type="button" class="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit" ${old?.googleReadOnly ? 'disabled' : ''}>Speichern</button></div></form>`);
+}
+async function saveEditor(form) {
+  const data = Object.fromEntries(new FormData(form)), { kind, old } = editing;
+  if (old) data._rev = old._rev;
+  if (kind === 'events') {
+    data.allDay = !!data.allDay;
+    const target = data.googleTarget ? JSON.parse(data.googleTarget) : [];
+    data.googleAccountId = old?.googleAccountId || target[0] || ''; data.calendarId = old?.calendarId || target[1] || '';
+  }
+  if (kind === 'notes') data.pinned = !!data.pinned;
+  if (kind === 'items') { data.listId = old?.listId || activeList; data.checked = old?.checked || false; }
+  if (kind === 'recipes') {
+    data.ingredients = data.ingredientsText.split('\n').filter(l => l.trim()).map((line, i) => {
+      const parts = line.split('|').map(p => p.trim());
+      if (parts.length < 3 || !parts[2]) throw new Error(`Zutat ${i + 1}: Bitte Menge | Einheit | Zutat eingeben.`);
+      const quantity = Number(parts[0].replace(',', '.'));
+      if (!Number.isFinite(quantity)) throw new Error(`Zutat ${i + 1}: Die Menge ist keine Zahl.`);
+      return { quantity, unit: parts[1], name: parts[2], category: parts[3] || 'Sonstiges' };
+    });
+  }
+  await api(`/records/${kind}${old ? '/' + old.id : ''}`, old ? 'PUT' : 'POST', data);
+  editor.close(); await refresh(false); render(); toast('Gespeichert.');
+}
+function openMeal(date) {
+  if (!S.recipes.length) { toast('Legt zuerst ein Rezept an.'); editRecord('recipes'); return; }
+  const old = meal(date); editing = { kind: 'meals', old, date };
+  dialog(`Essen für ${weekday(date)}, ${shortDate(date)}`, `<form id="meal-form"><div class="form-grid">${selectField('Rezept auswählen', 'recipeId', old?.recipeId || S.recipes[0].id, S.recipes.map(r => [r.id, r.title]), true)}${field('Portionen', 'servings', old?.servings || S.members.length, 'number', 'required min="1" max="100" step="1"', true)}</div><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${old ? '<button type="button" class="button danger" data-action="delete-record">Entfernen</button><div class="spacer"></div>' : ''}<button type="button" class="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit">Planen</button></div></form>`);
+}
+function viewRecipe(id) {
+  const r = S.recipes.find(r => r.id === id); if (!r) return;
+  editing = null;
+  dialog(r.title, `<div class="flex wrap"><span class="tag">${E(r.category)}</span><span class="small muted">${r.minutes} Minuten · ${r.servings} Portionen</span></div><h3 class="section-gap">Zutaten</h3>${r.ingredients.map(i => `<div class="ingredient-row"><span>${quantity(i.quantity)} ${E(i.unit)}</span><span>${E(i.name)}</span></div>`).join('')}<h3 class="section-gap">Zubereitung</h3><div class="recipe-instructions">${E(r.instructions || 'Noch keine Zubereitung gespeichert.')}</div>${r.sourceUrl ? `<p class="section-gap"><a href="${E(r.sourceUrl)}" target="_blank" rel="noopener noreferrer">Rezeptquelle öffnen</a></p>` : ''}<div class="form-actions"><button class="button" data-edit="recipes" data-id="${r.id}">Bearbeiten</button><button class="button primary" data-action="close-editor">Schließen</button></div>`);
+}
+let resolveConfirmation;
+function ask(title, message, label = 'Bestätigen', destructive = false) {
+  return new Promise(resolve => {
+    resolveConfirmation = resolve;
+    confirmDialog.innerHTML = `<div class="dialog-header"><h2 id="confirm-title">${E(title)}</h2></div><div class="confirm-body"><p>${E(message)}</p><div class="form-actions"><button class="button" data-confirm="no">Abbrechen</button><button class="button ${destructive ? 'danger' : 'primary'}" data-confirm="yes">${E(label)}</button></div></div>`;
+    confirmDialog.showModal();
+  });
+}
+async function completeTask(id, date) {
+  const task = S.tasks.find(t => t.id === id), done = !!completion(task, date);
+  if (!task.memberId && !done) {
+    editing = { kind: 'completion', task, date };
+    dialog('Wer hat die Aufgabe erledigt?', `<form id="complete-form">${selectField('Familienmitglied', 'memberId', filter || S.members[0].id, S.members.map(m => [m.id, m.name]), true)}<p class="form-error" id="editor-error" role="alert"></p><div class="form-actions"><button class="button primary" type="submit">${task.points} Punkte vergeben</button></div></form>`);
+    return;
+  }
+  await mutate(`/tasks/${id}/complete`, 'POST', { date, done: !done }, !done && task.points ? `Geschafft! +${task.points} Punkte für ${member(task.memberId)?.name}.` : !done ? 'Geschafft!' : 'Aufgabe wieder geöffnet.');
+}
+async function changeSettings(form, data) {
+  await api('/settings', 'PUT', { ...S.settings, ...data, _revision: Number(form.dataset.revision) }); await refresh(false); render(); toast('Einstellungen gespeichert.');
+}
+function uid() { return Array.from(crypto.getRandomValues(new Uint8Array(16)), n => n.toString(16).padStart(2, '0')).join(''); }
+
+document.addEventListener('click', async event => {
+  const target = event.target.closest('button,a,[data-slide]'); if (!target) return;
+  if (target.dataset.confirm) { const yes = target.dataset.confirm === 'yes'; confirmDialog.close(); resolveConfirmation?.(yes); resolveConfirmation = null; return; }
+  if (target.dataset.removeLocal) { event.stopPropagation(); if (await ask('Lokales Foto entfernen?', 'Das Foto wird nur aus diesem Browser entfernt. Deine Originaldatei bleibt erhalten.', 'Entfernen', true)) { await localDbAction('delete', target.dataset.removeLocal); await loadPhotos(); } return; }
+  if (target.dataset.slide !== undefined) { startSlides(Number(target.dataset.slide)); return; }
+  if (target.dataset.nav) { go(target.dataset.nav); return; }
+  if (target.dataset.filter !== undefined) { filter = target.dataset.filter; render(); return; }
+  if (target.dataset.mode) { calendarMode = target.dataset.mode; render(); return; }
+  if (target.dataset.taskMode) { taskMode = target.dataset.taskMode; render(); return; }
+  if (target.dataset.list) { activeList = target.dataset.list; render(); return; }
+  if (target.dataset.photoSource) { photoSource = target.dataset.photoSource; localStorage.setItem('photoSource', photoSource); photoLoaded = false; photoItems = []; render(); void loadPhotos(); return; }
+  if (target.dataset.edit) { try { editRecord(target.dataset.edit, target.dataset.id, target.dataset.date ? { startDate: target.dataset.date } : {}); } catch (error) { toast(error.message, true); } return; }
+  if (target.dataset.recipe) { viewRecipe(target.dataset.recipe); return; }
+  if (busy || target.disabled) return;
+  const action = target.dataset.action;
+  try {
+    busy = true;
+    if (target.dataset.complete) await completeTask(target.dataset.complete, target.dataset.date);
+    else if (target.dataset.checkItem) { const item = S.items.find(i => i.id === target.dataset.checkItem); await mutate('/records/items/' + item.id, 'PUT', { ...item, checked: !item.checked }); }
+    else if (target.dataset.redeem) {
+      const memberId = $('#reward-member').value, reward = S.rewards.find(r => r.id === target.dataset.redeem);
+      if (await ask('Belohnung einlösen?', `${member(memberId).name} löst „${reward.title}“ für ${reward.cost} Punkte ein.`, 'Einlösen')) await mutate(`/rewards/${reward.id}/redeem`, 'POST', { memberId, requestId: uid() }, 'Belohnung eingelöst. Viel Spaß!');
+    } else if (action === 'menu') $('#rail').classList.toggle('open');
+    else if (action === 'photos') go('photos');
+    else if (action === 'fullscreen') { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); }
+    else if (action === 'close-editor') editor.close();
+    else if (action === 'today') { cursor = S.serverDate; render(); }
+    else if (action === 'prev-day' || action === 'next-day') { cursor = addDays(cursor, action === 'prev-day' ? -1 : 1); render(); }
+    else if (action === 'prev' || action === 'next') {
+      const direction = action === 'prev' ? -1 : 1;
+      if (route === 'calendar' && calendarMode === 'month') { const d = ds(cursor.slice(0, 8) + '01'); d.setMonth(d.getMonth() + direction); cursor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; }
+      else cursor = addDays(cursor, direction * 7);
+      render();
+    } else if (action === 'agenda-day') { cursor = target.dataset.date; calendarMode = 'agenda'; render(); }
+    else if (action === 'delete-record') {
+      const { kind, old } = editing;
+      if (await ask('Eintrag löschen?', `„${old.title || 'Geplantes Essen'}“ wird entfernt.${kind === 'events' && old.googleAccountId ? ' Der Termin wird auch in Google Kalender gelöscht.' : ''}${kind === 'tasks' ? ' Bereits verdiente Punkte bleiben erhalten.' : ''}`, 'Löschen', true)) { await api(`/records/${kind}/${old.id}`, 'DELETE', { _rev: old._rev }); editor.close(); await refresh(false); render(); toast('Entfernt.'); }
+    } else if (action === 'plan-meal') openMeal(target.dataset.date);
+    else if (action === 'generate-shopping') { const result = await api('/shopping/generate', 'POST', { week: monday(cursor) }); await refresh(false); render(); toast(`${result.count} Zutaten auf der Einkaufsliste aktualisiert.`); }
+    else if (action === 'google-connect') { const result = await api('/google/authorize', 'POST', {}); location.assign(result.url); }
+    else if (action === 'google-sync') { toast('Kalender werden abgeglichen …'); const result = await api('/google/sync', 'POST', {}); await refresh(false); render(); toast(result.pending ? `${result.pending} Änderung(en) sind noch offen. Details stehen in den Einstellungen.` : 'Kalender abgeglichen.'); }
+    else if (action === 'google-refresh') { await api(`/google/accounts/${target.dataset.account}/refresh`, 'POST', {}); await refresh(false); render(); toast('Kalenderliste aktualisiert.'); }
+    else if (action === 'google-disconnect') { if (await ask('Google-Konto trennen?', 'Die angezeigten Termine bleiben als lokale Termine erhalten. Offene Google-Änderungen werden verworfen. Das Google-Konto selbst wird nicht verändert.', 'Trennen', true)) await mutate(`/google/accounts/${target.dataset.account}`, 'DELETE', {}, 'Google-Konto getrennt.'); }
+    else if (action === 'logout') { await api('/logout', 'POST', {}); stopSlides(); S = null; renderAuth(true); }
+    else if (action === 'reload-photos') await loadPhotos();
+    else if (action === 'start-slides') startSlides();
+    else if (action === 'close-slides') stopSlides();
+    else if (action === 'prev-slide' || action === 'next-slide') { slideIndex = (slideIndex + (action === 'next-slide' ? 1 : -1) + photoItems.length) % photoItems.length; renderSlide(); }
+    else if (action === 'pause-slides') { slidePaused = !slidePaused; renderSlide(); }
+  } catch (error) { toast(error.message, true); }
+  finally { busy = false; }
+});
+document.addEventListener('submit', async event => {
+  const form = event.target;
+  if (form.id === 'auth-form') return;
+  event.preventDefault(); if (busy) return; busy = true;
+  const submit = $('button[type=submit]', form); if (submit) submit.disabled = true;
+  const errorArea = $('#editor-error'); if (errorArea) errorArea.textContent = '';
+  try {
+    const data = Object.fromEntries(new FormData(form));
+    if (form.id === 'record-form') await saveEditor(form);
+    else if (form.id === 'meal-form') { const { old, date } = editing; await api('/records/meals' + (old ? '/' + old.id : ''), old ? 'PUT' : 'POST', { ...data, date, ...(old ? { _rev: old._rev } : {}) }); editor.close(); await refresh(false); render(); toast('Essen geplant.'); }
+    else if (form.id === 'complete-form') { await api(`/tasks/${editing.task.id}/complete`, 'POST', { date: editing.date, done: true, memberId: data.memberId }); editor.close(); await refresh(false); render(); toast('Aufgabe erledigt und Punkte vergeben.'); }
+    else if (form.id === 'quick-item') await mutate('/records/items', 'POST', { title: data.title, listId: activeList, quantity: 0, unit: '', category: 'Sonstiges', checked: false });
+    else if (form.id === 'settings-family' || form.id === 'settings-photos') await changeSettings(form, data);
+    else if (form.id === 'password-form') await mutate('/password', 'POST', data, 'Passwort geändert. Andere Geräte müssen sich neu anmelden.');
+    else if (form.dataset.calendarForm) {
+      const account = S.google.find(a => a.id === form.dataset.calendarForm);
+      const calendars = account.calendars.map(c => ({ id: c.id, selected: [...form.querySelectorAll('input[type=checkbox]')].some(i => i.value === c.id && i.checked), memberId: [...form.querySelectorAll('[data-cal-member]')].find(s => s.dataset.calMember === c.id).value }));
+      await mutate(`/google/accounts/${account.id}/calendars`, 'PUT', { calendars }, 'Kalenderauswahl gespeichert.');
+    }
+  } catch (error) { if (errorArea) errorArea.textContent = error.message; else toast(error.message, true); }
+  finally { busy = false; if (submit) submit.disabled = false; }
+});
+document.addEventListener('change', async event => {
+  const input = event.target;
+  if (input.name === 'allDay' && editor.contains(input)) for (const el of editor.querySelectorAll('input[type=time]')) el.disabled = input.checked;
+  if (input.name === 'startDate' && editor.contains(input)) { const end = $('[name=endDate]', editor); if (end && end.value < input.value) end.value = input.value; }
+  if (input.id === 'immich-album') { photoAlbum = input.value; localStorage.setItem('photoAlbum', photoAlbum); await loadPhotos(); }
+  if (input.id === 'photo-upload') {
+    try {
+      for (const file of input.files) {
+        if (file.size > 20 * 1024 * 1024) throw new Error(`${file.name}: Das Bild ist größer als 20 MB.`);
+        if (photoSource === 'local') await localDbAction('put', { id: uid(), name: file.name, file });
+        else { const response = await fetch('/api/photos/upload', { method: 'POST', headers: { 'X-Family-Request': '1', 'Content-Type': file.type }, body: file }); if (!response.ok) throw new Error((await response.json()).error); }
+      }
+      await loadPhotos(); toast('Fotos hinzugefügt.');
+    } catch (error) { toast(error.message, true); }
+  }
+});
+editor.addEventListener('close', () => { editing = null; if (S) render(); });
+confirmDialog.addEventListener('cancel', () => { resolveConfirmation?.(false); resolveConfirmation = null; });
+document.addEventListener('keydown', event => {
+  if (slideActive) { if (event.key === 'Escape') stopSlides(); if (event.key === 'ArrowRight') { slideIndex = (slideIndex + 1) % photoItems.length; renderSlide(); } if (event.key === 'ArrowLeft') { slideIndex = (slideIndex - 1 + photoItems.length) % photoItems.length; renderSlide(); } }
+  else if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-slide]')) { event.preventDefault(); startSlides(Number(event.target.dataset.slide)); }
+});
+addEventListener('hashchange', () => { route = location.hash.slice(1) || 'home'; if (S) render(); });
+
+let dbPromise;
+function photoDb() {
+  dbPromise ||= new Promise((resolve, reject) => {
+    const request = indexedDB.open('familien-organisierer-photos', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('photos', { keyPath: 'id' });
+    request.onsuccess = () => resolve(request.result); request.onerror = () => reject(new Error('Dieser Browser konnte keine Fotos auf dem Gerät speichern.'));
+  });
+  return dbPromise;
+}
+async function localDbAction(action, value) {
+  const db = await photoDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('photos', action === 'getAll' ? 'readonly' : 'readwrite');
+    const request = transaction.objectStore('photos')[action](value);
+    let result;
+    request.onsuccess = () => { result = request.result; };
+    transaction.oncomplete = () => resolve(result);
+    transaction.onerror = () => reject(new Error('Fotos konnten nicht auf dem Gerät gespeichert werden. Der Speicher könnte voll sein.'));
+  });
+}
+let photoLoadSequence = 0;
+async function loadPhotos() {
+  const sequence = ++photoLoadSequence, source = photoSource;
+  photoLoading = true; if (route === 'photos') render();
+  try {
+    let items;
+    if (source === 'local') {
+      const records = await localDbAction('getAll');
+      const ids = new Set(records.map(r => r.id));
+      for (const [id, url] of photoUrls) if (!ids.has(id)) { URL.revokeObjectURL(url); photoUrls.delete(id); }
+      items = records.map(r => { if (!photoUrls.has(r.id)) photoUrls.set(r.id, URL.createObjectURL(r.file)); return { id: r.id, name: r.name, url: photoUrls.get(r.id) }; });
+    } else if (source === 'server') items = await api('/photos');
+    else if (source === 'remote') items = await api('/photos/remote-list');
+    else { const list = await api('/immich/albums'); if (sequence !== photoLoadSequence) return; albums = list; items = photoAlbum ? await api('/immich/albums/' + photoAlbum) : []; }
+    if (sequence !== photoLoadSequence) return;
+    photoItems = items; photoLoaded = true;
+  } catch (error) { if (sequence === photoLoadSequence) { photoItems = []; photoLoaded = true; toast(error.message, true); } }
+  finally { if (sequence === photoLoadSequence) { photoLoading = false; if (route === 'photos') render(); } }
+}
+function startSlides(index = 0) {
+  if (!photoItems.length) return;
+  slideIndex = index; slidePaused = false; slideActive = true;
+  $('#slideshow').hidden = false; renderSlide();
+  clearInterval(slideTimer);
+  slideTimer = setInterval(() => { if (!slidePaused && slideActive && photoItems.length) { slideIndex = (slideIndex + 1) % photoItems.length; renderSlide(); } }, S.settings.photoInterval * 1000);
+}
+function renderSlide() {
+  const p = photoItems[slideIndex]; if (!p) return stopSlides();
+  $('#slideshow').innerHTML = `<img src="${E(p.url)}" alt="${E(p.name)}" style="object-fit:${S.settings.photoFit}"><div class="slide-overlay"></div><div class="slide-toolbar"><span class="small">${E(S.settings.familyName)}</span><div class="spacer"></div>${iconBtn('Vorheriges Bild', 'prev-slide', 'left')}${iconBtn(slidePaused ? 'Weiter abspielen' : 'Pausieren', 'pause-slides', slidePaused ? 'play' : 'pause')}${iconBtn('Nächstes Bild', 'next-slide', 'right')}${iconBtn('Bilderrahmen schließen', 'close-slides', 'close')}</div><div class="slide-footer"><div><div class="slide-clock">${clockText()}</div><div class="small">${ds(S.serverDate).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</div></div><span class="slide-count">${slideIndex + 1} / ${photoItems.length}</span></div>`;
+}
+function stopSlides() { clearInterval(slideTimer); slideActive = false; $('#slideshow').hidden = true; $('#slideshow').innerHTML = ''; }
+async function boot() {
+  try { status = await api('/status'); if (!status.configured) return renderAuth(); if (!status.authenticated) return renderAuth(true); await refresh(false); render();
+    if (new URLSearchParams(location.search).get('google')) { const connected = new URLSearchParams(location.search).get('google') === 'connected'; toast(connected ? 'Google-Konto verbunden. Jetzt Kalender auswählen.' : 'Google-Verbindung fehlgeschlagen. Bitte erneut versuchen.', !connected); history.replaceState(null, '', location.pathname + location.hash); }
+  } catch (error) { app.innerHTML = `<main class="boot"><h2>Familienzentrale nicht erreichbar</h2><p>${E(error.message)}</p>${btn('Erneut versuchen', 'retry', 'refresh', 'primary')}</main>`; $('[data-action=retry]').onclick = boot; }
+}
+setInterval(async () => {
+  if (!S || busy || document.hidden) return;
+  try { await refresh(); }
+  catch { if (S && online) { online = false; if (!editor.open && !document.activeElement?.closest('form')) render(); else { $('#connection')?.classList.add('offline'); if ($('#connection')) $('#connection').textContent = 'Verbindung fehlt'; updateDisabled(); } } }
+}, 15000);
+setInterval(() => { document.querySelectorAll('.local-clock,.slide-clock').forEach(el => el.textContent = clockText()); }, 1000);
+void boot();

@@ -1,0 +1,15 @@
+data/
+.env
+.env.*
+!.env.example
+master.key
+family.sqlite
+family.sqlite-*
+/photos/
+/uploads/
+backups/
+node_modules/
+*.log
+test-results/
+.sites-runtime/
+.DS_Store
