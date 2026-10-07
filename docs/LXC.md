@@ -50,6 +50,8 @@ bash scripts/install-lxc.sh
 
 Ein privates Repository benötigt GitHub-Authentifizierung auf dem LXC. SSH mit Zugriff nur auf dieses Repository ist eine Möglichkeit. Bei HTTPS einen Token über die interaktive Git-Abfrage eingeben; Tokens nicht in URLs, Skripte, Chat oder Quellcode schreiben. Die GitHub-Verbindung hier in ChatGPT überträgt keine Git-Anmeldedaten in deinen LXC.
 
+Ein GitHub- oder Google-Passwort wird dafür nicht benötigt. Für einen Account mit Google-Anmeldung die aktuelle GitHub CLI und Browser-Bestätigung aus [PROXMOX.md](PROXMOX.md#browser-bestätigung-ohne-passwort-oder-manuell-erstellten-token) verwenden; im bestehenden LXC danach in einen neuen Quellcodeordner klonen und `scripts/install-lxc.sh` starten. **Den Container-Ersteller dort nicht verwenden.** Oder **Code → Download ZIP** im angemeldeten Browser herunterladen: das GitHub-ZIP heißt `Familien-Organizer-main.zip` und enthält den Ordner `Familien-Organizer-main`; diese Namen anstelle der Namen im ZIP-Beispiel oben verwenden. Für den ZIP-Weg benötigt der LXC keine GitHub-Anmeldung.
+
 ## 3. Erster Start
 
 Nach erfolgreicher Installation im eigenen Netz `http://CONTAINER-IP:8080` öffnen. Familie und Familienpasswort einrichten. Auf anderen Geräten dieselbe Adresse verwenden. Der Dienst wird automatisch beim Start des Containers aktiviert.

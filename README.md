@@ -6,13 +6,37 @@ Eine eigenständige, deutschsprachige Familienzentrale zum Selbsthosten. Funktio
 
 ## Neuen Proxmox-LXC automatisch anlegen
 
-In Proxmox den **Host → Shell** öffnen und als root ausführen:
+In Proxmox den **Host → Shell** öffnen. Die Installation funktioniert auch, wenn du dich bei GitHub mit **Google** registriert hast: Du brauchst kein GitHub-Passwort und musst keinen Token selbst erstellen. Das Repository ist privat; einmal bestätigst du den Zugriff im Browser.
+
+Als root zuerst die aktuelle GitHub CLI aus ihrer offiziellen Paketquelle installieren:
 
 ```bash
-git clone https://github.com/etzewetze/Familien-Organizer.git /root/Familien-Organizer && bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh
+(
+  set -e
+  apt-get update
+  apt-get install -y ca-certificates curl git
+  install -d -m 0755 /etc/apt/keyrings
+  curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  chmod 0644 /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\n' "$(dpkg --print-architecture)" > /etc/apt/sources.list.d/github-cli.list
+  apt-get update
+  apt-get install -y gh
+)
 ```
 
-Dieses Repository ist **privat**. Beim HTTPS-Download GitHub-Benutzername und einen Lesetoken als Git-Passwort verwenden, oder mit einem bereits eingerichteten SSH-Schlüssel klonen. Der Token braucht für dieses Repository nur **Contents: Read**. Die GitHub-Verbindung in ChatGPT meldet deinen Proxmox-Host nicht bei GitHub an. Falls `git` fehlt, zuerst `apt-get install -y git` ausführen. Alternativ im angemeldeten GitHub **Code → Download ZIP**, auf dem Host entpacken und daraus `bash scripts/create-proxmox-lxc.sh` ausführen.
+Dann die Browser-Anmeldung starten:
+
+```bash
+gh auth login --hostname github.com --git-protocol https --web
+```
+
+Die Shell zeigt einen Einmalcode und eine Adresse an. Auf deinem PC oder Handy [github.com/login/device](https://github.com/login/device) öffnen, mit Google bei **etzewetze** anmelden, den angezeigten Code eingeben und die GitHub CLI freigeben. Ein Browser auf Proxmox ist nicht nötig. Falls die Shell nach der Git-Authentifizierung fragt, **Ja** wählen. Sobald die Anmeldung erfolgreich ist:
+
+```bash
+gh auth setup-git --hostname github.com && gh repo clone etzewetze/Familien-Organizer /root/Familien-Organizer && bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh
+```
+
+Die CLI speichert die erteilte Anmeldung auf dem Host für spätere Downloads. Die Verbindung von ChatGPT zu GitHub ersetzt diese Freigabe nicht. **Ohne jede GitHub-Anmeldung auf Proxmox:** im bereits angemeldeten Browser **Code → Download ZIP**, das ZIP auf den Host kopieren, entpacken und daraus das Container-Skript starten. Die genauen Befehle stehen in [docs/PROXMOX.md](docs/PROXMOX.md#zip-ohne-github-anmeldung-auf-dem-host). Das Container-Skript selbst benötigt keine GitHub-Zugangsdaten.
 
 Das Skript wählt eine freie Container-ID, prüft vorhandene Speicher und Bridge, lädt ein offizielles Debian-Template, erstellt einen unprivilegierten LXC und installiert die Anwendung. Die abschließend angezeigte Adresse `http://CONTAINER-IP:8080` öffnen und Familie/Passwort einrichten. Die Proxmox-Konsole ist direkt als Shell nutzbar; es gibt kein fest eingebautes Root-Passwort.
 

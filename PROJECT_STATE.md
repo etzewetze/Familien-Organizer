@@ -1,7 +1,7 @@
 # Projektstand und Fortsetzung
 
 **Projekt:** Familien Organisierer  
-**Stand:** 2026-10-06, Version 0.1.2, Datenbankschema 1
+**Stand:** 2026-10-07, Version 0.1.2, Datenbankschema 1
 **Ziel:** Eigene Familienzentrale auf Proxmox LXC; funktionale Orientierung am genannten Familienkalender, eigener Quellcode und eigenes Design. Unabhängiger Kern ohne Daely-Dienste. Google ist optional; bei dessen Nutzung bleibt Google natürlich eine externe Abhängigkeit.
 
 ## Vorgaben des Nutzers
@@ -16,6 +16,7 @@
 - Bei ausgeschöpftem Nutzungsvolumen pausieren und später am bestehenden Stand weiterarbeiten; GitHub als Zwischenspeicher.
 - Repository vom Nutzer vorgegeben: https://github.com/etzewetze/Familien-Organizer (privat).
 - Ein Aufruf aus der README soll einen LXC auf dem Proxmox-Host anlegen und die Anwendung installieren.
+- GitHub-Anmeldung erfolgt mit Google; kein GitHub-Passwort vorhanden. Installation ohne Passworteingabe oder manuell erstellten Token anbieten, alternativ ohne GitHub-Anmeldung auf dem Host per Browser-ZIP.
 
 ## Was geliefert ist
 
@@ -29,7 +30,7 @@ Vollständiger LXC-Installer für Debian 12/13 auf x86_64/ARM64: Host-/Container
 
 Host-Skript `scripts/create-proxmox-lxc.sh`: Erstellt auf Proxmox >=8 (x86_64) einen neuen unprivilegierten LXC aus dem aktuellen offiziellen Debian-Template und installiert darin die Anwendung. Startwerte: 1 Kern, 1024 MiB RAM, 512 MiB Swap, 8 GiB Disk. Clusterweit freie ID, aktive Speicher und Bridge werden geprüft; eigene IDs, Speicher, Bridge, IPv4, Gateway, VLAN und größere Ressourcen sind konfigurierbar. Debian 12 für Proxmox 8, Debian 13 für Proxmox >=9. Nur Vorprüfung via --dry-run. Autostart erst nach erfolgreicher Installation, keine Container-Löschung bei Fehlern. Quellcode wird ohne Git-Metadaten und Zugangsdaten vom Host übertragen; SHA-256 prüft die Übertragung.
 
-README enthält den direkten Git-Download plus Skriptaufruf. Weil das Repository privat ist, braucht der Download eine normale GitHub-Anmeldung auf dem Host; keine öffentliche Raw-URL oder CT-Template-Datei wird versprochen. Die GitHub-Verbindung in ChatGPT überträgt keine Anmeldedaten auf Proxmox.
+README enthält die offizielle GitHub-CLI-Installation, Browser-Bestätigung per Einmalcode und Download plus Skriptaufruf. Google-Anmeldung erfolgt im Browser auf PC/Handy; kein GitHub-Passwort und kein manuell erstellter Token nötig. Die CLI speichert die Freigabe auf dem Host. Alternativ Browser-ZIP nach Proxmox kopieren und lokal entpacken: Das Container-Skript läuft ohne GitHub-Anmeldung auf dem Host. Die private Sichtbarkeit bleibt erhalten; anonyme Raw-Downloads und ein vorinstalliertes CT-Template werden nicht versprochen. Die GitHub-Verbindung in ChatGPT überträgt keine Anmeldedaten auf Proxmox.
 
 Optional Docker, konsistente SQLite-Sicherung inklusive Schlüssel und Fotos sowie Passwort-Wiederherstellung sind enthalten. Keine externen npm-Laufzeitabhängigkeiten, kein Build-Schritt. Node 24 empfohlen, >=22.13 erforderlich.
 
@@ -107,7 +108,7 @@ Vor Weiterentwicklung vorhandene Daten, Einstellungen und Änderungen erhalten. 
 
 ## GitHub-Stand
 
-Der Nutzer hat am 2026-10-06 das Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer) ausgewählt. Zugriff und Schreibrechte wurden über die bestehende GitHub-Verbindung erfolgreich geprüft. Das Repository ist privat; die initiale README wird durch die vollständige Projektanleitung ergänzt. Der komplette Quellcode einschließlich beider Installer, Dokumentation, Tests und dieses Fortsetzungsstands wird auf `main` bereitgestellt. Das andere öffentliche Repository `extraitems` bleibt unberührt.
+Der Nutzer hat am 2026-10-06 das Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer) ausgewählt. Zugriff und Schreibrechte wurden über die bestehende GitHub-Verbindung erfolgreich geprüft. Das Repository ist privat; die initiale README wurde durch die vollständige Projektanleitung ergänzt. Der komplette Quellcode einschließlich beider Installer, Dokumentation, Tests und dieses Fortsetzungsstands liegt auf `main` (Erstübertragung `c1fbc9cc027525b9a462f81273f7e1914eac6575`). Am 2026-10-07 wurden die Startanleitungen für Google-Login auf Browser-Bestätigung bzw. Browser-ZIP angepasst. Die Anwendung und Container-Erstellung wurden bei dieser Dokumentationsänderung nicht verändert. Das andere öffentliche Repository `extraitems` bleibt unberührt.
 
 Die Übertragung erfolgt als zusammenhängender Git-Commit mit dem bisherigen Repository-Commit als Elternstand und einer Prüfung gegen den erwarteten Branch-Stand. Quellcode und Skripte anhand des resultierenden Commits kontrollieren. Es werden keine echten `.env`, Familiendaten, Fotos, SQLite-Dateien, Schlüssel oder Sicherungen hochgeladen. Die `.gitignore` schützt die Standardpfade; externe Datenordner ebenfalls außerhalb des Quellcodes halten.
 

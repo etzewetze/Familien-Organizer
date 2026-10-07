@@ -4,21 +4,56 @@
 
 ## Download und Start
 
-In der Weboberfläche den Host auswählen und dessen Shell öffnen. Das private Repository authentifiziert laden und starten:
+In der Weboberfläche den Host auswählen und dessen Shell öffnen. Für einen GitHub-Account mit Google-Anmeldung gibt es zwei Wege ohne GitHub-Passworteingabe.
+
+### Browser-Bestätigung ohne Passwort oder manuell erstellten Token
+
+Die aktuelle GitHub CLI aus der offiziellen Paketquelle installieren; der vollständige Installationsblock steht am Anfang der [README](../README.md#neuen-proxmox-lxc-automatisch-anlegen). Es ist keine zusätzliche Paketquelle von Proxmox nötig; hinzu kommt die offizielle GitHub-CLI-Paketquelle. Die GitHub-CLI-Maintainer empfehlen ihre aktuellen Pakete, weil bestimmte ältere Distributionsversionen veraltete APIs verwenden.
+
+Anschließend als root auf dem Host:
 
 ```bash
-git clone https://github.com/etzewetze/Familien-Organizer.git /root/Familien-Organizer && bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh
+gh auth login --hostname github.com --git-protocol https --web
 ```
 
-Für HTTPS GitHub-Benutzername und einen auf dieses Repository begrenzten Lesetoken im Passwortfeld von Git verwenden. Nicht den Token in den Clone-Link schreiben. Alternativ einen vorhandenen SSH-Schlüssel verwenden:
+Die Shell zeigt einen Einmalcode und eine Adresse an. Auf dem eigenen PC oder Handy [github.com/login/device](https://github.com/login/device) öffnen, dort mit Google bei **etzewetze** anmelden, den Code eingeben und die GitHub CLI freigeben. Nicht das Google-Passwort in der Proxmox-Shell eingeben. Falls gefragt, die Git-Authentifizierung mit **Ja** bestätigen. Ein Browser muss auf dem Host nicht installiert sein.
+
+Nach erfolgreicher Anmeldung:
 
 ```bash
-git clone git@github.com:etzewetze/Familien-Organizer.git /root/Familien-Organizer && bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh
+gh auth setup-git --hostname github.com && gh repo clone etzewetze/Familien-Organizer /root/Familien-Organizer && bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh
 ```
 
-Falls `git` fehlt, `apt-get install -y git` ausführen. Ein Download aus dem angemeldeten GitHub über **Code → Download ZIP** ist ebenfalls möglich: auf dem Host entpacken und das Host-Skript im vollständigen Projekt starten. Ein anonymes `curl` auf einen Raw-Link des privaten Repositorys kann den Quellcode nicht laden. Die Verbindung von ChatGPT zu GitHub stellt keine Zugangsdaten auf deinem Host bereit.
+Die CLI richtet eine Anmeldung auf dem Host ein und speichert sie für spätere Downloads; es ist keine anonyme Freigabe des Repositorys. Die GitHub-Verbindung von ChatGPT überträgt keine Anmeldung auf deinen Proxmox. Abmeldung bei Bedarf mit `gh auth logout --hostname github.com`; für spätere private Git-Downloads ist dann eine neue Anmeldung nötig. Der Familien-Organizer läuft ohne diese GitHub-Anmeldung weiter.
 
-Ein vorhandener Projektordner wird durch `git clone` nicht überschrieben. Bei einem bestehenden Checkout darin `git pull --ff-only` ausführen und den Skriptaufruf separat starten. Der Container-Ersteller ist nur für **neue** Container; für Updates der installierten Anwendung [LXC.md](LXC.md) beachten.
+### ZIP ohne GitHub-Anmeldung auf dem Host
+
+1. Auf dem PC mit deinem Google-Login [das Repository](https://github.com/etzewetze/Familien-Organizer) öffnen und **Code → Download ZIP** wählen.
+2. `Familien-Organizer-main.zip` auf den **Proxmox-Host** nach `/root` kopieren, z.B. über die eigene Dateiablage oder `scp`. Hierzu gelten deine vorhandenen Proxmox-Zugriffsrechte, keine GitHub-Zugangsdaten.
+3. In der Host-Shell als root ausführen:
+
+```bash
+(
+  set -e
+  apt-get update
+  apt-get install -y unzip
+  test ! -e /root/Familien-Organizer-main
+  unzip /root/Familien-Organizer-main.zip -d /root
+  bash /root/Familien-Organizer-main/scripts/create-proxmox-lxc.sh
+)
+```
+
+Ein vorhandener Ordner wird dabei nicht überschrieben; in diesem Fall einen anderen leeren Zielordner zum Entpacken wählen. Das Skript läuft aus dem vollständigen ZIP ohne `git`, GitHub CLI, Token oder GitHub-Anmeldung auf dem Host. Nach dem Entpacken können auch `--dry-run` und die unten beschriebenen Optionen verwendet werden.
+
+Für ein privates Repository ist ein vollständig anonymer Direktdownload von GitHub nicht möglich. Der ZIP-Weg nutzt deine Anmeldung nur im Browser. Es wird keine öffentliche Raw-URL versprochen und die Repository-Sichtbarkeit nicht verändert.
+
+### Vorhandene Anmeldung und Updates
+
+Mit einem bereits eingerichteten SSH-Schlüssel oder Git-Lesetoken funktioniert der bisherige `git clone`-Weg weiterhin. Ein Token wird bei HTTPS in der Git-Abfrage verwendet, nicht das GitHub- oder Google-Passwort; Zugangsdaten nicht in Clone-URLs einbauen.
+
+Ein vorhandener Projektordner wird durch `git clone` bzw. `gh repo clone` nicht überschrieben. Bei einem bestehenden Checkout darin `git pull --ff-only` ausführen und den Skriptaufruf separat starten. Der Container-Ersteller ist nur für **neue** Container; für Updates der installierten Anwendung [LXC.md](LXC.md) beachten.
+
+Offizielle Referenzen: [GitHub CLI installieren](https://github.com/cli/cli/blob/trunk/docs/install_linux.md), [Browser-Anmeldung](https://cli.github.com/manual/gh_auth_login), [Git-Zugriff einrichten](https://cli.github.com/manual/gh_auth_setup-git), [Repository klonen](https://cli.github.com/manual/gh_repo_clone), [Google-Anmeldung bei GitHub](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github).
 
 ## Werte und Auswahl
 
