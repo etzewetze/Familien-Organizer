@@ -15,6 +15,7 @@ configure_proxmox() {
   bridge=''
   ip4=dhcp
   gateway=''
+  nameserver=''
   vlan=''
   debian=''
   dry_run=false
@@ -53,6 +54,7 @@ Optionen:
   --bridge NAME              Standard: vmbr0, sonst eine eindeutige Bridge
   --ip4 DHCP-ODER-CIDR       dhcp oder z.B. 192.168.178.60/24
   --gateway IP              Bei statischer IPv4 erforderlich
+  --nameserver IP           Optional: erreichbarer IPv4-DNS-Server für den LXC
   --vlan ID                 Optional: 1 bis 4094
   --debian 12|13            Debian 13 setzt hier Proxmox >=9 voraus
   --source ORDNER           Vollständiger Projektordner, falls abweichend
@@ -110,6 +112,11 @@ check_host_and_parameters() {
     valid_ipv4 "$gateway" || die 'Bei statischer IPv4 einen gültigen Gateway angeben.'
   fi
   [ -z "$vlan" ] || number_in_range VLAN "$vlan" 1 4094
+  if [ -n "$nameserver" ]; then
+    valid_ipv4 "$nameserver" || die 'DNS-Server muss eine gültige IPv4-Adresse sein.'
+    local first_octet="${nameserver%%.*}"
+    [ "$first_octet" -gt 0 ] && [ "$first_octet" -lt 224 ] && [ "$first_octet" -ne 127 ] || die 'DNS-Server muss eine erreichbare Unicast-Adresse außerhalb des Container-Loopbacks sein.'
+  fi
   local entry
   for entry in package.json server.mjs src public scripts/install-lxc.sh scripts/lxc-config.mjs deploy .env.example README.md LICENSE; do
     [ -e "$project_dir/$entry" ] || die "Projektdatei fehlt: $entry. Das vollständige Repository herunterladen oder --source angeben."
@@ -168,6 +175,7 @@ show_settings() {
   say "Ressourcen: $cores Kern(e), $memory MiB RAM, $swap MiB Swap, $disk GiB Disk."
   say "Speicher: rootfs=$rootfs_storage, Template=$template_storage."
   say "Netz: Bridge=$bridge, IPv4=$ip4${gateway:+, Gateway=$gateway}${vlan:+, VLAN=$vlan}."
+  if [ -n "$nameserver" ]; then say "DNS: $nameserver."; else say 'DNS: Proxmox übernimmt die Host-Einstellung; im LXC muss der Server erreichbar sein.'; fi
 }
 
 select_template() {
@@ -202,13 +210,15 @@ run_pct() { pct "$@" 9>&-; }
 
 create_and_install() {
   local net="name=eth0,bridge=$bridge,ip=$ip4,firewall=1"
+  local -a dns_options=()
+  [ -z "$nameserver" ] || dns_options=(--nameserver "$nameserver")
   [ -z "$gateway" ] || net+=",gw=$gateway"
   [ -z "$vlan" ] || net+=",tag=$vlan"
   # pct create hat zusätzlich seine eigenen Cluster-/VMID-Sperren.
   say "LXC $vmid erstellen …"
   run_pct create "$vmid" "$template_volume" --ostype debian --arch amd64 \
     --hostname "$ct_hostname" --unprivileged 1 --cores "$cores" --memory "$memory" \
-    --swap "$swap" --rootfs "$rootfs_storage:$disk" --net0 "$net" --onboot 0 --cmode shell \
+    --swap "$swap" --rootfs "$rootfs_storage:$disk" --net0 "$net" "${dns_options[@]}" --onboot 0 --cmode shell \
     --description 'Familien Organisierer – eigener Familienkalender; http://CONTAINER-IP:8080'
   container_created=true
   run_pct start "$vmid"
@@ -219,7 +229,7 @@ create_and_install() {
        run_pct exec "$vmid" -- getent ahostsv4 deb.debian.org >/dev/null; then ready=true; break; fi
     sleep 2
   done
-  $ready || die "Container $vmid ist nicht bereit. DHCP/DNS und Bridge prüfen."
+  $ready || die "Container $vmid ist nicht bereit. DHCP/DNS und Bridge prüfen. Diagnose: pct exec $vmid -- ip -4 route; pct exec $vmid -- cat /etc/resolv.conf"
   run_pct push "$vmid" "$work_dir/source.tar.gz" "$container_archive" --perms 0600
   say 'Quellcode prüfen und Anwendung im Container installieren …'
   run_pct exec "$vmid" -- bash -c '
@@ -250,7 +260,13 @@ cleanup_proxmox() {
   set +e
   if [ "$status" -ne 0 ] && $container_created && ! $installed; then
     say "Installation unvollständig. Container $vmid bleibt zur Diagnose erhalten, Autostart ist noch deaktiviert." >&2
-    say "Konsole: pct enter $vmid; Quellcode: $container_project" >&2
+    say "Konsole: pct enter $vmid" >&2
+    if run_pct exec "$vmid" -- test -f "$container_project/scripts/install-lxc.sh" >/dev/null 2>&1; then
+      say "Nach Behebung im selben LXC fortsetzen: pct exec $vmid -- bash $container_project/scripts/install-lxc.sh" >&2
+      say "Nach erfolgreicher Installation Autostart aktivieren: pct set $vmid --onboot 1" >&2
+    else
+      say 'Quellcode wurde noch nicht vollständig bereitgestellt. Übertragung und Fortsetzung im bestehenden LXC: docs/PROXMOX.md.' >&2
+    fi
   fi
   if [ -n "$work_dir" ] && [ -d "$work_dir" ]; then rm -rf -- "$work_dir"; fi
   exit "$status"
@@ -262,13 +278,14 @@ main_proxmox() {
     case "$1" in
       --dry-run) dry_run=true ;;
       -h|--help) usage; return 0 ;;
-      --vmid|--hostname|--cores|--memory|--swap|--disk|--rootfs-storage|--template-storage|--bridge|--ip4|--gateway|--vlan|--debian|--source)
+      --vmid|--hostname|--cores|--memory|--swap|--disk|--rootfs-storage|--template-storage|--bridge|--ip4|--gateway|--nameserver|--vlan|--debian|--source)
         local option="$1"; shift; [ "$#" -gt 0 ] || die "Wert für $option fehlt."
         case "$option" in
           --vmid) vmid="$1" ;; --hostname) ct_hostname="$1" ;; --cores) cores="$1" ;; --memory) memory="$1" ;;
           --swap) swap="$1" ;; --disk) disk="$1" ;; --rootfs-storage) rootfs_storage="$1" ;;
           --template-storage) template_storage="$1" ;; --bridge) bridge="$1" ;; --ip4) ip4="$1" ;;
           --gateway) gateway="$1" ;; --vlan) vlan="$1" ;; --debian) debian="$1" ;; --source) project_dir="$1" ;;
+          --nameserver) nameserver="$1" ;;
         esac ;;
       *) die "Unbekannte Option: $1" ;;
     esac

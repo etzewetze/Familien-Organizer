@@ -83,6 +83,16 @@ download() {
     --connect-timeout 15 --max-time 300 --retry 3 "$1" -o "$2"
 }
 
+check_download_dns() {
+  local host
+  say 'DNS für Debian- und Node.js-Downloads prüfen …'
+  for host in deb.debian.org security.debian.org nodejs.org; do
+    if ! timeout 10 getent ahostsv4 "$host" >/dev/null; then
+      die "DNS-Auflösung für $host fehlgeschlagen. IP, Gateway und /etc/resolv.conf im LXC prüfen. Danach dieses Skript im selben Container erneut starten."
+    fi
+  done
+}
+
 prepare_node() {
   local distribution filename checksum archive_version candidate_dir
   distribution="https://nodejs.org/dist/${node_version:-latest-v24.x}"
@@ -295,9 +305,13 @@ main() {
   trap 'printf "Installation bei Zeile %s fehlgeschlagen.\n" "$LINENO" >&2' ERR
   trap 'exit 130' INT
   trap 'exit 143' TERM
+  check_download_dns
   say 'Benötigte Debian-Pakete installieren …'
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl xz-utils git unzip
+  # APT meldet vorübergehende Abruffehler sonst nur als Warnung und läuft weiter.
+  if ! apt-get --error-on=any -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update; then
+    die 'Debian-Paketlisten konnten nicht vollständig geladen werden. DNS, Gateway, Firewall und Paketquellen prüfen; anschließend im selben LXC erneut starten.'
+  fi
+  DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y --no-install-recommends ca-certificates curl xz-utils git unzip
   prepare_node
   prepare_app
   prepare_account

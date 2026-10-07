@@ -14,7 +14,7 @@
 - Anpassung an Handy, Tablet, PC und Wandbildschirm.
 - Stundenpläne später. Native App erst, wenn das Webprojekt ausreichend fertig ist.
 - Bei ausgeschöpftem Nutzungsvolumen pausieren und später am bestehenden Stand weiterarbeiten; GitHub als Zwischenspeicher.
-- Repository vom Nutzer vorgegeben: https://github.com/etzewetze/Familien-Organizer (privat).
+- Repository vom Nutzer vorgegeben: https://github.com/etzewetze/Familien-Organizer; ursprünglich privat, am 2026-10-07 vom Nutzer öffentlich gestellt und öffentliche Sichtbarkeit per GitHub geprüft.
 - Ein Aufruf aus der README soll einen LXC auf dem Proxmox-Host anlegen und die Anwendung installieren.
 - GitHub-Anmeldung erfolgt mit Google; kein GitHub-Passwort vorhanden. Installation ohne Passworteingabe oder manuell erstellten Token anbieten, alternativ ohne GitHub-Anmeldung auf dem Host per Browser-ZIP.
 
@@ -30,13 +30,15 @@ Vollständiger LXC-Installer für Debian 12/13 auf x86_64/ARM64: Host-/Container
 
 Host-Skript `scripts/create-proxmox-lxc.sh`: Erstellt auf Proxmox >=8 (x86_64) einen neuen unprivilegierten LXC aus dem aktuellen offiziellen Debian-Template und installiert darin die Anwendung. Startwerte: 1 Kern, 1024 MiB RAM, 512 MiB Swap, 8 GiB Disk. Clusterweit freie ID, aktive Speicher und Bridge werden geprüft; eigene IDs, Speicher, Bridge, IPv4, Gateway, VLAN und größere Ressourcen sind konfigurierbar. Debian 12 für Proxmox 8, Debian 13 für Proxmox >=9. Nur Vorprüfung via --dry-run. Autostart erst nach erfolgreicher Installation, keine Container-Löschung bei Fehlern. Quellcode wird ohne Git-Metadaten und Zugangsdaten vom Host übertragen; SHA-256 prüft die Übertragung.
 
-README enthält die offizielle GitHub-CLI-Installation, Browser-Bestätigung per Einmalcode und Download plus Skriptaufruf. Google-Anmeldung erfolgt im Browser auf PC/Handy; kein GitHub-Passwort und kein manuell erstellter Token nötig. Die CLI speichert die Freigabe auf dem Host. Alternativ Browser-ZIP nach Proxmox kopieren und lokal entpacken: Das Container-Skript läuft ohne GitHub-Anmeldung auf dem Host. Die private Sichtbarkeit bleibt erhalten; anonyme Raw-Downloads und ein vorinstalliertes CT-Template werden nicht versprochen. Die GitHub-Verbindung in ChatGPT überträgt keine Anmeldedaten auf Proxmox.
+README enthält jetzt den öffentlichen HTTPS-Download plus Skriptaufruf ohne GitHub-Anmeldung. Für eine spätere private Sichtbarkeit sind die offizielle GitHub-CLI-Installation und Browser-Bestätigung per Einmalcode als Alternative erhalten: Google-Anmeldung im Browser auf PC/Handy; kein GitHub-Passwort und kein manuell erstellter Token nötig. Alternativ Browser-ZIP nach Proxmox kopieren und lokal entpacken. Es wird kein vorinstalliertes CT-Template veröffentlicht. Die GitHub-Verbindung in ChatGPT überträgt keine Anmeldedaten auf Proxmox.
+
+Nach der ersten realen Rückmeldung prüft der LXC-Installer vor Paketdownloads die DNS-Auflösung von Debian, Debian Security und Node.js. APT-Indexabruf mit `--error-on=any`, drei Wiederholungsversuchen und HTTP-Zeitlimits verhindert das Weiterarbeiten mit fehlgeschlagenen Paketlisten. Für neue Container ist `--nameserver` als erreichbarer IPv4-DNS-Server optional; ohne Auswahl bleibt die Proxmox-Übernahme der Host-Einstellung erhalten. Die Fehlermeldung zeigt die Wiederaufnahme im bestehenden LXC nur dann an, wenn der Quellcode schon vorhanden ist. `docs/PROXMOX.md` enthält DNS-/Routing-Diagnose und Fortsetzung ohne weitere Container-Erstellung.
 
 Optional Docker, konsistente SQLite-Sicherung inklusive Schlüssel und Fotos sowie Passwort-Wiederherstellung sind enthalten. Keine externen npm-Laufzeitabhängigkeiten, kein Build-Schritt. Node 24 empfohlen, >=22.13 erforderlich.
 
 ## Prüfungen
 
-`npm test`: **37 Tests bestanden** (20 Anwendungstests, 9 Installer-/Konfigurationstests, 8 Proxmox-Hosttests).
+`npm test`: **40 Tests bestanden** (20 Anwendungstests, 11 Installer-/Konfigurationstests, 9 Proxmox-Hosttests). Die DNS-Korrektur wurde am 2026-10-07 mit dem vollständigen Testlauf geprüft; außerdem 26 Bash-Blöcke in den Anleitungen auf Syntax geprüft.
 
 - Aufgabenpunkte, Wiederholungsrhythmen, Einmaligkeit und Rücknahme.
 - Belohnungen, doppelte Buchungskennungen und Schutz vor Überziehung.
@@ -50,10 +52,13 @@ Optional Docker, konsistente SQLite-Sicherung inklusive Schlüssel und Fotos sow
 - Installer: Hostschutz und unverändernde Vorprüfung; falsche Download-Prüfsummen; Erstinstallation; lesbare Laufzeit und private Konfiguration; Update mit erhaltenen Daten/Fotos und entfernten alten Quelldateien; Wiederherstellung von Code, Laufzeit, Schlüssel, SQLite und Dienst nach fehlgeschlagenem Start; Abbruch bei unvollständiger Sicherung; Rücknahme einer Erstinstallation; keine Datenbank-Rückkopie über einen nicht gestoppten Dienst; Konfiguration, IPv6, Port und reale Symlink-Ziele.
 
 - Proxmox-Host: unverändernder Dry-Run, Schutz belegter Cluster-IDs, Bridge-/Speicher-/Mindestwertprüfungen, automatische und eigene Ressourcen, richtige Debian-/Architektur-Auswahl, Wiederverwendung von Templates, Quellcodepaket ohne .git/.env/Daten, prüfsummengeprüfte Übertragung sowie Erhalt des neuen Containers ohne Autostart nach Fehlern.
+- Neue DNS-Tests: Ausfall jeder Download-Domain stoppt vor Paket-/Dienst-/Datenänderungen; Indexabruf mit vorübergehendem Fehler wird als Fehler erkannt und startet keine Paketinstallation; eigener DNS wird geprüft/übergeben, ohne Auswahl bleibt die Host-Einstellung erhalten; Wiederaufnahme-Befehl nur bei tatsächlich übertragenem Quellcode.
 
 Die Installer- und Host-Tests verwenden einen isolierten Dateibaum mit nachgebildeten Paket-, Konto- und systemd-Befehlen. Archiv-Prüfsummen, Dateioperationen und SQLite-Sicherung/Wiederherstellung werden tatsächlich ausgeführt; sie ersetzen keine Prüfung von UID-Zuordnung, AppArmor, Netz und systemd im echten LXC.
 
-JavaScript-Syntax und Bash-Syntax des Installers geprüft. Der Server wurde gestartet und die API getestet. Der Proxmox-Installer und Docker wurden **nicht** auf einer echten Zielmaschine ausgeführt. Es bestand kein Zugang zum Proxmox des Nutzers.
+JavaScript-Syntax und Bash-Syntax des Installers geprüft. Der Server wurde gestartet und die API getestet. Es bestand kein direkter Zugang zum Proxmox des Nutzers; Docker wurde nicht auf einer Zielmaschine ausgeführt.
+
+**Erste reale Proxmox-Rückmeldung am 2026-10-07:** Der Nutzer hat die öffentliche HTTPS-Installation gestartet. Repository-Download, Template-Auswahl und Erstellung des unprivilegierten Debian-13-Containers **100** mit den Mindestwerten sowie die Quellcode-Übertragung waren erfolgreich. Der Paketabruf scheiterte danach an `Temporary failure resolving` für Debian-/Security-Adressen. Der Container bleibt erhalten, Autostart ist aus. Aktuelle IPv4-Adresse, Route, Resolver und fehlgeschlagene Dienste sind noch nicht bekannt. DNS-/Netzwerkursache und vollständige Installation bleiben offen; der Nutzer soll die Diagnoseausgabe liefern und anschließend im selben LXC fortsetzen. Die Systemd-257-/Nesting-Warnung allein belegt keine DNS-Ursache. Keine echten Zugangsdaten oder vollständigen Nutzerlogs in GitHub aufnehmen.
 
 **Keine visuelle Browser-Abnahme:** In dieser Arbeitsumgebung fehlte die Browser-Vorschau-Infrastruktur. Ein Versuch mit installiertem Playwright konnte ebenfalls keinen lokalen Browser starten. Die Ansichtslogik wurde danach ohne Browser getestet; das ersetzt keine echte Bedienungs- und Layoutprüfung. Es gibt keine geprüften Screenshots. Responsive CSS ist implementiert, muss aber auf realen Bildschirmgrößen abgenommen werden.
 
@@ -74,7 +79,7 @@ JavaScript-Syntax und Bash-Syntax des Installers geprüft. Der Server wurde gest
 
 ## Konkreter nächster Entwicklungsschritt
 
-**Zuerst Version 0.1.2 über die README auf dem tatsächlichen Proxmox installieren und abnehmen.** Der Quellcode wird im privaten Repository des Nutzers bereitgestellt; kein Zugriff auf dessen Proxmox wurde eingerichtet. Keine Zugangsdaten in Chat oder Repository aufnehmen. Google/Immich-Zugangsdaten trägt der Nutzer privat auf dem Server bzw. in der Oberfläche ein.
+**Zuerst DNS/Netz im bereits angelegten Container 100 prüfen und die Installation dort abschließen; keinen neuen Container erstellen.** Der Quellcode liegt im öffentlichen Repository; kein direkter Zugriff auf den Proxmox des Nutzers wurde eingerichtet. Nach erfolgreicher Installation Autostart aktivieren und Version 0.1.2 abnehmen. Keine Zugangsdaten in Chat oder Repository aufnehmen. Google/Immich-Zugangsdaten trägt der Nutzer privat auf dem Server bzw. in der Oberfläche ein.
 
 1. LXC-Start, Betrieb nach Neustart und Sicherung/Wiederherstellung auf dem tatsächlichen System prüfen.
 2. Browser-Abnahme bei 390×844, 768×1024, 1440×900 und auf dem verwendeten Wanddisplay; Hoch-/Querformat, lange Namen, 200 % Schrift und Touch testen.
@@ -108,8 +113,8 @@ Vor Weiterentwicklung vorhandene Daten, Einstellungen und Änderungen erhalten. 
 
 ## GitHub-Stand
 
-Der Nutzer hat am 2026-10-06 das Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer) ausgewählt. Zugriff und Schreibrechte wurden über die bestehende GitHub-Verbindung erfolgreich geprüft. Das Repository ist privat; die initiale README wurde durch die vollständige Projektanleitung ergänzt. Der komplette Quellcode einschließlich beider Installer, Dokumentation, Tests und dieses Fortsetzungsstands liegt auf `main` (Erstübertragung `c1fbc9cc027525b9a462f81273f7e1914eac6575`). Am 2026-10-07 wurden die Startanleitungen für Google-Login auf Browser-Bestätigung bzw. Browser-ZIP angepasst. Die Anwendung und Container-Erstellung wurden bei dieser Dokumentationsänderung nicht verändert. Das andere öffentliche Repository `extraitems` bleibt unberührt.
+Der Nutzer hat am 2026-10-06 das Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer) ausgewählt. Zugriff und Schreibrechte wurden über die bestehende GitHub-Verbindung erfolgreich geprüft. Die initiale README wurde durch die vollständige Projektanleitung ergänzt. Der komplette Quellcode einschließlich beider Installer, Dokumentation, Tests und dieses Fortsetzungsstands liegt auf `main` (Erstübertragung `c1fbc9cc027525b9a462f81273f7e1914eac6575`). Am 2026-10-07 wurde zunächst der Google-Login dokumentiert (`f1e00a296a16e2f400ec13423e0c3b6340dbb588`), danach hat der Nutzer das Repository öffentlich gestellt. Öffentliche Sichtbarkeit wurde geprüft; der anonyme Download steht wieder vorn in der README. Die DNS-Korrektur verändert Installationsskripte und Tests, nicht den Anwendungscode oder das Datenbankschema; App-Version bleibt 0.1.2. Das andere öffentliche Repository `extraitems` bleibt unberührt.
 
 Die Übertragung erfolgt als zusammenhängender Git-Commit mit dem bisherigen Repository-Commit als Elternstand und einer Prüfung gegen den erwarteten Branch-Stand. Quellcode und Skripte anhand des resultierenden Commits kontrollieren. Es werden keine echten `.env`, Familiendaten, Fotos, SQLite-Dateien, Schlüssel oder Sicherungen hochgeladen. Die `.gitignore` schützt die Standardpfade; externe Datenordner ebenfalls außerhalb des Quellcodes halten.
 
-Keine generelle Upload-Erlaubnis erneut erfragen: Das Ziel und der Upload sind vom Nutzer ausdrücklich vorgegeben. Repository nicht ohne neue ausdrückliche Anweisung öffentlich machen. Bei ausgeschöpftem ChatGPT-Kontingent diesen Repository-Stand zur Fortsetzung verwenden. Stundenpläne und native App bleiben spätere Schritte.
+Keine generelle Upload-Erlaubnis erneut erfragen: Das Ziel und der Upload sind vom Nutzer ausdrücklich vorgegeben. Repository-Sichtbarkeit nicht ohne ausdrückliche Anweisung verändern. Bei ausgeschöpftem ChatGPT-Kontingent diesen Repository-Stand zur Fortsetzung verwenden. Stundenpläne und native App bleiben spätere Schritte.

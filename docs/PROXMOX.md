@@ -4,7 +4,13 @@
 
 ## Download und Start
 
-In der Weboberfläche den Host auswählen und dessen Shell öffnen. Für einen GitHub-Account mit Google-Anmeldung gibt es zwei Wege ohne GitHub-Passworteingabe.
+In der Weboberfläche den Host auswählen und dessen Shell öffnen. Das Repository ist öffentlich; auf dem Host als root ohne GitHub-Anmeldung herunterladen und starten:
+
+```bash
+git clone https://github.com/etzewetze/Familien-Organizer.git /root/Familien-Organizer && bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh
+```
+
+Falls `git` fehlt, zuerst `apt-get update && apt-get install -y git ca-certificates` ausführen. Ein vorhandener Checkout wird mit `git pull --ff-only` aktualisiert. Die Browser-Anmeldung im nächsten Abschnitt ist eine Alternative, falls das Repository später privat betrieben wird.
 
 ### Browser-Bestätigung ohne Passwort oder manuell erstellten Token
 
@@ -28,7 +34,7 @@ Die CLI richtet eine Anmeldung auf dem Host ein und speichert sie für spätere 
 
 ### ZIP ohne GitHub-Anmeldung auf dem Host
 
-1. Auf dem PC mit deinem Google-Login [das Repository](https://github.com/etzewetze/Familien-Organizer) öffnen und **Code → Download ZIP** wählen.
+1. Auf dem PC [das Repository](https://github.com/etzewetze/Familien-Organizer) öffnen und **Code → Download ZIP** wählen. Bei öffentlicher Sichtbarkeit geht dies ohne Anmeldung; bei privater Sichtbarkeit deinen Google-Login im Browser verwenden.
 2. `Familien-Organizer-main.zip` auf den **Proxmox-Host** nach `/root` kopieren, z.B. über die eigene Dateiablage oder `scp`. Hierzu gelten deine vorhandenen Proxmox-Zugriffsrechte, keine GitHub-Zugangsdaten.
 3. In der Host-Shell als root ausführen:
 
@@ -70,6 +76,7 @@ Offizielle Referenzen: [GitHub CLI installieren](https://github.com/cli/cli/blob
 | `--bridge` | `vmbr0`, wenn vorhanden; sonst eine eindeutige Linux-Bridge |
 | `--ip4` | `dhcp` |
 | `--gateway` | Bei statischer IPv4 erforderlich |
+| `--nameserver` | Optionaler erreichbarer IPv4-DNS-Server; ohne Angabe übernimmt Proxmox die Host-Einstellung |
 | `--vlan` | Optionales VLAN von 1 bis 4094 |
 | `--debian` | 12 für Proxmox 8; 13 für Proxmox >=9 |
 | `--source` | Vollständiges Projekt neben dem aufgerufenen Skript |
@@ -97,6 +104,8 @@ bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh --ip4 192.168.178.60
 
 DHCP benötigt einen DHCP-Server auf der gewählten Bridge. Für später eine DHCP-Reservierung oder feste Adresse verwenden. Bei VLANs muss die Bridge passend eingerichtet sein. Der Installer verändert die Host-Netzwerkkonfiguration nicht.
 
+Ein eigener Resolver kann für neue Container über `--nameserver IP_DEINES_DNS_SERVERS` gesetzt werden; den Platzhalter durch eine aus dem Container erreichbare IPv4-Adresse ersetzen. Ein nur auf dem Host laufender Loopback-Resolver, etwa `127.0.0.1`, ist keine geeignete Adresse für den neuen LXC. Öffentliche DNS-Server funktionieren nur, wenn dein Netz diese Verbindungen erlaubt.
+
 ## Ablauf und Betrieb
 
 1. Host, Ressourcen, aktive Speicher, freie Cluster-ID und vorhandene Bridge prüfen.
@@ -116,6 +125,55 @@ Die Konsole der Proxmox-Weboberfläche nutzt den Modus `shell`; alternativ auf d
 ## Fehler und Updates
 
 Bestehende IDs werden abgewiesen. Eine bereits laufende VM oder ein Container wird weder übernommen noch gelöscht. Falls der neue Container bei Netzwerk, Übertragung oder Installation scheitert, bleibt er zur Diagnose erhalten; der Autostart wird erst nach erfolgreicher Installation aktiviert. Die Ausgabe nennt die ID und `pct enter` für die Prüfung. Lokale temporäre Quellcodekopien werden nach dem Aufruf entfernt.
+
+### DNS-Fehler und Fortsetzung im vorhandenen Container
+
+`Temporary failure resolving 'deb.debian.org'` oder `security.debian.org` bedeutet, dass die Namensauflösung im Container fehlgeschlagen ist. Es ist damit noch nicht bekannt, ob der Resolver, DHCP, Routing oder eine Firewall die Ursache ist. Ein erfolgreicher Download des GitHub-Repositorys auf dem Host prüft nicht die Verbindung des LXC.
+
+Vor Paketdownloads prüft der Installer jetzt `deb.debian.org`, `security.debian.org` und `nodejs.org`. Der Paketlisten-Abruf nutzt `--error-on=any` und Wiederholungsversuche; auch vorübergehende Fehler stoppen den Ablauf vor der Paketinstallation. Damit wird nicht mit alten oder unvollständigen Paketlisten weitergearbeitet. Dies verbessert die Fehlerbehandlung, ersetzt aber keine funktionierende Netzkonfiguration.
+
+Für den bereits erstellten Container **100** auf dem **Proxmox-Host** prüfen (bei anderer ID ersetzen):
+
+```bash
+pct exec 100 -- ip -4 address show dev eth0
+pct exec 100 -- ip -4 route
+pct exec 100 -- cat /etc/resolv.conf
+pct exec 100 -- getent ahostsv4 deb.debian.org
+pct exec 100 -- getent ahostsv4 security.debian.org
+pct exec 100 -- systemctl --failed --no-pager
+```
+
+Fehlt eine IPv4-Adresse oder Standardroute, zuerst DHCP/Bridge/Gateway prüfen. Ist ein DNS-Server eingetragen, muss er vom Container erreichbar sein. Einen bekannten, funktionierenden DNS-Server im eigenen Netz unter **Container → DNS** auswählen; anschließend den Container neu starten. Die Meldung `Systemd 257 detected. You may need to enable nesting.` allein beweist keine DNS-Ursache. Fehlgeschlagene systemd-Dienste mit der letzten Diagnosezeile prüfen; Nesting nicht allein wegen des DNS-Textes ändern.
+
+Wenn der Quellcode wie bei der gemeldeten Installation schon übertragen wurde, nach Behebung im **selben** Container fortsetzen:
+
+```bash
+pct exec 100 -- bash /root/familien-organisierer-src/scripts/install-lxc.sh && pct set 100 --onboot 1
+```
+
+Der Autostart wird nur bei erfolgreicher Installation aktiviert. Die Ausgabe nennt die Browser-Adresse. `create-proxmox-lxc.sh` dafür nicht erneut ausführen: Es würde einen weiteren Container anlegen.
+
+Falls der Quellcode noch fehlt oder der aktuelle Stand übertragen werden soll, auf dem Host den vorhandenen Checkout aktualisieren und ein Paket nur aus Quellcode bilden. Die Befehle laufen in einer Subshell, die bei Fehlern stoppt:
+
+```bash
+(
+  set -e
+  cd /root/Familien-Organizer
+  git pull --ff-only
+  test ! -e /root/familien-organizer-resume.tar.gz
+  tar -czf /root/familien-organizer-resume.tar.gz package.json server.mjs src public scripts deploy docs tests README.md PROJECT_STATE.md LICENSE .env.example .gitignore
+  pct exec 100 -- test ! -e /root/familien-organisierer-resume-src
+  pct push 100 /root/familien-organizer-resume.tar.gz /root/familien-organizer-resume.tar.gz --perms 0600
+  pct exec 100 -- install -d -m 0700 /root/familien-organisierer-resume-src
+  pct exec 100 -- tar -xzf /root/familien-organizer-resume.tar.gz -C /root/familien-organisierer-resume-src --no-same-owner
+  pct exec 100 -- bash /root/familien-organisierer-resume-src/scripts/install-lxc.sh
+  pct set 100 --onboot 1
+)
+```
+
+Archive nach erfolgreicher Prüfung selbst entfernen bzw. für die nächste Übertragung einen neuen Namen wählen. Der neue Quellcodeordner darf ebenfalls noch nicht existieren; dadurch werden keine alten Quelldateien in einen neuen Stand gemischt. Keine `.git`, echte `.env`, Familiendaten oder Sicherungen übertragen. Bei einem laufenden Dienst vor dem Weiterarbeiten die normalen Update-/Sicherungshinweise in [LXC.md](LXC.md) beachten.
+
+Referenzen: [Proxmox-DNS-Einstellung für LXC](https://github.com/proxmox/pve-docs/blob/master/generated/pct.1-synopsis.adoc), [Debian apt-get und --error-on=any](https://manpages.debian.org/bookworm/apt/apt-get.8.en.html).
 
 Daten, Fotos, Schlüssel und Sicherungen liegen im LXC bzw. im eigenen eingebundenen Speicher. Sie werden nicht in GitHub hochgeladen. Im LXC bleiben `/root/familien-organisierer-src` und die installierte Anwendung unter `/opt/familien-organisierer` erhalten. Der übertragene Quellcodeordner enthält kein `.git`; der ursprüngliche Git-Checkout ist auf dem Host.
 

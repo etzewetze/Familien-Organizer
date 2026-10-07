@@ -6,7 +6,18 @@ Eine eigenständige, deutschsprachige Familienzentrale zum Selbsthosten. Funktio
 
 ## Neuen Proxmox-LXC automatisch anlegen
 
-In Proxmox den **Host → Shell** öffnen. Die Installation funktioniert auch, wenn du dich bei GitHub mit **Google** registriert hast: Du brauchst kein GitHub-Passwort und musst keinen Token selbst erstellen. Das Repository ist privat; einmal bestätigst du den Zugriff im Browser.
+In Proxmox den **Host → Shell** öffnen und als root ausführen. Das Repository ist **öffentlich**; der Download benötigt keine GitHub-Anmeldung, kein Passwort und keinen Token:
+
+```bash
+git clone https://github.com/etzewetze/Familien-Organizer.git /root/Familien-Organizer && bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh
+```
+
+Falls `git` fehlt, zuerst `apt-get update && apt-get install -y git ca-certificates` ausführen. Bei einem bereits vorhandenen Checkout darin `git pull --ff-only` verwenden. Der Container-Ersteller erstellt neue Container. **Nach einer fehlgeschlagenen Installation im vorhandenen LXC fortsetzen:** siehe [DNS-Prüfung und Wiederaufnahme](docs/PROXMOX.md#dns-fehler-und-fortsetzung-im-vorhandenen-container).
+
+<details>
+<summary>Browser-Anmeldung mit Google, falls das Repository später wieder privat ist</summary>
+
+Für ein privates Repository funktioniert die Installation auch mit einem GitHub-Account, der über **Google** registriert wurde: kein GitHub-Passwort und kein manuell erstellter Token nötig; einmal bestätigst du den Zugriff im Browser.
 
 Als root zuerst die aktuelle GitHub CLI aus ihrer offiziellen Paketquelle installieren:
 
@@ -38,6 +49,8 @@ gh auth setup-git --hostname github.com && gh repo clone etzewetze/Familien-Orga
 
 Die CLI speichert die erteilte Anmeldung auf dem Host für spätere Downloads. Die Verbindung von ChatGPT zu GitHub ersetzt diese Freigabe nicht. **Ohne jede GitHub-Anmeldung auf Proxmox:** im bereits angemeldeten Browser **Code → Download ZIP**, das ZIP auf den Host kopieren, entpacken und daraus das Container-Skript starten. Die genauen Befehle stehen in [docs/PROXMOX.md](docs/PROXMOX.md#zip-ohne-github-anmeldung-auf-dem-host). Das Container-Skript selbst benötigt keine GitHub-Zugangsdaten.
 
+</details>
+
 Das Skript wählt eine freie Container-ID, prüft vorhandene Speicher und Bridge, lädt ein offizielles Debian-Template, erstellt einen unprivilegierten LXC und installiert die Anwendung. Die abschließend angezeigte Adresse `http://CONTAINER-IP:8080` öffnen und Familie/Passwort einrichten. Die Proxmox-Konsole ist direkt als Shell nutzbar; es gibt kein fest eingebautes Root-Passwort.
 
 | Einstellung | Mindest-Startwert / Standard |
@@ -57,6 +70,8 @@ bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh --vmid 120 --rootfs-
 ```
 
 Vorher nur prüfen: `bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh --dry-run`. Eine vorhandene ID wird abgewiesen. Jeder normale Aufruf erstellt einen **neuen** Container; Updates sind in der LXC-Anleitung beschrieben.
+
+Bei Bedarf `--nameserver IP_DEINES_DNS_SERVERS` ergänzen. Ohne diese Option übernimmt Proxmox die DNS-Einstellung des Hosts; der Resolver muss auch aus dem LXC erreichbar sein. Vor Paketdownloads prüft der Installer die Namensauflösung für Debian und Node.js. Fehlgeschlagene Paketlisten-Abrufe werden als Fehler behandelt; ein vorhandener Container wird erhalten.
 
 Ein CT-Template enthält ein komplettes Linux-Dateisystem. Das Projekt-ZIP ist Quellcode; der automatische Weg nutzt das offizielle Debian-CT-Template und installiert die Familienzentrale anschließend darin.
 
@@ -118,7 +133,7 @@ node scripts/backup.mjs /pfad/zu/sicherungen
 
 Das Sicherungsskript erzeugt einen konsistenten SQLite-Schnappschuss und kopiert Schlüssel, Fotos und gegebenenfalls `.env`. Es ist keine Verschlüsselung des gesamten Backups: Sicherungsordner privat aufbewahren. Wiederherstellung steht in der LXC-Anleitung. Der JSON-Export in der Oberfläche ist ein lesbarer Datenexport; er ersetzt die vollständige Sicherung und deren Wiederherstellung nicht.
 
-[PROJECT_STATE.md](PROJECT_STATE.md) hält Umfang, Prüfungen, Grenzen und nächste Schritte fest. Für die Fortsetzung genügt das Projektpaket zusammen mit dieser Datei. Der Quellcode liegt im privaten Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer). Zugangsdaten, Familiendaten, Fotos und Sicherungen bleiben auf dem eigenen Server.
+[PROJECT_STATE.md](PROJECT_STATE.md) hält Umfang, Prüfungen, Grenzen und nächste Schritte fest. Für die Fortsetzung genügt das Projektpaket zusammen mit dieser Datei. Der Quellcode liegt im öffentlichen Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer). Zugangsdaten, Familiendaten, Fotos und Sicherungen bleiben auf dem eigenen Server.
 
 ## Technik
 

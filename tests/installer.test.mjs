@@ -24,10 +24,10 @@ function fixture(t) {
   const javascript = (name, body) => writeFileSync(join(bin, name), '#!/usr/bin/env node\n' + body + '\n', { mode: 0o755 });
   shell('id', 'printf "0\\n"');
   shell('systemd-detect-virt', 'printf "%s\\n" "${MOCK_VIRT:-lxc}"');
-  shell('getent', 'exit 0');
+  shell('getent', 'if [ "${1:-}" = ahostsv4 ] && [ "${2:-}" = "${MOCK_DNS_FAIL:-}" ]; then exit 2; fi\nexit 0');
   shell('chown', 'exit 0');
   shell('useradd', 'exit 0');
-  shell('apt-get', 'printf "%s\\n" "$*" >> "$MOCK_STATE/apt"');
+  shell('apt-get', 'printf "%s\\n" "$*" >> "$MOCK_STATE/apt"\nif [[ " $* " == *" update "* ]] && [ "${MOCK_APT_FAIL:-}" = yes ]; then\n  if [[ " $* " == *" --error-on=any "* ]]; then exit 100; fi\n  printf "W: Temporary failure resolving package host\\n" >&2\nfi');
   shell('sleep', 'exit 0');
   shell('hostname', 'printf "192.0.2.12\\n"');
   javascript('install', `const {spawnSync}=require('node:child_process'); const args=process.argv.slice(2), keep=[]; for(let i=0;i<args.length;i++){if(args[i]==='-o'||args[i]==='-g'){i++;continue;}keep.push(args[i]);} const result=spawnSync('/usr/bin/install',keep,{stdio:'inherit'}); process.exit(result.status ?? 1);`);
@@ -114,6 +114,22 @@ test('Falsche Node.js-Prüfsumme bricht vor Dienst- und Datenänderungen ab', t 
   writeFileSync(manifest, readFileSync(manifest, 'utf8').replace(/^[a-f0-9]{64}/, '0'.repeat(64)));
   const result = f.run(); assert.notEqual(result.status, 0); assert.match(result.stderr, /Prüfsumme stimmt nicht/);
   assert.equal(existsSync(f.app), false); assert.equal(existsSync(f.data), false); assert.equal(existsSync(f.unit), false); assert.equal(existsSync(join(f.state, 'systemctl')), false);
+});
+
+test('Fehlende Download-DNS-Auflösung bricht vor Paket-, Dienst- und Datenänderungen ab', t => {
+  for (const host of ['deb.debian.org', 'security.debian.org', 'nodejs.org']) {
+    const f = fixture(t), result = f.run([], { MOCK_DNS_FAIL: host });
+    assert.notEqual(result.status, 0); assert.ok(result.stderr.includes(host)); assert.match(result.stderr, /DNS-Auflösung/);
+    for (const path of [f.app, f.data, f.unit, join(f.state, 'apt'), join(f.state, 'curl'), join(f.state, 'systemctl')]) assert.equal(existsSync(path), false);
+  }
+});
+
+test('Fehler beim APT-Indexabruf werden als Fehler behandelt und stoppen vor Paketinstallation', t => {
+  const f = fixture(t), result = f.run([], { MOCK_APT_FAIL: 'yes' });
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /Paketlisten konnten nicht vollständig geladen werden/);
+  const calls = readFileSync(join(f.state, 'apt'), 'utf8').trim().split('\n');
+  assert.equal(calls.length, 1); assert.match(calls[0], /--error-on=any/); assert.match(calls[0], /Acquire::Retries=3/);
+  for (const path of [f.app, f.data, f.unit, join(f.state, 'curl'), join(f.state, 'systemctl')]) assert.equal(existsSync(path), false);
 });
 
 test('Erstinstallation richtet Laufzeit, Dienst, private Konfiguration und HTTP-Prüfung ein', t => {

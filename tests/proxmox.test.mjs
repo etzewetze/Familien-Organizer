@@ -54,14 +54,15 @@ if(command==='push') {if(process.env.MOCK_PUSH_FAIL==='yes') process.exit(1); fs
 if(command==='exec') {
   const cmd=args.slice(3);
   if(cmd[0]==='getent'&&process.env.MOCK_NETWORK_FAIL==='yes') process.exit(1);
+  if(cmd[0]==='test'&&cmd[1]==='-f') process.exit(fs.existsSync(path.join(root,'unpacked','scripts','install-lxc.sh'))?0:1);
   if(cmd[0]==='hostname') console.log('192.0.2.42');
   if(cmd[0]==='bash') {
     const archive=path.join(root,'source.tar.gz'), checksum=args[args.length-2];
     const actual=crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
     if(actual!==checksum) process.exit(33);
-    if(process.env.MOCK_INSTALL_FAIL==='yes') process.exit(2);
     const target=path.join(root,'unpacked');fs.mkdirSync(target,{recursive:true});
     cp.execFileSync('tar',['-xzf',archive,'-C',target]);
+    if(process.env.MOCK_INSTALL_FAIL==='yes') process.exit(2);
     fs.writeFileSync(path.join(root,'installed'),'yes');
   }
 }
@@ -131,6 +132,15 @@ test('Eigene ID, statische IPv4, VLAN und größere Ressourcen werden korrekt ü
   assert.equal(option(create, '--net0'), 'name=eth0,bridge=vmbr1,ip=192.0.2.60/24,firewall=1,gw=192.0.2.1,tag=20');
 });
 
+test('Eigener DNS-Server wird geprüft und übergeben; ohne Auswahl bleibt Proxmox-DNS erhalten', t => {
+  const f = fixture(t); passed(f.run(['--nameserver', '192.0.2.53']));
+  const create = f.calls('pct').find(c => c[0] === 'create'); assert.equal(option(create, '--nameserver'), '192.0.2.53');
+  const g = fixture(t); passed(g.run()); assert.equal(g.calls('pct').find(c => c[0] === 'create').includes('--nameserver'), false);
+  const h = fixture(t);
+  for (const value of ['127.0.0.1', '0.0.0.0', '224.0.0.1', '999.1.1.1', '192.0.2.53;echo bad']) assert.notEqual(h.run(['--nameserver', value]).status, 0);
+  assert.equal(h.calls('pct').length, 0); assert.equal(h.calls('pveam').length, 0);
+});
+
 test('Mehrdeutige Speicher verlangen Auswahl; ausgewählter Speicher wird benutzt', t => {
   const f = fixture(t), ambiguous = f.run(['--dry-run'], { MOCK_AMBIGUOUS:'yes' }); assert.notEqual(ambiguous.status, 0); assert.match(ambiguous.stderr, /rootfs-storage/);
   passed(f.run(['--rootfs-storage','pool-b'], { MOCK_AMBIGUOUS:'yes' })); assert.equal(option(f.calls('pct').find(c => c[0] === 'create'), '--rootfs'), 'pool-b:8');
@@ -139,6 +149,11 @@ test('Mehrdeutige Speicher verlangen Auswahl; ausgewählter Speicher wird benutz
 test('Fehler bei Netzwerk, Übertragung oder Installation behalten neuen Container ohne Autostart und ohne Löschen', t => {
   for (const extra of [{MOCK_NETWORK_FAIL:'yes'}, {MOCK_PUSH_FAIL:'yes'}, {MOCK_INSTALL_FAIL:'yes'}]) {
     const f = fixture(t), result = f.run([], extra); assert.notEqual(result.status, 0); assert.match(result.stderr, /bleibt zur Diagnose erhalten/);
+    if (extra.MOCK_INSTALL_FAIL) {
+      assert.match(result.stderr, /pct exec 101 -- bash .*install-lxc.sh/); assert.match(result.stderr, /pct set 101 --onboot 1/);
+    } else {
+      assert.match(result.stderr, /Quellcode wurde noch nicht vollständig bereitgestellt/); assert.doesNotMatch(result.stderr, /pct exec 101 -- bash/);
+    }
     const calls = f.calls('pct'); assert.ok(calls.find(c => c[0] === 'create')); assert.equal(calls.some(c => c[0] === 'set'), false); assert.equal(calls.some(c => c[0] === 'destroy'), false);
     assert.equal(readdirSync(join(f.root, 'work')).length, 0);
   }
