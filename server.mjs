@@ -7,22 +7,25 @@ import { Store } from './src/store.mjs';
 import { Model, AppError, check, text, number, networkUrl } from './src/model.mjs';
 import { GoogleSync } from './src/google.mjs';
 import { Photos } from './src/photos.mjs';
+import { importRecipe } from './src/recipe-import.mjs';
 import { seed } from './src/seed.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
 const hash = value => createHash('sha256').update(value).digest('hex');
-const VERSION = '0.1.2';
+const VERSION = '0.2.0';
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
 function passwordHash(password, salt = randomBytes(16).toString('hex')) {
   return { salt, hash: scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString('hex') };
 }
 function validPassword(value) { check(typeof value === 'string' && value.length >= 12 && value.length <= 200, 'Das Familienpasswort braucht 12 bis 200 Zeichen.'); return value; }
 
-export function createApp(env = process.env) {
+export function createApp(env = process.env, services = {}) {
   const store = new Store(env.DATA_DIR || join(ROOT, 'data'));
   const model = new Model(store), google = new GoogleSync(store, model, env);
   const photos = new Photos(store, env.PHOTO_DIR || join(store.directory, 'photos'));
+  const loadRecipe = services.importRecipe || importRecipe;
+  let activeRecipeImports = 0;
   const failures = new Map();
   const cookie = token => `family_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${env.COOKIE_SECURE === 'true' || env.APP_URL?.startsWith('https:') ? '; Secure' : ''}`;
   function newSession(response) {
@@ -137,6 +140,15 @@ export function createApp(env = process.env) {
             store.setMeta('settings', settings); store.bump();
           });
           return json(res, settings);
+        }
+        if (path === '/api/recipes/import' && req.method === 'POST') {
+          const data = await body(req);
+          check(activeRecipeImports < 2, 'Es werden bereits Rezepte geladen. Bitte kurz warten.', 429);
+          activeRecipeImports++;
+          try {
+            const result = await loadRecipe(text(data.url, 2048, true));
+            return json(res, { recipe: model.validate('recipes', result.recipe), warnings: result.warnings });
+          } finally { activeRecipeImports--; }
         }
         const recordRoute = path.match(/^\/api\/records\/([a-z]+)(?:\/([a-zA-Z0-9-]{1,100}))?$/);
         if (recordRoute) {

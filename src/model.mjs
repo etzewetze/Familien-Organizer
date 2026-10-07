@@ -70,6 +70,16 @@ export class Model {
         } else check(!calendarId, 'Bitte Google-Konto auswählen.');
         return { title: title(), startDate, endDate, startTime, endTime, allDay, memberId: memberId(), location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false };
       }
+      case 'birthdays': {
+        const month = number(data.month, 1, 12, true), birthdayDay = number(data.day, 1, 31, true);
+        day(`2000-${String(month).padStart(2, '0')}-${String(birthdayDay).padStart(2, '0')}`);
+        const currentYear = Number(new Intl.DateTimeFormat('sv-SE', { timeZone: this.store.meta('settings', {}).timezone || 'Europe/Berlin' }).format(new Date()).slice(0, 4));
+        const birthYear = data.birthYear === undefined || data.birthYear === null || data.birthYear === '' ? null : number(data.birthYear, 1, currentYear, true);
+        if (birthYear !== null) day(`${String(birthYear).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(birthdayDay).padStart(2, '0')}`);
+        const leapDay = data.leapDay || 'mar1';
+        check(['mar1', 'feb28'].includes(leapDay), 'Bitte den Ersatztermin für den 29. Februar auswählen.');
+        return { name: text(data.name, 100, true), month, day: birthdayDay, birthYear, leapDay, memberId: memberId(), notes: text(data.notes, 2000) };
+      }
       case 'tasks': {
         const repeat = data.repeat || 'none';
         check(['none', 'daily', 'weekdays', 'weekly'].includes(repeat), 'Ungültige Wiederholung.');

@@ -14,14 +14,14 @@ Die Anwendung läuft als eigener Benutzer ohne Administratorrechte. Der Quellcod
 
 ### Mit dem ZIP
 
-Das vollständige ZIP auf dem eigenen Rechner herunterladen und in den LXC nach `/root` kopieren, beispielsweise mit `scp` oder der eigenen Dateiablage. In der LXC-Konsole:
+Auf GitHub **Code → Download ZIP** wählen und das vollständige ZIP in den LXC nach `/root` kopieren, beispielsweise mit `scp` oder der eigenen Dateiablage. In der LXC-Konsole:
 
 ```bash
 apt-get update
 apt-get install -y unzip
 cd /root
-unzip familien-organisierer-v0.1.2.zip
-cd familien-organisierer
+unzip Familien-Organizer-main.zip
+cd Familien-Organizer-main
 bash scripts/install-lxc.sh --check
 bash scripts/install-lxc.sh
 ```
@@ -50,7 +50,7 @@ bash scripts/install-lxc.sh
 
 Nur bei privater Sichtbarkeit benötigt das Repository GitHub-Authentifizierung auf dem LXC. SSH mit Zugriff nur auf dieses Repository ist eine Möglichkeit. Bei HTTPS einen Token über die interaktive Git-Abfrage eingeben; Tokens nicht in URLs, Skripte, Chat oder Quellcode schreiben. Die GitHub-Verbindung hier in ChatGPT überträgt keine Git-Anmeldedaten in deinen LXC.
 
-Ein GitHub- oder Google-Passwort wird dafür nicht benötigt. Für einen Account mit Google-Anmeldung die aktuelle GitHub CLI und Browser-Bestätigung aus [PROXMOX.md](PROXMOX.md#browser-bestätigung-ohne-passwort-oder-manuell-erstellten-token) verwenden; im bestehenden LXC danach in einen neuen Quellcodeordner klonen und `scripts/install-lxc.sh` starten. **Den Container-Ersteller dort nicht verwenden.** Oder **Code → Download ZIP** im angemeldeten Browser herunterladen: das GitHub-ZIP heißt `Familien-Organizer-main.zip` und enthält den Ordner `Familien-Organizer-main`; diese Namen anstelle der Namen im ZIP-Beispiel oben verwenden. Für den ZIP-Weg benötigt der LXC keine GitHub-Anmeldung.
+Ein GitHub- oder Google-Passwort wird dafür nicht benötigt. Für einen Account mit Google-Anmeldung die aktuelle GitHub CLI und Browser-Bestätigung aus [PROXMOX.md](PROXMOX.md#browser-bestätigung-ohne-passwort-oder-manuell-erstellten-token) verwenden; im bestehenden LXC danach in einen neuen Quellcodeordner klonen und `scripts/install-lxc.sh` starten. **Den Container-Ersteller dort nicht verwenden.** Alternativ das ZIP wie oben beschrieben im angemeldeten Browser herunterladen; für den ZIP-Weg benötigt der LXC keine GitHub-Anmeldung.
 
 ## 3. Erster Start
 
@@ -96,13 +96,34 @@ git pull --ff-only
 bash scripts/install-lxc.sh
 ```
 
+### Update des öffentlichen Projekts vom Proxmox-Host
+
+Für den bereits laufenden Container **100** diesen vollständigen Block auf dem **Proxmox-Host als root** ausführen. Bei einer anderen Container-ID die `100` ersetzen. Das öffentliche Repository braucht keine GitHub-Anmeldung:
+
+```bash
+pct exec 100 -- bash -c '
+set -e
+export GIT_TERMINAL_PROMPT=0
+if [ -d /root/Familien-Organizer/.git ]; then
+  git -C /root/Familien-Organizer pull --ff-only
+else
+  git clone https://github.com/etzewetze/Familien-Organizer.git /root/Familien-Organizer
+fi
+bash /root/Familien-Organizer/scripts/install-lxc.sh
+'
+```
+
+Der Checkout liegt innerhalb des Containers außerhalb des installierten Codes. Der ursprüngliche, vom Host übertragene Ordner `/root/familien-organisierer-src` bleibt erhalten. Derselbe Block lässt sich für spätere Updates wieder verwenden. Bei lokalen Änderungen oder einem bereits belegten Zielordner bricht Git ab; es wird nichts automatisch gelöscht oder zurückgesetzt.
+
+Der Installer erstellt vor dem Wechsel die unten beschriebene Updatesicherung und erhält vorhandene Familiendaten, Einstellungen und Fotos. Nach erfolgreichem Update die Browserseite neu laden. Für neue Funktionen muss der **vollständige Projektstand** geladen werden; nur `install-lxc.sh` zu kopieren aktualisiert den Anwendungscode nicht. Der Container wird dabei nicht neu angelegt.
+
 Das Skript bereitet die neue Laufzeit und den Quellcode zuerst vor. Dann stoppt es den vorhandenen Dienst, sichert Datenbank, Schlüssel, Konfiguration und Fotos, ersetzt den Quellcode, startet den Dienst und prüft seine HTTP-Antwort einschließlich Versionsnummer. Bestehende `.env`, Familiendaten, Fotos und eigene systemd-Drop-ins werden erhalten. Dateien, die im neuen Quellcode fehlen, werden nicht aus der alten Installation übernommen.
 
 Schlägt der Start fehl, stoppt das Skript die neue Version und stellt vorherigen Code, Node.js-Verknüpfung, Dienstkonfiguration und den Datenbankstand vor dem Update wieder her. Neue Datenbankdateien werden für die Diagnose in einem privaten `failed-database-*`-Ordner behalten. Fotos bleiben erhalten; Einträge, die während eines fehlgeschlagenen Updates neu geschrieben wurden, können durch das Zurücksetzen der Datenbank entfallen. Bei der Erstinstallation wird der Dienst zurückgenommen, ein bereits erzeugter Datenordner bleibt erhalten.
 
 Kann der neue Dienst nicht sicher gestoppt werden oder schlägt eine Wiederherstellung fehl, kopiert das Skript keine Datenbank über einen laufenden Dienst. Es meldet den Fehler und behält Arbeitsordner und Sicherungen für die manuelle Wiederherstellung. Bei vollem oder defektem Speicher ist eine automatische Wiederherstellung nicht garantiert.
 
-Updatesicherungen, alte Laufzeiten und alte Quellcodekopien werden **nicht automatisch gelöscht**. Speicherplatz regelmäßig kontrollieren und nach geprüften Updates nicht mehr benötigte Stände entfernen. Bei künftigen Schemaänderungen gehören Datenbankmigrationen zur jeweiligen Version; 0.1.2 verwendet weiterhin Schema 1.
+Updatesicherungen, alte Laufzeiten und alte Quellcodekopien werden **nicht automatisch gelöscht**. Speicherplatz regelmäßig kontrollieren und nach geprüften Updates nicht mehr benötigte Stände entfernen. Bei künftigen Schemaänderungen gehören Datenbankmigrationen zur jeweiligen Version; 0.2.0 verwendet weiterhin Schema 1. Geburtstage werden als zusätzliche Datensatzart gespeichert; vorhandene Tabellen und Daten bleiben bestehen.
 
 ## 6. Separate Sicherung
 
@@ -150,7 +171,7 @@ Das Repository speichert Quellcode, Tests und `PROJECT_STATE.md`. `.env`, Laufze
 
 Der Quellcode liegt im öffentlichen Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer). Der Host-Installer kopiert ausschließlich Quellcode in den neuen LXC; GitHub-Anmeldedaten und Git-Metadaten werden nicht mitgegeben. Ein so übertragener Quellcodeordner ist kein Git-Checkout. Für spätere Updates einen neuen Stand in den bestehenden LXC übertragen oder dort selbst einen Git-Checkout außerhalb von `/opt/familien-organisierer` anlegen und `scripts/install-lxc.sh` ausführen. Den Host-Ersteller dafür nicht erneut aufrufen: Er erstellt einen neuen Container.
 
-Die Installer-Tests verwenden einen isolierten Dateibaum und nachgebildete Paket-, Konto- und systemd-Befehle. SHA-256-Prüfung, Kopiervorgänge und SQLite-Sicherung/Wiederherstellung werden tatsächlich ausgeführt. Eine echte Proxmox-/LXC-Abnahme steht aus.
+Die Installer-Tests verwenden einen isolierten Dateibaum und nachgebildete Paket-, Konto- und systemd-Befehle. SHA-256-Prüfung, Kopiervorgänge und SQLite-Sicherung/Wiederherstellung werden tatsächlich ausgeführt. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf seinem Proxmox gemeldet. Das Update auf 0.2.0 und eine vollständige Prüfung auf dem Zielsystem stehen noch aus.
 
 Technische Referenzen: [Offizielle Node.js-Downloads](https://nodejs.org/en/download), [Node.js-Release-Verifikation](https://github.com/nodejs/node#verifying-binaries), [systemd-LXC-Erkennung](https://github.com/systemd/systemd/blob/main/man/systemd-detect-virt.xml).
 

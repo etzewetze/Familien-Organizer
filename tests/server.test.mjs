@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../server.mjs';
+import { parseRecipePage } from '../src/recipe-import.mjs';
 test('HTTP: Anmeldung, Gerätesynchronisierung, Konflikte, CSRF und private Bilder', async t => {
   const directory = mkdtempSync(join(tmpdir(), 'family-http-'));
   const app = createApp({ DATA_DIR: directory });
@@ -38,4 +39,39 @@ test('HTTP: Anmeldung, Gerätesynchronisierung, Konflikte, CSRF und private Bild
   const exportText = await (await request('/api/export')).text(); assert.ok(!exportText.includes('test-password-2026')); assert.ok(!exportText.includes('salt'));
   assert.equal((await request('/api/password', 'POST', { currentPassword: 'test-password-2026', newPassword: 'new-password-2026' })).status, 200);
   assert.equal((await request('/api/state', 'GET', undefined, { Cookie: cookie2 })).status, 401);
+});
+
+test('HTTP: Geburtstage sind synchronisiert; Rezeptimport bleibt bis zum Speichern eine geschützte Vorschau', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'family-features-'));
+  let imports = 0;
+  const app = createApp({ DATA_DIR: directory }, { importRecipe: async url => {
+    imports++;
+    return parseRecipePage(JSON.stringify({ '@type': 'Recipe', name: 'Eigene Testpasta', recipeYield: '4 Portionen', totalTime: 'PT20M', recipeIngredient: ['400 g Nudeln'], recipeInstructions: 'Nudeln kochen.' }), url);
+  } });
+  await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  t.after(async () => { await new Promise(resolve => app.server.close(resolve)); app.store.close(); rmSync(directory, { recursive: true, force: true }); });
+  let cookie = '';
+  const request = (path, method = 'GET', data, extra = {}) => fetch(base + path, { method, headers: { 'X-Family-Request': '1', 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...extra }, ...(data ? { body: JSON.stringify(data) } : {}) });
+  assert.equal((await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' })).status, 401); assert.equal(imports, 0);
+  const setup = await request('/api/setup', 'POST', { password: 'test-password-2026', familyName: 'Test', names: ['Anna'] });
+  cookie = setup.headers.get('set-cookie').split(';')[0];
+  const initial = await (await request('/api/state')).json(); assert.deepEqual(initial.birthdays, []);
+  const birthdayResponse = await request('/api/records/birthdays', 'POST', { name: 'Anna', day: 7, month: 10, birthYear: 1990, memberId: initial.members[0].id });
+  assert.equal(birthdayResponse.status, 201); const birthday = await birthdayResponse.json();
+  const login = await request('/api/login', 'POST', { password: 'test-password-2026' }), secondCookie = login.headers.get('set-cookie').split(';')[0];
+  const second = await (await request('/api/state', 'GET', undefined, { Cookie: secondCookie })).json(); assert.equal(second.birthdays[0].id, birthday.id); assert.equal(second.events.length, 0);
+  const exported = await (await request('/api/export')).json(); assert.equal(exported.birthdays[0].birthYear, 1990); assert.equal(exported.version, '0.2.0');
+  assert.equal((await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }, { Origin: 'https://foreign.example' })).status, 403); assert.equal(imports, 0);
+  const previewResponse = await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }); assert.equal(previewResponse.status, 200);
+  const preview = await previewResponse.json(); assert.equal(preview.recipe.sourceUrl, 'https://rezepte.example/pasta'); assert.equal(preview.recipe.ingredients[0].quantity, 400);
+  assert.equal(app.store.all('recipes').length, 0); assert.equal(imports, 1);
+  const savedResponse = await request('/api/records/recipes', 'POST', preview.recipe); assert.equal(savedResponse.status, 201);
+  const saved = await savedResponse.json();
+  assert.equal((await request('/api/records/meals', 'POST', { date: '2026-10-05', recipeId: saved.id, servings: 2 })).status, 201);
+  assert.equal((await request('/api/shopping/generate', 'POST', { week: '2026-10-05' })).status, 200);
+  assert.equal(app.store.all('items')[0].quantity, 200); assert.equal(app.store.all('items')[0].title, 'Nudeln');
+  assert.equal((await request('/birthdays.js')).status, 200);
+  assert.equal((await request('/api/records/birthdays/' + birthday.id, 'DELETE', { _rev: birthday._rev })).status, 200);
+  assert.equal(app.store.state().birthdays.length, 0);
 });

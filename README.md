@@ -2,7 +2,7 @@
 
 Eine eigenständige, deutschsprachige Familienzentrale zum Selbsthosten. Funktional an den beschriebenen Familienkalender angelehnt; eigener Quellcode, eigenes Design und keine Abhängigkeit von Dæly. Keine übernommenen Markenassets oder proprietären Programmteile.
 
-**Version 0.1.2 ist eine lauffähige erste Entwicklungsfassung.** Sie ist für einen privaten Haushalt im eigenen Netz gedacht. Alle Familiengeräte verwenden dasselbe Familienpasswort und dieselben Bearbeitungsrechte. Eine native App und Stundenpläne folgen später.
+**Version 0.2.0 ergänzt Geburtstage und den Rezeptimport per Webseiten-Link.** Sie ist für einen privaten Haushalt im eigenen Netz gedacht. Alle Familiengeräte verwenden dasselbe Familienpasswort und dieselben Bearbeitungsrechte. Eine native App und Stundenpläne folgen später.
 
 ## Neuen Proxmox-LXC automatisch anlegen
 
@@ -96,20 +96,23 @@ Im Browser `http://localhost:8080` öffnen, Familiennamen, Mitglieder und ein Pa
 
 ## Enthaltene Funktionen
 
-| Bereich | Stand in 0.1 |
+| Bereich | Stand in 0.2 |
 |---|---|
 | Kalender | Wochen-, Monats- und Listenansicht; ganztägige und mehrtägige Termine; Personenfarben und Filter; anlegen, bearbeiten, löschen |
+| Geburtstage | Eigener Reiter; Name, Tag und Monat; optional Geburtsjahr und Person; jährliche Anzeige im Kalender mit Alter; Ersatzdatum für den 29. Februar wählbar |
 | Google Kalender | Mehrere Konten über OAuth; Kalenderauswahl und Personenzuordnung; importieren und Änderungen zurückschreiben; Wiederholungsversuche bei Verbindungsfehlern |
 | Aufgaben und Routinen | Einmalig, täglich, werktags oder wöchentlich; Zuordnung zu Personen; Abhaken nach Tag |
 | Punkte | Einmalige Gutschrift je Erledigung; selbst definierte Belohnungen; Einlösungen und Punktestand |
-| Essen und Rezepte | Wochenplan, Rezeptverwaltung, Zutaten, Zubereitung und Portionszahlen |
+| Essen und Rezepte | Wochenplan, Rezeptverwaltung, Zutaten, Zubereitung und Portionszahlen; öffentliche Rezeptlinks als editierbare Vorschau importieren |
 | Einkauf | Zutaten skalieren und zusammenführen; erneut übernehmen ohne Verdopplung; manuelle Ergänzungen und Abhaken |
 | Listen und Notizen | Eigene Checklisten, Kategorien, Mengen und angeheftete Notizen |
 | Fotos | Nur auf dem Gerät gespeicherte Bilder; Container-Ordner und Upload; Netzwerk-Bilderliste; Immich-Alben; Diashow mit Uhr |
 | Geräte | Responsive Weboberfläche für Handy, Tablet, PC und Wandbildschirm; manueller Vollbildmodus |
 | Betrieb | SQLite, systemd für LXC, optional Docker, vollständiges Sicherungsskript und Datenexport |
 
-**Wichtig zum Entwicklungsstand:** Google- und Immich-Anbindungen sind implementiert, aber noch nicht gegen deine Konten bzw. deine Instanz getestet. Google wird alle fünf Minuten abgeglichen; neue Änderungen werden zusätzlich sofort zum Versand angestoßen. Dies ist kein Echtzeit-Push. Der Google-Abruf umfasst 90 Tage Vergangenheit und 366 Tage Zukunft. Wiederkehrende Google-Termine werden in diesem Zeitraum als einzelne Vorkommen angezeigt und einzeln bearbeitet. Lokale wiederkehrende Kalendertermine sind noch nicht enthalten; wiederkehrende Aufgaben sind enthalten.
+Unter **Essen & Rezepte → Rezeptlink importieren** einen direkten Rezeptlink einfügen, die Vorschau prüfen und speichern. Der Import liest öffentlich angebotene Rezeptdaten, etwa von Seiten wie Chefkoch, sofern die betreffende Seite diese Daten ausliefert und den Serverabruf zulässt. Quellenlink, Zutaten und Zubereitung werden lokal gespeichert. Nicht jede Webseite lässt sich automatisch auslesen; eine manuelle Eingabe bleibt möglich. Details in [INTEGRATIONS.md](docs/INTEGRATIONS.md#rezepte-aus-dem-internet).
+
+**Wichtig zum Entwicklungsstand:** Google- und Immich-Anbindungen sind implementiert, aber noch nicht gegen deine Konten bzw. deine Instanz getestet. Google wird alle fünf Minuten abgeglichen; neue Änderungen werden zusätzlich sofort zum Versand angestoßen. Dies ist kein Echtzeit-Push. Der Google-Abruf umfasst 90 Tage Vergangenheit und 366 Tage Zukunft. Wiederkehrende Google-Termine werden in diesem Zeitraum als einzelne Vorkommen angezeigt und einzeln bearbeitet. Geburtstage wiederholen sich lokal jedes Jahr; allgemeine lokale Terminserien sind noch nicht enthalten. Wiederkehrende Aufgaben sind enthalten.
 
 ## Installation auf Proxmox LXC
 
@@ -120,7 +123,7 @@ Die vollständige Anleitung steht in [docs/LXC.md](docs/LXC.md). Ein unprivilegi
 3. `bash scripts/install-lxc.sh` ausführen; Debian-Pakete, Node.js 24 und der systemd-Dienst werden automatisch eingerichtet.
 4. `http://CONTAINER-IP:8080` öffnen und Familie einrichten.
 
-Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Der Dienst startet nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Die Abläufe sind mit isolierten Systembefehlen getestet; die Abnahme auf deinem echten Proxmox steht noch aus.
+Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Der Dienst startet nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf Proxmox gemeldet; das Update auf 0.2.0 ist dort noch zu prüfen. Der [Update-Befehl vom Proxmox-Host](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) lädt den vollständigen neuen Stand in denselben Container.
 
 ## Google und Fotos einrichten
 

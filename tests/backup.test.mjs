@@ -9,6 +9,7 @@ import { Store } from '../src/store.mjs';
 test('Sicherung einer laufenden WAL-Datenbank erhält Daten und Entschlüsselungsschlüssel', t => {
   const directory = mkdtempSync(join(tmpdir(), 'family-backup-')), data = join(directory, 'data'), target = join(directory, 'backups');
   const store = new Store(data); store.put('notes', 'note', { title: 'Sicherung', body: 'WAL-Test' }); store.setMeta('secret', store.encrypt('test-secret'));
+  store.put('birthdays', 'birthday', { name: 'Test Geburtstag', month: 10, day: 7, birthYear: 1990, leapDay: 'mar1', memberId: '', notes: '' });
   t.after(() => { store.close(); rmSync(directory, { recursive: true, force: true }); });
   const result = spawnSync(process.execPath, ['scripts/backup.mjs', target], { cwd: new URL('../', import.meta.url), env: { ...process.env, DATA_DIR: data }, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
@@ -16,5 +17,6 @@ test('Sicherung einer laufenden WAL-Datenbank erhält Daten und Entschlüsselung
   assert.deepEqual(readFileSync(join(backupFolder, 'master.key')), readFileSync(join(data, 'master.key')));
   assert.ok(existsSync(join(backupFolder, 'backup.json')));
   const copy = new DatabaseSync(join(backupFolder, 'family.sqlite'), { readOnly: true });
-  assert.equal(JSON.parse(copy.prepare('SELECT data FROM records WHERE id=?').get('note').data).body, 'WAL-Test'); copy.close();
+  assert.equal(JSON.parse(copy.prepare('SELECT data FROM records WHERE id=?').get('note').data).body, 'WAL-Test');
+  assert.equal(JSON.parse(copy.prepare('SELECT data FROM records WHERE kind=? AND id=?').get('birthdays', 'birthday').data).birthYear, 1990); copy.close();
 });

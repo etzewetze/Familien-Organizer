@@ -1,7 +1,7 @@
 # Projektstand und Fortsetzung
 
 **Projekt:** Familien Organisierer  
-**Stand:** 2026-10-07, Version 0.1.2, Datenbankschema 1
+**Stand:** 2026-10-07, Version 0.2.0, Datenbankschema 1
 **Ziel:** Eigene Familienzentrale auf Proxmox LXC; funktionale Orientierung am genannten Familienkalender, eigener Quellcode und eigenes Design. Unabhängiger Kern ohne Daely-Dienste. Google ist optional; bei dessen Nutzung bleibt Google natürlich eine externe Abhängigkeit.
 
 ## Vorgaben des Nutzers
@@ -17,10 +17,15 @@
 - Repository vom Nutzer vorgegeben: https://github.com/etzewetze/Familien-Organizer; ursprünglich privat, am 2026-10-07 vom Nutzer öffentlich gestellt und öffentliche Sichtbarkeit per GitHub geprüft.
 - Ein Aufruf aus der README soll einen LXC auf dem Proxmox-Host anlegen und die Anwendung installieren.
 - GitHub-Anmeldung erfolgt mit Google; kein GitHub-Passwort vorhanden. Installation ohne Passworteingabe oder manuell erstellten Token anbieten, alternativ ohne GitHub-Anmeldung auf dem Host per Browser-ZIP.
+- Geburtstagsreiter mit automatischer jährlicher Kalenderanzeige; Rezeptimport über Internetlinks, beispielsweise Chefkoch.
 
 ## Was geliefert ist
 
-Lauffähiger Node.js-Server, SQLite-Speicherung, deutsche Weboberfläche und API für alle Kernbereiche. Familienname, Mitglieder und Passwort werden bei der ersten Benutzung eingerichtet. Daten liegen gemeinsam auf dem Server, geöffnete Geräte laden Änderungen alle 15 Sekunden. Die Oberfläche besitzt acht Arbeitsbereiche; Stundenpläne sind als späterer Bereich gekennzeichnet.
+Lauffähiger Node.js-Server, SQLite-Speicherung, deutsche Weboberfläche und API für alle Kernbereiche. Familienname, Mitglieder und Passwort werden bei der ersten Benutzung eingerichtet. Daten liegen gemeinsam auf dem Server, geöffnete Geräte laden Änderungen alle 15 Sekunden. Die Oberfläche besitzt neun Arbeitsbereiche; Stundenpläne sind als späterer Bereich gekennzeichnet.
+
+Neu in 0.2.0: Geburtstagsreiter mit optionalem Geburtsjahr, Personenzuordnung und Notizen. Dynamische jährliche Anzeige in Woche, Monat und Kalenderliste; keine gespeicherten Terminkopien, kein begrenzter Jahreshorizont. Mit Geburtsjahr wird das Alter angezeigt. Der 29. Februar erhält eine wählbare Regel für Jahre ohne Schalttag. Geburtstage bleiben lokal; kein automatischer Export als Google-Serie. Die zusätzliche Datensatzart nutzt die vorhandene SQLite-Tabelle unter Schema 1.
+
+Neu in 0.2.0: Rezeptlink-Import mit editierbarer Vorschau und manueller Alternative. JSON-LD Recipe unterstützt Graphen, Typ-Arrays, Zutaten, Portionen, Dauer und strukturierte Anleitung. Deutsche/englische Dezimalzahlen, Brüche und verbreitete Einheiten werden erkannt; unbekannte Mengen bleiben mit Hinweis als Text erhalten. Speichern ist eine gesonderte Nutzeraktion; anschließend funktioniert die vorhandene Portionen-/Einkaufslistenlogik. Abruf ausschließlich öffentlicher HTTP(S)-Adressen mit geprüften, fest gebundenen DNS-Adressen, Prüfung jeder Weiterleitung sowie Größen-/Zeitlimits. Keine Browser-Cookies oder Zugangsdaten weiterleiten. Kein externer Importdienst und keine neue npm-Abhängigkeit. Chefkoch und andere Anbieter müssen passende strukturierte Daten liefern und den Abruf erlauben; tatsächliche Chefkoch-Seiten wurden noch nicht über die Anwendung live geprüft.
 
 Google-OAuth für mehrere Konten, Kalenderauswahl und Personenzuordnung; Import, Rückschreiben und persistente Warteschlange. Abgleich alle fünf Minuten plus sofortiger Versandversuch bei lokalen Terminänderungen. Immich-Alben und serverseitiges Weiterreichen der Bilder. Lokale Gerätefotos in IndexedDB. Netzwerk-Bilderlisten und eigener Fotoordner mit Upload.
 
@@ -39,6 +44,14 @@ Nach der ersten realen Rückmeldung prüft der LXC-Installer vor Paketdownloads 
 Optional Docker, konsistente SQLite-Sicherung inklusive Schlüssel und Fotos sowie Passwort-Wiederherstellung sind enthalten. Keine externen npm-Laufzeitabhängigkeiten, kein Build-Schritt. Node 24 empfohlen, >=22.13 erforderlich.
 
 ## Prüfungen
+
+**Aktueller vollständiger Lauf für 0.2.0: `npm test`, 61 Tests bestanden** (40 Anwendungstests, 11 Installer-/Konfigurationstests, 10 Proxmox-Hosttests), keine Fehler oder übersprungenen Tests. Geburtstagsdaten sind auch nach Update und in der konsistenten WAL-Sicherung erhalten. Die neuen Frontend-Tests prüfen alle neun Ansichten, alle drei Kalenderdarstellungen, maskierte Vorschautexte und den Schutz vor verspäteten Importantworten in einem inzwischen gewechselten Dialog. Die HTTP-Tests prüfen Anmeldung/CSRF, Geburtstage auf zwei Sitzungen und die Folge Importvorschau → Speichern → Essensplan → skalierte Einkaufsliste.
+
+JavaScript-Syntax für 14 Laufzeit-/Skriptmodule, Bash-Syntax beider Installer, **35 Bash-Blöcke der Anleitungen** und `git diff --check` geprüft. Keine neue System- oder npm-Abhängigkeit erforderlich.
+
+Rezeptparser-Tests nutzen eigene Beispieldaten für Graphen, Typ-Arrays, PropertyValue, ItemList, Brüche, Dezimalzahlen und fehlende Angaben. Abruf-Tests prüfen private/reservierte Adressen, alle DNS-Ergebnisse, Umleitungen, Formate, Größenlimits, komprimierte Daten und Zeitlimit. Ein echter lokaler HTTP-Test prüft die Verbindung mit vorab festgelegter IP und ursprünglichem Host; öffentliche Anbieteraufrufe werden dabei ersetzt. Kein Nachweis eines tatsächlichen Chefkoch-Imports auf dem Nutzer-LXC.
+
+Die folgenden Prüfergebnisse und Installationsrückmeldungen dokumentieren den Verlauf vor 0.2.0:
 
 `npm test`: **40 Tests bestanden** (20 Anwendungstests, 11 Installer-/Konfigurationstests, 9 Proxmox-Hosttests). Die DNS-Korrektur wurde am 2026-10-07 mit dem vollständigen Testlauf geprüft; außerdem 26 Bash-Blöcke in den Anleitungen auf Syntax geprüft.
 
@@ -74,32 +87,34 @@ JavaScript-Syntax und Bash-Syntax des Installers geprüft. Der Server wurde gest
 
 **Weitere Nutzerprüfung am 2026-10-07:** `/etc` ist tatsächlich `700 root:root`; `/` und `/etc/dbus-1` sind `755`, `/etc/passwd` ist `644`. Der Reparaturblock brach bereits bei `stat` ab, weil `/etc/dbus-1/system.conf` nicht existiert; die Rechte wurden deshalb noch nicht geändert. Auch der anschließende Installationsblock brach korrekt bei `degraded` ab. Die Anleitung ist korrigiert: keine zwingende lokale D-Bus-Konfiguration unter `/etc`, sondern die offizielle Standardkonfiguration unter `/usr/share/dbus-1/system.conf`, falls kein lokaler Ersatz vorhanden ist. Der Nutzer schlägt vor, den noch unfertigen Container zu löschen und neu zu erstellen. Ein konkreter Neuaufbau mit aktualisiertem Host-Checkout, Vorprüfung und ausdrücklicher ID 100 ist jetzt dokumentiert; die manuelle Löschung ist auf diesen unfertigen Container beschränkt. Der Ersteller selbst löscht weiterhin nichts. Auf dem Nutzerhost wurden Löschung und Neuinstallation noch nicht ausgeführt bzw. nicht bestätigt.
 
+**Aktuelle Rückmeldung:** Der Nutzer meldet, dass der Container nun läuft, und bittet um Root-Zugang sowie Geburtstage und Rezeptimport. Die vorangehende Fehlerbehebung ist damit abgeschlossen gemeldet; eine eigene Prüfung aller Systemdienste liegt nicht vor. Neue Erstellung oder Löschung ist kein weiterer Schritt. Das Update auf 0.2.0 muss der Nutzer im bestehenden LXC ausführen; eine Abnahme dieser neuen Version auf dem Zielhost steht aus.
+
 **Keine visuelle Browser-Abnahme:** In dieser Arbeitsumgebung fehlte die Browser-Vorschau-Infrastruktur. Ein Versuch mit installiertem Playwright konnte ebenfalls keinen lokalen Browser starten. Die Ansichtslogik wurde danach ohne Browser getestet; das ersetzt keine echte Bedienungs- und Layoutprüfung. Es gibt keine geprüften Screenshots. Responsive CSS ist implementiert, muss aber auf realen Bildschirmgrößen abgenommen werden.
 
 **Keine Live-Abnahme von Google und Immich:** Eigene Konten, OAuth-Konfiguration, Domain und Immich-Instanz/Version standen nicht zur Verfügung. Tests dieser Anbindungen verwenden kontrollierte Ersatzantworten, keine realen Benutzerkonten.
 
-## Bekannte Grenzen von 0.1
+## Bekannte Grenzen von 0.2
 
 1. Ein Familienpasswort und dieselben Rechte für alle Geräte. Die Anzeige „Kind“ vergibt keine beschränkten Rechte. Vor einem Einsatz mit frei bedienbaren Kindergeräten Elternschutz/PIN und Rechte ergänzen.
-2. Google-Polling statt Push; Abruffenster 90 Tage zurück / 366 Tage vor. Importierte Google-Serien werden als einzelne Vorkommen bearbeitet. Lokale wiederkehrende Termine fehlen noch.
+2. Google-Polling statt Push; Abruffenster 90 Tage zurück / 366 Tage vor. Importierte Google-Serien werden als einzelne Vorkommen bearbeitet. Geburtstage wiederholen sich lokal; allgemeine lokale Terminserien fehlen noch.
 3. Noch keine vollständige Konfliktoberfläche für gleichzeitige Änderungen direkt in Google und in der Familienzentrale. Nach erfolgreicher Übertragung wird der Google-Stand beim folgenden Import maßgeblich.
 4. Keine Browser-Offlinebearbeitung. Gemeinsame Daten brauchen den eigenen Server. Gerätefotos sind lokal und nicht auf andere Geräte synchronisiert.
 5. Kein automatischer Bildschirmschoner, keine Push-Erinnerungen, keine native App. Die Diashow wird bewusst gestartet.
 6. Netzwerkquelle braucht JSON-Bilderliste auf demselben Ursprung. Keine automatische allgemeine Verzeichnis-, SMB- oder WebDAV-Erkennung.
-7. Standardmäßig eine Mahlzeit pro Tag. Frühstück/Mittag/Abend als getrennte Slots und erweiterte Rezeptimporte können später ergänzt werden.
+7. Standardmäßig eine Mahlzeit pro Tag. Frühstück/Mittag/Abend als getrennte Slots können später ergänzt werden. Rezeptimport setzt öffentlich abrufbare JSON-LD-Rezeptdaten voraus; nicht alle Seiten sind geeignet.
 8. JSON-Export dient dem Lesen der Familiendaten. Vollständige Wiederherstellung nutzt SQLite-Sicherung und Originalschlüssel; eine Import-/Restore-Oberfläche fehlt.
 9. Kleine Haushalte sind Zielgruppe. Große Datenmengen, langjährig wachsende Erledigungslisten und sehr große Fotobibliotheken sind noch nicht unter Last geprüft.
 10. Kein Stundenplan-Modul und keine native App; ausdrücklich nach hinten gestellt.
 
 ## Konkreter nächster Entwicklungsschritt
 
-**Nach der aktuellen Nutzerpräferenz den unfertigen Container 100 mit dem korrigierten Ersteller neu aufsetzen.** Zuerst den Host-Checkout mit `git pull --ff-only` aktualisieren und `--dry-run` prüfen; danach den unfertigen LXC 100 stoppen/löschen und ausdrücklich mit `--vmid 100` neu erstellen. Das aktuelle Skript setzt Debian-13-Nesting und korrigiert die vererbte umask; Anwendung und innerer Installer sind unverändert. Die vorherige Reparatur ist an einer falschen Dateipfad-Annahme im Prüfblock gescheitert; die Anleitung ist ebenfalls korrigiert. Der Quellcode liegt im öffentlichen Repository; kein direkter Zugriff auf den Proxmox des Nutzers wurde eingerichtet. Nach erfolgreicher Installation Version 0.1.2 abnehmen; der Ersteller aktiviert Autostart erst nach erfolgreicher Startprüfung. Keine Zugangsdaten in Chat oder Repository aufnehmen. Google/Immich-Zugangsdaten trägt der Nutzer privat auf dem Server bzw. in der Oberfläche ein.
+**Der Nutzer meldet inzwischen einen laufenden Container 100. Diesen erhalten und auf 0.2.0 aktualisieren.** Der vollständige Host-Befehl steht in `docs/LXC.md` unter „Update des öffentlichen Projekts vom Proxmox-Host“: Checkout innerhalb des bestehenden LXC klonen bzw. `git pull --ff-only`, anschließend den inneren Installer starten. Vorhandene Daten, Schlüssel, Konfiguration und Fotos werden gesichert und erhalten. Danach Browser neu laden, Geburtstage einschließlich Schalttag und eine echte Rezeptadresse prüfen. Container weder löschen noch neu erstellen. Kein direkter Zugriff auf den Proxmox des Nutzers wurde eingerichtet; der Nutzer führt das Update aus. Root-Zugang vom Host mit `pct enter 100`, eigenes Root-Passwort optional mit `pct exec 100 -- passwd root`; kein voreingestelltes Passwort und vom Familienpasswort getrennt. Google/Immich-Zugangsdaten trägt der Nutzer privat auf dem Server bzw. in der Oberfläche ein.
 
 1. LXC-Start, Betrieb nach Neustart und Sicherung/Wiederherstellung auf dem tatsächlichen System prüfen.
 2. Browser-Abnahme bei 390×844, 768×1024, 1440×900 und auf dem verwendeten Wanddisplay; Hoch-/Querformat, lange Namen, 200 % Schrift und Touch testen.
 3. Eigene Google-Domain/OAuth einrichten; zwei Konten und einen gemeinsam freigegebenen Kalender testen; Serien, ganztägige und mehrtägige Termine, Leserechte, Ausfall/Wiederverbindung und DST testen.
 4. Immich-Version feststellen und Album-/Bild-Endpunkte samt Schlüsselrechten live prüfen. Lokale Gerätefotos nach Browserneustart, Container-Mounts und Netzwerkmanifest testen.
-5. Elternschutz/PIN und Rechte, bessere Konfliktbehandlung und lokale Kalenderwiederholungen ergänzen. Dadurch Webversion weiter festigen.
+5. Elternschutz/PIN und Rechte, bessere Konfliktbehandlung und allgemeine lokale Kalenderwiederholungen ergänzen. Dadurch Webversion weiter festigen.
 6. Danach Stundenpläne: Personenbezug, Fächer/Farben, Uhrzeitblöcke, Wochentage, ggf. A/B-Wochen und Ferien. Anforderungen vor Umsetzung konkretisieren.
 7. Erst anschließend die App planen; die vorhandene HTTP-API ist die Grundlage. Native Plattform, Offlinebedarf und Benachrichtigungen erst dann entscheiden.
 
@@ -109,12 +124,14 @@ JavaScript-Syntax und Bash-Syntax des Installers geprüft. Der Server wurde gest
 - `scripts/create-proxmox-lxc.sh`: Neue Container auf dem Proxmox-Host erstellen und installieren.
 - `docs/PROXMOX.md`: GitHub-Download, Host-Aufruf, Mindestwerte und Optionen.
 - `docs/LXC.md`: Installation, Sicherung, Wiederherstellung und Updates im LXC.
-- `docs/INTEGRATIONS.md`: Google, Immich und Bilderquellen.
+- `docs/INTEGRATIONS.md`: Google, Geburtstage, Rezeptimport, Immich und Bilderquellen.
 - `server.mjs`: HTTP, Anmeldung, API und statische Dateien.
 - `src/store.mjs`: Datenbank und Verschlüsselung.
 - `src/model.mjs`: Validierung und Buchungslogik.
 - `src/google.mjs`: OAuth und Abgleich.
 - `src/photos.mjs`: Bilderquellen und Proxy.
+- `src/recipe-import.mjs`, `src/public-web.mjs`: Rezeptdaten und begrenzter öffentlicher Abruf.
+- `public/birthdays.js`: Jährliche Geburtstagsvorkommen und Schalttagsregel.
 - `public/app.js`: Ansichten und Interaktionen.
 - `public/style.css`, `public/tokens.css`: responsive Darstellung.
 - `tests/`: reproduzierbare Prüfungen mit `npm test`.
@@ -130,5 +147,7 @@ Vor Weiterentwicklung vorhandene Daten, Einstellungen und Änderungen erhalten. 
 Der Nutzer hat am 2026-10-06 das Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer) ausgewählt. Zugriff und Schreibrechte wurden über die bestehende GitHub-Verbindung erfolgreich geprüft. Die initiale README wurde durch die vollständige Projektanleitung ergänzt. Der komplette Quellcode einschließlich beider Installer, Dokumentation, Tests und dieses Fortsetzungsstands liegt auf `main` (Erstübertragung `c1fbc9cc027525b9a462f81273f7e1914eac6575`). Am 2026-10-07 wurde zunächst der Google-Login dokumentiert (`f1e00a296a16e2f400ec13423e0c3b6340dbb588`), danach hat der Nutzer das Repository öffentlich gestellt. Öffentliche Sichtbarkeit wurde geprüft; der anonyme Download steht wieder vorn in der README. Die DNS-Korrektur verändert Installationsskripte und Tests, nicht den Anwendungscode oder das Datenbankschema; App-Version bleibt 0.1.2. Das andere öffentliche Repository `extraitems` bleibt unberührt.
 
 Die Übertragung erfolgt als zusammenhängender Git-Commit mit dem bisherigen Repository-Commit als Elternstand und einer Prüfung gegen den erwarteten Branch-Stand. Quellcode und Skripte anhand des resultierenden Commits kontrollieren. Es werden keine echten `.env`, Familiendaten, Fotos, SQLite-Dateien, Schlüssel oder Sicherungen hochgeladen. Die `.gitignore` schützt die Standardpfade; externe Datenordner ebenfalls außerhalb des Quellcodes halten.
+
+Version 0.2.0 ergänzt Geburtstage, den öffentlichen Rezeptlink-Import, Tests und Update-/Root-Zugangsanleitung. Datenbankschema bleibt 1; kein Zurücksetzen der vorhandenen Familieninstallation. Die neuen Module gehören zum vollständigen Quellcode-Update und werden nicht durch alleiniges Kopieren des Installers übertragen.
 
 Keine generelle Upload-Erlaubnis erneut erfragen: Das Ziel und der Upload sind vom Nutzer ausdrücklich vorgegeben. Repository-Sichtbarkeit nicht ohne ausdrückliche Anweisung verändern. Bei ausgeschöpftem ChatGPT-Kontingent diesen Repository-Stand zur Fortsetzung verwenden. Stundenpläne und native App bleiben spätere Schritte.

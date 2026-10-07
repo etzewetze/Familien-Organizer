@@ -1,6 +1,6 @@
 # Automatische Container-Erstellung auf Proxmox
 
-`scripts/create-proxmox-lxc.sh` läuft **auf dem Proxmox-Host als root**. Es erstellt einen neuen LXC und ruft darin `scripts/install-lxc.sh` auf. Unterstützt werden Proxmox VE >=8 auf x86_64. Ein echter Proxmox-Test steht noch aus; automatisierte Tests bilden die Proxmox-Befehle kontrolliert nach.
+`scripts/create-proxmox-lxc.sh` läuft **auf dem Proxmox-Host als root**. Es erstellt einen neuen LXC und ruft darin `scripts/install-lxc.sh` auf. Unterstützt werden Proxmox VE >=8 auf x86_64. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 gemeldet; eine vollständige Prüfung auf dem Zielsystem und das Update auf 0.2.0 stehen noch aus. Automatisierte Tests bilden die Proxmox-Befehle kontrolliert nach.
 
 ## Download und Start
 
@@ -121,6 +121,22 @@ Im Browser `http://CONTAINER-IP:8080` öffnen und Familie samt Passwort einricht
 
 Die Konsole der Proxmox-Weboberfläche nutzt den Modus `shell`; alternativ auf dem Host `pct enter CONTAINER-ID`. Es wird kein gemeinsames oder fest eingebautes Root-Passwort vergeben und keine SSH-Zugangsinformation des Hosts übertragen. Für eine direkte SSH-Anmeldung in den LXC eigene Zugangsdaten separat einrichten.
 
+### Root-Zugang zum Container
+
+Auf dem **Proxmox-Host als root** öffnet dieser Befehl direkt die Shell von Container 100, ohne Container-Passwort:
+
+```bash
+pct enter 100
+```
+
+Mit `exit` zurück zur Host-Shell wechseln. Möchtest du ein eigenes Root-Passwort setzen, stattdessen diesen Befehl **auf dem Proxmox-Host** verwenden:
+
+```bash
+pct exec 100 -- passwd root
+```
+
+Das gewünschte Passwort zweimal eingeben; die Zeichen werden dabei nicht angezeigt. Es ist vom Familienpasswort der Webanwendung getrennt. Ein gesetztes Passwort richtet für sich allein noch keinen SSH-Zugang ein.
+
 `firewall=1` ist an der Netzwerkschnittstelle gesetzt. Falls die Proxmox-Firewall für diesen Container mit einer blockierenden Regel aktiv ist, den Zugriff auf TCP 8080 aus dem eigenen Netz erlauben. Der Installer ändert keine Firewall-Regeln auf dem Host.
 
 ## Fehler und Updates
@@ -203,7 +219,7 @@ Sobald `systemctl` den Status `running` und keine fehlgeschlagenen Dienste melde
 )
 ```
 
-Hier wird nur die Installer-Korrektur übertragen; die Anwendung und Schema-Version sind weiterhin 0.1.2 bzw. 1. Für spätere Änderungen des Anwendungscodes den vollständigen neuen Stand wie oben beschrieben übertragen. Nach erfolgreichem Start die angezeigte Browser-Adresse öffnen. Den Container-Ersteller nicht erneut ausführen.
+Dieser historische Reparaturblock überträgt nur die Installer-Korrektur für 0.1.2 und Schema 1. Für neue Funktionen den [vollständigen neuen Stand in denselben Container laden](LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host). Nach erfolgreichem Start die angezeigte Browser-Adresse öffnen. Den Container-Ersteller nicht erneut ausführen.
 
 Wenn trotz Nesting Basisdienste fehlschlagen, vor weiteren Änderungen deren Journal ansehen:
 
@@ -251,7 +267,7 @@ Bei `running` ohne fehlgeschlagene Dienste mit dem oben gezeigten `git pull`, `p
 
 Die Nutzerprüfung hat `/etc` mit `700 root:root` bestätigt. Der ursprüngliche Prüfblock brach jedoch vor `chmod` ab, weil er `/etc/dbus-1/system.conf` als zwingend vorhandene Datei behandelte. Das war ein Fehler in der Anleitung: D-Bus liefert die Standardkonfiguration unter `/usr/share/dbus-1/system.conf`; die Datei unter `/etc` kann fehlen. Die korrigierte Prüfung verlangt die lokale Datei nicht mehr. Keine Ersatzdatei oder zusätzliche Dienstkonfiguration anlegen.
 
-Primärquellen: [Proxmox-Mitarbeiter reproduziert geerbte umask und tar-Verzeichnisproblem](https://forum.proxmox.com/threads/creating-a-debian-or-ubuntu-lxc-with-the-pct-create-command-makes-etc-in-the-container-not-world-readable.161231/), [offizielle D-Bus-Konfigurationspfade](https://dbus.freedesktop.org/doc/dbus-daemon.1.html). Der Regressionstest entpackt ein echtes Testarchiv in dieser Reihenfolge: vor der Korrektur erhält `/etc` Modus `700`, danach `755`; private Host-Dateien bleiben `600` in einem Verzeichnis mit `700`. Die erfolgreiche Reparatur auf dem Nutzerhost ist nicht bestätigt; der Nutzer bevorzugt eine neue Erstellung des noch nicht fertig installierten Containers.
+Primärquellen: [Proxmox-Mitarbeiter reproduziert geerbte umask und tar-Verzeichnisproblem](https://forum.proxmox.com/threads/creating-a-debian-or-ubuntu-lxc-with-the-pct-create-command-makes-etc-in-the-container-not-world-readable.161231/), [offizielle D-Bus-Konfigurationspfade](https://dbus.freedesktop.org/doc/dbus-daemon.1.html). Der Regressionstest entpackt ein echtes Testarchiv in dieser Reihenfolge: vor der Korrektur erhält `/etc` Modus `700`, danach `755`; private Host-Dateien bleiben `600` in einem Verzeichnis mit `700`. Der Nutzer hat inzwischen einen laufenden Container nach neuer Erstellung gemeldet. Für diesen gelten die normalen Updates ohne erneute Erstellung; die folgenden Löschschritte betreffen ausschließlich die damalige fehlgeschlagene Erstinstallation.
 
 ### Container 100 nach fehlgeschlagener Erstinstallation neu erstellen
 

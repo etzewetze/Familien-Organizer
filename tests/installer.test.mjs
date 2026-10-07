@@ -148,12 +148,15 @@ test('Erstinstallation richtet Laufzeit, Dienst, private Konfiguration und HTTP-
 
 test('Update behält Konfiguration, Notizen, Schlüssel und Fotos und entfernt alten Code', t => {
   const f = fixture(t); writeFileSync(join(f.source, 'src', 'obsolete.txt'), 'old'); passed(f.run()); f.seed();
+  const birthdayStore = new Store(f.data); birthdayStore.put('birthdays', 'birthday', { name: 'Test Geburtstag', month: 10, day: 7, birthYear: 1990, leapDay: 'mar1', memberId: '', notes: '' }); birthdayStore.close();
   const key = readFileSync(join(f.data, 'master.key'));
   const env = readFileSync(join(f.app, '.env'), 'utf8') + 'GOOGLE_CLIENT_SECRET="privat-test"\n'; writeFileSync(join(f.app, '.env'), env);
   rmSync(join(f.source, 'src', 'obsolete.txt')); f.release('v24.20.0'); passed(f.run());
   assert.equal(readFileSync(join(f.app, '.env'), 'utf8'), env); assert.equal(f.noteExists(), true); assert.deepEqual(readFileSync(join(f.data, 'master.key')), key);
   assert.equal(readFileSync(join(f.data, 'photos', 'foto.jpg'), 'utf8'), 'test-photo'); assert.equal(existsSync(join(f.app, 'src', 'obsolete.txt')), false);
   assert.match(readlinkSync(f.runtimeLink), /v24\.20\.0/);
+  assert.ok(existsSync(join(f.app, 'public', 'birthdays.js'))); assert.ok(existsSync(join(f.app, 'src', 'recipe-import.mjs')));
+  const afterUpdate = new Store(f.data); assert.equal(afterUpdate.get('birthdays', 'birthday').birthYear, 1990); afterUpdate.close();
   const update = join(f.backups, 'updates', readdirSync(join(f.backups, 'updates'))[0]);
   assert.deepEqual(readFileSync(join(update, 'master.key')), key); assert.equal(readFileSync(join(update, '.env'), 'utf8'), env); assert.equal(readFileSync(join(update, 'photos', 'foto.jpg'), 'utf8'), 'test-photo');
 });

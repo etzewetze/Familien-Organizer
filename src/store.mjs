@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync, chmodSync, existsSync } from 'n
 import { resolve, join } from 'node:path';
 import { randomBytes, randomUUID, createCipheriv, createDecipheriv } from 'node:crypto';
 
-export const KINDS = ['members', 'events', 'tasks', 'recipes', 'meals', 'lists', 'items', 'notes', 'rewards'];
+export const KINDS = ['members', 'events', 'birthdays', 'tasks', 'recipes', 'meals', 'lists', 'items', 'notes', 'rewards'];
 export class Store {
   constructor(directory) {
     this.directory = resolve(directory);

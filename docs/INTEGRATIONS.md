@@ -1,4 +1,4 @@
-# Kalender und Bilderquellen
+# Kalender, Bilder und Rezeptquellen
 
 ## Google Kalender
 
@@ -28,7 +28,7 @@ Google akzeptiert für Webanwendungen grundsätzlich HTTPS-Weiterleitungen und k
 
 Google-OAuth im Status „Testing“ kann Refresh-Tokens nach sieben Tagen ablaufen lassen. Dann erneut verbinden oder den passenden Veröffentlichungsstatus des eigenen Google-Projekts wählen. Je nach Google-Konfiguration kann eine Verifikation nötig sein. Bei der Einrichtung Googles aktuelle Hinweise beachten.
 
-### Verhalten in Version 0.1
+### Verhalten seit Version 0.1
 
 - Automatischer Abgleich alle fünf Minuten, zusätzlich manuell unter Einstellungen.
 - Änderungen aus der Anwendung werden sofort zur Übertragung angestoßen. Bei Fehlern bleiben sie in einer persistenten Warteschlange und werden später erneut versucht.
@@ -40,6 +40,31 @@ Google-OAuth im Status „Testing“ kann Refresh-Tokens nach sieben Tagen ablau
 - OAuth-Tokens liegen AES-GCM-verschlüsselt in SQLite; der Schlüssel liegt lokal als `master.key`. Client-Secret steht nur in der privaten `.env`. Beides wird nicht an die Oberfläche ausgegeben.
 
 Noch ausstehend: Live-Abnahme mit euren Konten, großen wiederkehrenden Serien, Freigaberechten und gemeinsam direkt in Google bearbeiteten Terminen.
+
+## Geburtstage
+
+Im Reiter **Geburtstage** Namen, Tag und Monat eintragen. Das Geburtsjahr ist optional; mit Jahr zeigt der Kalender zusätzlich das erreichte Alter an. Ein Geburtstag kann einem Familienmitglied zugeordnet werden, muss aber nicht. Hinweise lassen sich als Notiz speichern.
+
+Die Geburtstage erscheinen automatisch jedes Jahr in der Wochen-, Monats- und Listenansicht des Familienkalenders, auch in weit entfernten Jahren. Es werden keine jährlichen Kopien als Termine angelegt. Bearbeiten oder Löschen eines Geburtstags wirkt deshalb auf alle Kalenderjahre. Mit „Im Kalender ansehen“ zum nächsten Vorkommen springen.
+
+Für den 29. Februar kann gewählt werden, ob der Geburtstag in Jahren ohne Schalttag am **1. März** oder **28. Februar** erscheint. In Schaltjahren bleibt es beim 29. Februar. Ein bekanntes Geburtsjahr muss zum Datum passen.
+
+Diese Wiederholung gehört zum lokalen Familienkalender. Geburtstage werden in dieser Version nicht automatisch als Google-Kalenderserie angelegt.
+
+## Rezepte aus dem Internet
+
+1. Unter **Essen & Rezepte** „Rezeptlink importieren“ öffnen.
+2. Die direkte Adresse eines öffentlich zugänglichen Rezepts einfügen und „Vorschau laden“ wählen.
+3. Titel, Portionen, Dauer, Zutatenmengen und Anleitung prüfen und bei Bedarf korrigieren.
+4. Erst mit **Speichern** das Rezept übernehmen. Danach wie andere Rezepte dem Wochenplan zuordnen und Zutaten in die Einkaufsliste übernehmen.
+
+Der Import liest strukturierte Rezeptdaten im verbreiteten **JSON-LD-/schema.org-Recipe-Format**. Das kann auch bei Chefkoch und anderen Rezeptseiten funktionieren, sofern die konkrete Seite diese Daten bereitstellt und den Abruf durch euren Server zulässt. Es gibt keine Garantie für jeden Anbieter oder jede Seite. Eine Live-Abnahme mit Chefkoch auf dem Nutzer-LXC steht noch aus.
+
+Es wird die Quelladresse gespeichert; die Vorschau ist noch kein gespeichertes Rezept. Nicht erkannte Mengen, etwa „2–3 Tomaten“ oder „Salz nach Geschmack“, bleiben als Zutatentext erhalten und werden zur Prüfung markiert. Mengen mit Null werden beim Zusammenführen nicht als bekannte Einkaufsmenge behandelt. Vor dem Speichern die erkannten Portionen und Einheiten prüfen, damit die Skalierung im Essensplan stimmt.
+
+Wenn die Seite keine passenden Daten enthält, den Abruf sperrt oder erst im Browser nachlädt, die manuelle Eingabe verwenden. Der Quelllink kann dabei erhalten bleiben. Anmeldung, Paywalls und Zugriffssperren werden nicht umgangen.
+
+Der Abruf erfolgt vom LXC, ohne externe Importdienste. Unterstützt werden öffentliche HTTP-/HTTPS-Adressen auf den Standardports 80/443. Lokale IP-Adressen, private Netze, Zugangsdaten in URLs und Weiterleitungen dorthin werden abgewiesen. Browser-Cookies werden nicht weitergegeben; Antwortgröße und Abrufzeit sind begrenzt. Diese Beschränkung betrifft Rezeptimporte; eure privaten Bildquellen bleiben über die dafür vorgesehenen Einstellungen nutzbar.
 
 ## Fotos nur auf dem Gerät
 
@@ -88,4 +113,6 @@ Diese Integration muss gegen eure eingesetzte Immich-Version geprüft werden. AP
 - [Google Calendar API: Events](https://developers.google.com/workspace/calendar/api/v3/reference/events)
 - [Google: Ablauf von Refresh-Tokens](https://developers.google.com/identity/protocols/oauth2#expiration)
 - [Immich API](https://api.immich.app/)
+- [schema.org: Recipe](https://schema.org/Recipe)
+- [Google: Strukturierte Rezeptdaten](https://developers.google.com/search/docs/appearance/structured-data/recipe?hl=de)
 - [Node.js 22.13: SQLite](https://nodejs.org/download/release/v22.13.1/docs/api/sqlite.html)
