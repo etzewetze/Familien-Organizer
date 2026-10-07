@@ -222,14 +222,17 @@ Der korrigierte Ersteller verwendet nur für den `pct`-Kindprozess `umask 022`; 
 ```bash
 pct exec 100 -- bash -c '
 set -e
-stat -c "%a %U:%G %n" / /etc /etc/passwd /etc/dbus-1 /etc/dbus-1/system.conf
+stat -c "%a %U:%G %n" / /etc /etc/passwd /etc/dbus-1
 case "$(stat -c "%a:%u:%g" /etc)" in
   700:0:0) chmod 0755 /etc ;;
   755:0:0) ;;
   *) printf "%s\n" "Unerwartete /etc-Rechte oder Besitzer; bitte die Ausgabe prüfen lassen." >&2; exit 1 ;;
 esac
 runuser -u messagebus -- test -r /etc/passwd
-runuser -u messagebus -- test -r /etc/dbus-1/system.conf
+config=/usr/share/dbus-1/system.conf
+if [ -e /etc/dbus-1/system.conf ]; then config=/etc/dbus-1/system.conf; fi
+stat -c "%a %U:%G %n" "$config"
+runuser -u messagebus -- test -r "$config"
 systemctl reset-failed dbus.service dbus.socket
 systemctl start dbus.socket dbus.service
 systemctl --failed --no-pager
@@ -240,13 +243,37 @@ systemctl is-system-running --wait
 Wenn der Block fehlschlägt, keine weiteren Rechte ändern. Diagnose:
 
 ```bash
-pct exec 100 -- namei -l /etc/passwd /etc/dbus-1/system.conf
+pct exec 100 -- namei -l /etc/passwd /usr/share/dbus-1/system.conf
 pct exec 100 -- journalctl -b -u dbus.socket -u dbus.service --no-pager -n 40
 ```
 
 Bei `running` ohne fehlgeschlagene Dienste mit dem oben gezeigten `git pull`, `pct push` und `install-lxc.sh` im bestehenden Container fortsetzen. Den Container-Ersteller nicht erneut ausführen. `chmod` ist hier bewusst auf das Verzeichnis `/etc` beschränkt; Dateien mit vertraulichem Inhalt behalten ihre bisherigen Rechte.
 
-Primärquelle: [Proxmox-Mitarbeiter reproduziert geerbte umask und tar-Verzeichnisproblem](https://forum.proxmox.com/threads/creating-a-debian-or-ubuntu-lxc-with-the-pct-create-command-makes-etc-in-the-container-not-world-readable.161231/). Der Regressionstest entpackt ein echtes Testarchiv in dieser Reihenfolge: vor der Korrektur erhält `/etc` Modus `700`, danach `755`; private Host-Dateien bleiben `600` in einem Verzeichnis mit `700`. Der tatsächliche `/etc`-Modus und die erfolgreiche Reparatur auf dem Nutzerhost sind erst durch dessen Ausgabe bestätigt.
+Die Nutzerprüfung hat `/etc` mit `700 root:root` bestätigt. Der ursprüngliche Prüfblock brach jedoch vor `chmod` ab, weil er `/etc/dbus-1/system.conf` als zwingend vorhandene Datei behandelte. Das war ein Fehler in der Anleitung: D-Bus liefert die Standardkonfiguration unter `/usr/share/dbus-1/system.conf`; die Datei unter `/etc` kann fehlen. Die korrigierte Prüfung verlangt die lokale Datei nicht mehr. Keine Ersatzdatei oder zusätzliche Dienstkonfiguration anlegen.
+
+Primärquellen: [Proxmox-Mitarbeiter reproduziert geerbte umask und tar-Verzeichnisproblem](https://forum.proxmox.com/threads/creating-a-debian-or-ubuntu-lxc-with-the-pct-create-command-makes-etc-in-the-container-not-world-readable.161231/), [offizielle D-Bus-Konfigurationspfade](https://dbus.freedesktop.org/doc/dbus-daemon.1.html). Der Regressionstest entpackt ein echtes Testarchiv in dieser Reihenfolge: vor der Korrektur erhält `/etc` Modus `700`, danach `755`; private Host-Dateien bleiben `600` in einem Verzeichnis mit `700`. Die erfolgreiche Reparatur auf dem Nutzerhost ist nicht bestätigt; der Nutzer bevorzugt eine neue Erstellung des noch nicht fertig installierten Containers.
+
+### Container 100 nach fehlgeschlagener Erstinstallation neu erstellen
+
+Wenn die Erstinstallation noch nicht erfolgreich war und keine zu erhaltenden Daten im Container liegen, kann der unfertige Container durch einen neuen ersetzt werden. Zuerst den Git-Checkout auf dem Host aktualisieren; das aktuelle Skript enthält sowohl Nesting für Debian 13 als auch `umask 022` für Proxmox-Aufrufe. Eine reine Vorprüfung prüft den Host vor dem Löschen. Die dabei angezeigte freie ID ist nur ein Vorschlag; die anschließende echte Erstellung verwendet ausdrücklich wieder **100**.
+
+**Dieser Block löscht Container 100 samt seinem Container-Speicher endgültig.** Er gilt für den unfertigen Familien-Organizer-LXC aus dieser Erstinstallation. Als root auf dem Proxmox-Host ausführen:
+
+```bash
+(
+  set -e
+  cd /root/Familien-Organizer
+  git pull --ff-only
+  bash scripts/create-proxmox-lxc.sh --dry-run
+  pct stop 100
+  pct destroy 100
+  bash scripts/create-proxmox-lxc.sh --vmid 100
+)
+```
+
+Wenn ein Schritt scheitert, endet der Block dort. Der Ersteller selbst löscht weiterhin keine Container und überschreibt keine belegte ID. Eine bereits vorhandene offizielle Template-Datei wird wiederverwendet; daraus entsteht ein neues Root-Dateisystem. Eine neue DHCP-Adresse ist möglich. Nach erfolgreicher Installation die vom Skript ausgegebene Browser-Adresse öffnen und die Familie einrichten. Falls die neue Installation scheitert, ihre Ausgabe prüfen; nicht wiederholt Container löschen.
+
+Referenz: [offizielle pct-Referenz für stop, destroy und create](https://github.com/proxmox/pve-docs/blob/master/generated/pct.1-synopsis.adoc).
 
 Daten, Fotos, Schlüssel und Sicherungen liegen im LXC bzw. im eigenen eingebundenen Speicher. Sie werden nicht in GitHub hochgeladen. Im LXC bleiben `/root/familien-organisierer-src` und die installierte Anwendung unter `/opt/familien-organisierer` erhalten. Der übertragene Quellcodeordner enthält kein `.git`; der ursprüngliche Git-Checkout ist auf dem Host.
 
