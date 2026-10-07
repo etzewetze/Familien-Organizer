@@ -75,6 +75,8 @@ Bei Bedarf `--nameserver IP_DEINES_DNS_SERVERS` ergänzen. Ohne diese Option üb
 
 Bei Debian 13 setzt der Ersteller Nesting für die systemd-Basisdienste. Für einen schon erstellten Container mit fehlgeschlagenen Basis-Mounts oder D-Bus steht die [Reparatur im vorhandenen LXC](docs/PROXMOX.md#debian-13-systemd-mount--oder-d-bus-fehler) in der Host-Anleitung.
 
+Proxmox-Aufrufe erhalten die System-Standardrechte über `umask 022`. Bei D-Bus-Fehlern mit `Permission denied` nach einer Installation mit dem ursprünglichen Skript siehe die [gezielte Prüfung von `/etc`](docs/PROXMOX.md#d-bus-permission-denied-nach-ursprünglicher-erstellung).
+
 Ein CT-Template enthält ein komplettes Linux-Dateisystem. Das Projekt-ZIP ist Quellcode; der automatische Weg nutzt das offizielle Debian-CT-Template und installiert die Familienzentrale anschließend darin.
 
 [Host-Skript ansehen](scripts/create-proxmox-lxc.sh) · [Host-Anleitung und Optionen](docs/PROXMOX.md) · [Betrieb, Updates und Sicherung im LXC](docs/LXC.md)

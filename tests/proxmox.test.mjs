@@ -47,10 +47,20 @@ if(args[0]==='list') {console.log('NAME SIZE');if(process.env.MOCK_CACHED==='yes
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process'),crypto=require('node:crypto');
 const args=process.argv.slice(2),root=process.env.MOCK_STATE,command=args[0],id=args[1];
 fs.appendFileSync(path.join(root,'pct'),JSON.stringify(args)+'\\n');
-if(command==='create') fs.writeFileSync(path.join(root,'ct-'+id),JSON.stringify(args));
+if(command==='create') {
+  fs.writeFileSync(path.join(root,'ct-'+id),JSON.stringify(args));
+  if(process.env.MOCK_TEMPLATE_ARCHIVE) {
+    const rootfs=path.join(root,'rootfs');fs.mkdirSync(rootfs);
+    cp.execFileSync('tar',['-xpf',process.env.MOCK_TEMPLATE_ARCHIVE,'--skip-old-files','-C',rootfs]);
+  }
+}
 if(command==='start') fs.writeFileSync(path.join(root,'started'),'yes');
 if(command==='set') fs.writeFileSync(path.join(root,'autostart'),'yes');
-if(command==='push') {if(process.env.MOCK_PUSH_FAIL==='yes') process.exit(1); fs.copyFileSync(args[2],path.join(root,'source.tar.gz'));}
+if(command==='push') {
+  if(process.env.MOCK_PUSH_FAIL==='yes') process.exit(1);
+  fs.writeFileSync(path.join(root,'source-permissions'),JSON.stringify({directory:fs.statSync(path.dirname(args[2])).mode&0o777,archive:fs.statSync(args[2]).mode&0o777}));
+  fs.copyFileSync(args[2],path.join(root,'source.tar.gz'));
+}
 if(command==='exec') {
   const cmd=args.slice(3);
   if(cmd[0]==='getent'&&process.env.MOCK_NETWORK_FAIL==='yes') process.exit(1);
@@ -117,6 +127,19 @@ test('Erstellung lädt aktuelles passendes Debian-Template und installiert mit M
   const project = join(f.state, 'unpacked'); assert.ok(existsSync(join(project, 'scripts', 'install-lxc.sh'))); assert.ok(existsSync(join(project, '.env.example')));
   assert.equal(existsSync(join(project, '.git')), false); assert.equal(existsSync(join(project, '.env')), false); assert.equal(existsSync(join(project, 'data')), false);
   assert.equal(readdirSync(join(f.root, 'work')).length, 0);
+});
+
+test('Template-Entpacken erhält zugängliches /etc trotz privater Installer-Dateien', t => {
+  const f = fixture(t), template = join(f.root, 'template'), archive = join(f.root, 'template.tar');
+  mkdirSync(join(template, 'etc'), { recursive: true, mode: 0o755 });
+  writeFileSync(join(template, 'etc', 'passwd'), 'root:x:0:0:root:/root:/bin/bash\n', { mode: 0o644 });
+  // Der Datei-Eintrag vor dem Verzeichnis reproduziert Proxmox/tar --skip-old-files.
+  execFileSync('tar', ['-cf', archive, '-C', template, 'etc/passwd', 'etc']);
+  passed(f.run([], { MOCK_TEMPLATE_ARCHIVE: archive }));
+  const permissions = execFileSync('stat', ['-c', '%a', join(f.state, 'rootfs', 'etc')], { encoding: 'utf8' }).trim();
+  assert.equal(permissions, '755');
+  assert.deepEqual(JSON.parse(readFileSync(join(f.state, 'source-permissions'), 'utf8')), { directory: 0o700, archive: 0o600 });
+  assert.equal(execFileSync('stat', ['-c', '%a', join(f.root, 'install.lock')], { encoding: 'utf8' }).trim(), '600');
 });
 
 test('Proxmox 8 verwendet Debian 12 und vorhandenes Debian-13-Template wird auf Proxmox 9 wiederverwendet', t => {

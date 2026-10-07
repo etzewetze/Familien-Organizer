@@ -213,6 +213,41 @@ pct exec 100 -- journalctl -b -u tmp.mount -u run-lock.mount -u dev-mqueue.mount
 
 Primärquellen: [gleiche Debian-13-Mount-Fehler mit erfolgreicher Nesting-Korrektur](https://forum.proxmox.com/threads/lxc-unprivileged-container-journal-and-other-services-failed-to-start.178714/), [Proxmox-Mitarbeiter zur Nesting-Freigabe in einem unprivilegierten Container](https://forum.proxmox.com/threads/pmg8to9-warnung-failed-to-resolve-hostname-upgrade-probleme.182214/), [pct-Feature-Referenz](https://github.com/proxmox/pve-docs/blob/master/generated/pct.1-synopsis.adoc).
 
+### D-Bus: Permission denied nach ursprünglicher Erstellung
+
+Nach aktiviertem Nesting können die Mounts wieder funktionieren, während D-Bus mit `Looking up user ID …: Permission denied`, `Unknown username "root"` und `Failed to open "/etc/dbus-1/system.conf": Permission denied` weiterhin scheitert. Das ursprüngliche Host-Skript hat seine private `umask 077` an `pct` vererbt. Proxmox entpackt Templates mit `tar --skip-old-files`; wenn ein Datei-Eintrag vor seinem Verzeichnis kommt, kann das Verzeichnis mit den vererbten Rechten angelegt werden. Ein nicht durchsuchbares `/etc` verhindert für Dienstbenutzer auch das Lesen von `/etc/passwd` und `/etc/resolv.conf`. Deshalb kann die Namensauflösung als root funktionieren, während Paketdownloads als `_apt` scheitern.
+
+Der korrigierte Ersteller verwendet nur für den `pct`-Kindprozess `umask 022`; temporäre Quelldateien und Sperrdatei auf dem Host bleiben privat. Das repariert bestehende Container nicht rückwirkend. Im bereits angelegten **Container 100** zunächst die Rechte ausgeben und ausschließlich ein root gehörendes `/etc` mit Modus `700` auf `755` korrigieren. Ein bereits korrektes `755` bleibt erhalten; bei anderen Werten wird abgebrochen. Der folgende Block läuft **auf dem Proxmox-Host** und setzt voraus, dass Nesting bereits aktiviert ist:
+
+```bash
+pct exec 100 -- bash -c '
+set -e
+stat -c "%a %U:%G %n" / /etc /etc/passwd /etc/dbus-1 /etc/dbus-1/system.conf
+case "$(stat -c "%a:%u:%g" /etc)" in
+  700:0:0) chmod 0755 /etc ;;
+  755:0:0) ;;
+  *) printf "%s\n" "Unerwartete /etc-Rechte oder Besitzer; bitte die Ausgabe prüfen lassen." >&2; exit 1 ;;
+esac
+runuser -u messagebus -- test -r /etc/passwd
+runuser -u messagebus -- test -r /etc/dbus-1/system.conf
+systemctl reset-failed dbus.service dbus.socket
+systemctl start dbus.socket dbus.service
+systemctl --failed --no-pager
+systemctl is-system-running --wait
+'
+```
+
+Wenn der Block fehlschlägt, keine weiteren Rechte ändern. Diagnose:
+
+```bash
+pct exec 100 -- namei -l /etc/passwd /etc/dbus-1/system.conf
+pct exec 100 -- journalctl -b -u dbus.socket -u dbus.service --no-pager -n 40
+```
+
+Bei `running` ohne fehlgeschlagene Dienste mit dem oben gezeigten `git pull`, `pct push` und `install-lxc.sh` im bestehenden Container fortsetzen. Den Container-Ersteller nicht erneut ausführen. `chmod` ist hier bewusst auf das Verzeichnis `/etc` beschränkt; Dateien mit vertraulichem Inhalt behalten ihre bisherigen Rechte.
+
+Primärquelle: [Proxmox-Mitarbeiter reproduziert geerbte umask und tar-Verzeichnisproblem](https://forum.proxmox.com/threads/creating-a-debian-or-ubuntu-lxc-with-the-pct-create-command-makes-etc-in-the-container-not-world-readable.161231/). Der Regressionstest entpackt ein echtes Testarchiv in dieser Reihenfolge: vor der Korrektur erhält `/etc` Modus `700`, danach `755`; private Host-Dateien bleiben `600` in einem Verzeichnis mit `700`. Der tatsächliche `/etc`-Modus und die erfolgreiche Reparatur auf dem Nutzerhost sind erst durch dessen Ausgabe bestätigt.
+
 Daten, Fotos, Schlüssel und Sicherungen liegen im LXC bzw. im eigenen eingebundenen Speicher. Sie werden nicht in GitHub hochgeladen. Im LXC bleiben `/root/familien-organisierer-src` und die installierte Anwendung unter `/opt/familien-organisierer` erhalten. Der übertragene Quellcodeordner enthält kein `.git`; der ursprüngliche Git-Checkout ist auf dem Host.
 
 Für Updates einen neuen vollständigen Stand in **denselben LXC** übertragen und dessen `scripts/install-lxc.sh` erneut ausführen; Details und Wiederherstellung in [LXC.md](LXC.md). Ein erneuter Aufruf von `create-proxmox-lxc.sh` erstellt einen weiteren Container.

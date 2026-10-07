@@ -208,7 +208,13 @@ prepare_source() {
   source_checksum="$(sha256sum "$work_dir/source.tar.gz" | awk '{print $1}')"
 }
 
-run_pct() { pct "$@" 9>&-; }
+run_pct() (
+  # pct/tar vererbt die umask auch beim Anlegen von /etc im Template.
+  # Nur dieser Kindprozess bekommt System-Standardrechte; private Host-Dateien
+  # und die Installer-Sperre behalten im übergeordneten Prozess umask 077.
+  umask 022
+  pct "$@" 9>&-
+)
 
 create_and_install() {
   local net="name=eth0,bridge=$bridge,ip=$ip4,firewall=1"
