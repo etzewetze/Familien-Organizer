@@ -6,9 +6,9 @@ Für die automatische Erstellung des Containers auf dem **Proxmox-Host** zuerst 
 
 ## 1. Container vorbereiten
 
-Einen unprivilegierten Debian-12- oder Debian-13-LXC mit systemd anlegen. Ausgangspunkt: 1–2 vCPU, 1 GB RAM und 8–16 GB Systemdisk; Fotos und Sicherungen benötigen zusätzlichen Platz. Eine stabile IP per DHCP-Reservierung oder statischer Konfiguration vergeben. Unterstützt werden x86_64 und ARM64. Für diese direkte Installation werden Docker und Nesting nicht benötigt.
+Einen unprivilegierten Debian-12- oder Debian-13-LXC mit systemd anlegen. Ausgangspunkt: 1–2 vCPU, 1 GB RAM und 8–16 GB Systemdisk; Fotos und Sicherungen benötigen zusätzlichen Platz. Eine stabile IP per DHCP-Reservierung oder statischer Konfiguration vergeben. Unterstützt werden x86_64 und ARM64. Docker wird für diese direkte Installation nicht benötigt; Debian 13 erhält die Nesting-Freigabe für systemd.
 
-Die Anwendung läuft als eigener Benutzer ohne Administratorrechte. Der Quellcode gehört root, die Konfiguration ist privat lesbar, Datenordner und Sicherungen sind privat. Der Standarddienst verwendet keine zusätzlichen Mount-Namensräume, damit er im unprivilegierten LXC ohne Nesting starten kann. `NoNewPrivileges`, eine leere Capability-Liste und beschränkte Adressfamilien bleiben aktiv.
+Die Anwendung läuft als eigener Benutzer ohne Administratorrechte. Der Quellcode gehört root, die Konfiguration ist privat lesbar, Datenordner und Sicherungen sind privat. Bei Debian 13 **Nesting in den Proxmox-Container-Features aktivieren**, damit die systemd-Basisdienste funktionieren. Docker wird nicht benötigt. Der Standarddienst der Anwendung verwendet keine zusätzlichen Mount-Namensräume; `NoNewPrivileges`, eine leere Capability-Liste und beschränkte Adressfamilien bleiben aktiv.
 
 ## 2. Projekt übertragen und installieren
 

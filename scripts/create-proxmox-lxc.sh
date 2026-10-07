@@ -41,6 +41,7 @@ Familien Organisierer – neuen Proxmox-LXC erstellen und installieren
 Startwerte: 1 Kern, 1024 MiB RAM, 512 MiB Swap, 8 GiB Disk, DHCP.
 Eine freie ID und geeignete vorhandene Speicher werden automatisch gewählt.
 Debian 12 auf Proxmox 8, Debian 13 auf Proxmox 9 oder neuer.
+Debian 13 erhält nesting=1 für die systemd-Basisdienste.
 
 Optionen:
   --vmid ID                 Freie Container-ID (100 bis 999999999)
@@ -172,6 +173,7 @@ choose_bridge_and_id() {
 
 show_settings() {
   say "Neuer Container: $vmid ($ct_hostname), Debian $debian, unprivilegiert."
+  if [ "$debian" = 13 ]; then say 'Nesting: aktiviert für die systemd-Basisdienste von Debian 13.'; fi
   say "Ressourcen: $cores Kern(e), $memory MiB RAM, $swap MiB Swap, $disk GiB Disk."
   say "Speicher: rootfs=$rootfs_storage, Template=$template_storage."
   say "Netz: Bridge=$bridge, IPv4=$ip4${gateway:+, Gateway=$gateway}${vlan:+, VLAN=$vlan}."
@@ -210,15 +212,17 @@ run_pct() { pct "$@" 9>&-; }
 
 create_and_install() {
   local net="name=eth0,bridge=$bridge,ip=$ip4,firewall=1"
-  local -a dns_options=()
+  local -a dns_options=() feature_options=()
   [ -z "$nameserver" ] || dns_options=(--nameserver "$nameserver")
+  # Debian 13/systemd benötigt diese Freigabe auch ohne Docker im Container.
+  [ "$debian" != 13 ] || feature_options=(--features nesting=1)
   [ -z "$gateway" ] || net+=",gw=$gateway"
   [ -z "$vlan" ] || net+=",tag=$vlan"
   # pct create hat zusätzlich seine eigenen Cluster-/VMID-Sperren.
   say "LXC $vmid erstellen …"
   run_pct create "$vmid" "$template_volume" --ostype debian --arch amd64 \
     --hostname "$ct_hostname" --unprivileged 1 --cores "$cores" --memory "$memory" \
-    --swap "$swap" --rootfs "$rootfs_storage:$disk" --net0 "$net" "${dns_options[@]}" --onboot 0 --cmode shell \
+    --swap "$swap" --rootfs "$rootfs_storage:$disk" --net0 "$net" "${dns_options[@]}" "${feature_options[@]}" --onboot 0 --cmode shell \
     --description 'Familien Organisierer – eigener Familienkalender; http://CONTAINER-IP:8080'
   container_created=true
   run_pct start "$vmid"

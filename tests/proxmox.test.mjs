@@ -110,7 +110,7 @@ test('Erstellung lädt aktuelles passendes Debian-Template und installiert mit M
   const f = fixture(t), result = f.run(); passed(result); assert.match(result.stdout, /http:\/\/192\.0\.2\.42:8080/);
   const calls = f.calls('pct'), create = calls.find(c => c[0] === 'create');
   assert.equal(create[1], '101'); assert.equal(create[2], 'local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst');
-  for (const [key, value] of [['--cores','1'],['--memory','1024'],['--swap','512'],['--rootfs','local-lvm:8'],['--unprivileged','1'],['--onboot','0'],['--cmode','shell']]) assert.equal(option(create, key), value);
+  for (const [key, value] of [['--cores','1'],['--memory','1024'],['--swap','512'],['--rootfs','local-lvm:8'],['--unprivileged','1'],['--onboot','0'],['--cmode','shell'],['--features','nesting=1']]) assert.equal(option(create, key), value);
   assert.equal(option(create, '--net0'), 'name=eth0,bridge=vmbr0,ip=dhcp,firewall=1');
   assert.equal(calls.some(c => c[0] === 'destroy'), false); assert.ok(calls.find(c => c[0] === 'set' && option(c, '--onboot') === '1'));
   assert.ok(f.calls('pveam').find(c => c[0] === 'download'));
@@ -121,8 +121,10 @@ test('Erstellung lädt aktuelles passendes Debian-Template und installiert mit M
 
 test('Proxmox 8 verwendet Debian 12 und vorhandenes Debian-13-Template wird auf Proxmox 9 wiederverwendet', t => {
   const f = fixture(t); passed(f.run([], { MOCK_PVE_MAJOR:'8' }));
-  assert.match(f.calls('pct').find(c => c[0] === 'create')[2], /debian-12-standard_/);
+  const debian12 = f.calls('pct').find(c => c[0] === 'create');
+  assert.match(debian12[2], /debian-12-standard_/); assert.equal(debian12.includes('--features'), false);
   const g = fixture(t); passed(g.run([], { MOCK_CACHED:'yes' })); assert.equal(g.calls('pveam').some(c => c[0] === 'download'), false);
+  assert.equal(option(g.calls('pct').find(c => c[0] === 'create'), '--features'), 'nesting=1');
   const h = fixture(t); assert.notEqual(h.run(['--debian','13'], { MOCK_PVE_MAJOR:'8' }).status, 0); assert.equal(h.calls('pct').length, 0);
 });
 

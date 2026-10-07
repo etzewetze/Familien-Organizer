@@ -79,6 +79,7 @@ Offizielle Referenzen: [GitHub CLI installieren](https://github.com/cli/cli/blob
 | `--nameserver` | Optionaler erreichbarer IPv4-DNS-Server; ohne Angabe übernimmt Proxmox die Host-Einstellung |
 | `--vlan` | Optionales VLAN von 1 bis 4094 |
 | `--debian` | 12 für Proxmox 8; 13 für Proxmox >=9 |
+| Nesting | Für Debian 13 automatisch `nesting=1` für systemd; Debian-12-Erstellung bleibt unverändert |
 | `--source` | Vollständiges Projekt neben dem aufgerufenen Skript |
 | `--dry-run` | Ziel und Werte prüfen; kein Download und keine Erstellung |
 
@@ -110,7 +111,7 @@ Ein eigener Resolver kann für neue Container über `--nameserver IP_DEINES_DNS_
 
 1. Host, Ressourcen, aktive Speicher, freie Cluster-ID und vorhandene Bridge prüfen.
 2. Offiziellen Proxmox-Template-Katalog aktualisieren und das aktuelle passende Debian-Standard-Template herunterladen bzw. das vorhandene verwenden.
-3. Einen unprivilegierten Container mit den gewählten Werten erstellen und starten.
+3. Einen unprivilegierten Container mit den gewählten Werten erstellen und starten. Bei Debian 13 `nesting=1` für die systemd-Basisdienste setzen.
 4. Auf systemd und DNS im Container warten.
 5. Quellcode ohne `.git`, echte `.env`, Daten oder Sicherungen übertragen. Die Übertragung wird anhand von SHA-256 geprüft.
 6. Im LXC Debian-Pakete, die eigene Node.js-24-Laufzeit und den systemd-Dienst installieren und dessen HTTP-Antwort prüfen.
@@ -174,6 +175,43 @@ Falls der Quellcode noch fehlt oder der aktuelle Stand übertragen werden soll, 
 Archive nach erfolgreicher Prüfung selbst entfernen bzw. für die nächste Übertragung einen neuen Namen wählen. Der neue Quellcodeordner darf ebenfalls noch nicht existieren; dadurch werden keine alten Quelldateien in einen neuen Stand gemischt. Keine `.git`, echte `.env`, Familiendaten oder Sicherungen übertragen. Bei einem laufenden Dienst vor dem Weiterarbeiten die normalen Update-/Sicherungshinweise in [LXC.md](LXC.md) beachten.
 
 Referenzen: [Proxmox-DNS-Einstellung für LXC](https://github.com/proxmox/pve-docs/blob/master/generated/pct.1-synopsis.adoc), [Debian apt-get und --error-on=any](https://manpages.debian.org/bookworm/apt/apt-get.8.en.html).
+
+### Debian 13: systemd-Mount- oder D-Bus-Fehler
+
+Wenn DNS inzwischen funktioniert, aber `dev-mqueue.mount`, `run-lock.mount`, `tmp.mount` und D-Bus fehlgeschlagen sind, passt das zu bekannten Debian-13-/systemd-Problemen bei fehlender Nesting-Freigabe. Die Korrektur des Erstellers setzt `nesting=1` für neue Debian-13-Container. Für den bereits angelegten Container **100** ist ein vollständiges Stoppen und Starten nötig, um die Feature-Änderung zu übernehmen.
+
+Auf dem Proxmox-Host als root:
+
+```bash
+pct stop 100 && pct set 100 --features nesting=1 && pct start 100
+pct exec 100 -- systemctl is-system-running --wait
+pct exec 100 -- systemctl --failed --no-pager
+```
+
+Diese Feature-Zeile gilt für den mit dem ursprünglichen Ersteller angelegten Container ohne andere ausdrücklich gesetzte Features. Sind im Container bereits weitere Features konfiguriert, unter **Container → Optionen → Features** nur Nesting einschalten und die anderen Einstellungen erhalten. Der Container bleibt unprivilegiert; der Proxmox-Host wird nicht neu gestartet.
+
+Sobald `systemctl` den Status `running` und keine fehlgeschlagenen Dienste meldet, den Installer auf dem Host aktualisieren, die korrigierte Installer-Datei in den vorhandenen Quellcodeordner übertragen und dort fortsetzen:
+
+```bash
+(
+  set -e
+  cd /root/Familien-Organizer
+  git pull --ff-only
+  pct push 100 scripts/install-lxc.sh /root/familien-organisierer-src/scripts/install-lxc.sh --perms 0700
+  pct exec 100 -- bash /root/familien-organisierer-src/scripts/install-lxc.sh
+  pct set 100 --onboot 1
+)
+```
+
+Hier wird nur die Installer-Korrektur übertragen; die Anwendung und Schema-Version sind weiterhin 0.1.2 bzw. 1. Für spätere Änderungen des Anwendungscodes den vollständigen neuen Stand wie oben beschrieben übertragen. Nach erfolgreichem Start die angezeigte Browser-Adresse öffnen. Den Container-Ersteller nicht erneut ausführen.
+
+Wenn trotz Nesting Basisdienste fehlschlagen, vor weiteren Änderungen deren Journal ansehen:
+
+```bash
+pct exec 100 -- journalctl -b -u tmp.mount -u run-lock.mount -u dev-mqueue.mount -u dbus.service -u dbus.socket --no-pager -n 80
+```
+
+Primärquellen: [gleiche Debian-13-Mount-Fehler mit erfolgreicher Nesting-Korrektur](https://forum.proxmox.com/threads/lxc-unprivileged-container-journal-and-other-services-failed-to-start.178714/), [Proxmox-Mitarbeiter zur Nesting-Freigabe in einem unprivilegierten Container](https://forum.proxmox.com/threads/pmg8to9-warnung-failed-to-resolve-hostname-upgrade-probleme.182214/), [pct-Feature-Referenz](https://github.com/proxmox/pve-docs/blob/master/generated/pct.1-synopsis.adoc).
 
 Daten, Fotos, Schlüssel und Sicherungen liegen im LXC bzw. im eigenen eingebundenen Speicher. Sie werden nicht in GitHub hochgeladen. Im LXC bleiben `/root/familien-organisierer-src` und die installierte Anwendung unter `/opt/familien-organisierer` erhalten. Der übertragene Quellcodeordner enthält kein `.git`; der ursprüngliche Git-Checkout ist auf dem Host.
 

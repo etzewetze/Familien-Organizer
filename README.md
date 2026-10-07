@@ -61,7 +61,7 @@ Das Skript wählt eine freie Container-ID, prüft vorhandene Speicher und Bridge
 | Systemdisk | 8 GiB; zusätzliche Kapazität für Fotos und Sicherungen |
 | Betriebssystem | Debian 12 auf Proxmox 8; Debian 13 auf Proxmox >=9 |
 | Netzwerk | `vmbr0`, IPv4 per DHCP; bei abweichender Einrichtung konfigurierbar |
-| Betrieb | Unprivilegierter LXC, systemd, Autostart nach erfolgreicher Installation |
+| Betrieb | Unprivilegierter LXC, systemd, bei Debian 13 `nesting=1`, Autostart nach erfolgreicher Installation |
 
 Andere Speicher, Bridge, VM-ID oder mehr Ressourcen:
 
@@ -72,6 +72,8 @@ bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh --vmid 120 --rootfs-
 Vorher nur prüfen: `bash /root/Familien-Organizer/scripts/create-proxmox-lxc.sh --dry-run`. Eine vorhandene ID wird abgewiesen. Jeder normale Aufruf erstellt einen **neuen** Container; Updates sind in der LXC-Anleitung beschrieben.
 
 Bei Bedarf `--nameserver IP_DEINES_DNS_SERVERS` ergänzen. Ohne diese Option übernimmt Proxmox die DNS-Einstellung des Hosts; der Resolver muss auch aus dem LXC erreichbar sein. Vor Paketdownloads prüft der Installer die Namensauflösung für Debian und Node.js. Fehlgeschlagene Paketlisten-Abrufe werden als Fehler behandelt; ein vorhandener Container wird erhalten.
+
+Bei Debian 13 setzt der Ersteller Nesting für die systemd-Basisdienste. Für einen schon erstellten Container mit fehlgeschlagenen Basis-Mounts oder D-Bus steht die [Reparatur im vorhandenen LXC](docs/PROXMOX.md#debian-13-systemd-mount--oder-d-bus-fehler) in der Host-Anleitung.
 
 Ein CT-Template enthält ein komplettes Linux-Dateisystem. Das Projekt-ZIP ist Quellcode; der automatische Weg nutzt das offizielle Debian-CT-Template und installiert die Familienzentrale anschließend darin.
 
