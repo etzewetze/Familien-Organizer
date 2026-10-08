@@ -34,6 +34,7 @@ Google-OAuth im Status „Testing“ kann Refresh-Tokens nach sieben Tagen ablau
 - Änderungen aus der Anwendung werden sofort zur Übertragung angestoßen. Bei Fehlern bleiben sie in einer persistenten Warteschlange und werden später erneut versucht.
 - Nachladen auf geöffneten Familiengeräten alle 15 Sekunden. Keine Push-Benachrichtigungen und kein Webhook-Echtzeitabgleich.
 - Abruffenster: 90 Tage Vergangenheit bis 366 Tage Zukunft; wiederkehrende Google-Termine werden als einzelne Vorkommen geladen. Bearbeitung betrifft dieses Vorkommen, nicht die gesamte Serie.
+- Seit 0.3: Mehrere ausgewählte Personen und feste Startzeiten ohne Ende werden über private Metadaten erhalten. Für eine feste Startzeit wird in Google ein 15-Minuten-Ende benötigt; die Familienzentrale zeigt weiterhin die ausblendende Darstellung. [Bedienung des Kalenders](PLANER.md#kalender).
 - Änderungen mit offenem Versand werden beim Import nicht überschrieben. Nach erfolgreichem Versand ist beim nächsten Abgleich Google maßgeblich. Es gibt noch keine umfassende Konfliktoberfläche für gleichzeitig direkt in Google und lokal geänderte Termine.
 - Kalender aus der Auswahl entfernen löscht deren importierte Anzeige in der Familienzentrale, nicht die Google-Termine. Ein Kalender mit ungesendeten Änderungen muss zuerst synchronisiert werden.
 - Konto trennen behält angezeigte Termine als lokale Termine und verwirft offene Google-Schreibvorgänge für dieses Konto. Die Berechtigung in deinem Google-Konto wird dadurch nicht automatisch widerrufen; bei Bedarf dort entfernen.

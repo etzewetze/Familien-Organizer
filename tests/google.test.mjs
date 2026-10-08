@@ -15,6 +15,15 @@ function fixture(t) {
   t.after(() => { store.close(); rmSync(directory, { recursive: true, force: true }); });
   return { store, model, google, calendar, account: store.publicAccounts()[0] };
 }
+test('Google-Übertragung erhält mehrere Personen und eine feste Startzeit über private Metadaten', async t => {
+  const { store, model, google, account, calendar } = fixture(t), date = '2026-10-05';
+  const a = model.save('members', '', { name: 'Anna', color: '#ff9900' }), b = model.save('members', '', { name: 'Ben', color: '#3399ff' });
+  const event = model.save('events', '', { title: 'Treffen', startDate: date, startTime: '23:55', startOnly: true, memberIds: [a.id, b.id], googleAccountId: account.id, calendarId: calendar.id });
+  let payload; google.request = async (_, path, options) => { payload = JSON.parse(options.body); return {}; }; await google.pushOutbox();
+  assert.equal(payload.end.dateTime, '2026-10-06T00:10:00'); assert.equal(payload.extendedProperties.private.familyStartOnly, '1');
+  const current = store.get('events', event.id); const remote = { id: current.googleEventId, ...payload, start: { dateTime: date + 'T21:55:00Z' }, end: { dateTime: '2026-10-05T22:10:00Z' } };
+  const imported = google.fromRemote(account, calendar, remote); assert.deepEqual(imported.memberIds, [a.id, b.id]); assert.equal(imported.startOnly, true); assert.equal(imported.endTime, ''); assert.equal(imported.endDate, date);
+});
 test('Google-Abgleich: Zeitzonen, ganztägige Enddaten und stabile Revisionen', async t => {
   const { google, store, account, calendar } = fixture(t), today = store.state().serverDate;
   const response = { items: [{ id: 'remote1', summary: 'Test', start: { dateTime: today + 'T08:00:00Z' }, end: { dateTime: today + 'T09:00:00Z' } }, { id: 'remote2', summary: 'Ganztag', start: { date: today }, end: { date: today.replace(/.$/, String(Number(today.slice(-1)) + 1)) } }] };

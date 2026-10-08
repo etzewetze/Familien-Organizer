@@ -110,11 +110,13 @@ export class GoogleSync {
           catch (e) { if (![404, 410].includes(e.remoteStatus)) throw e; }
         } else {
           const timezone = this.store.meta('settings').timezone || 'Europe/Berlin';
+          const minute = Number(event.startTime?.slice(0, 2)) * 60 + Number(event.startTime?.slice(3, 5)) + 15;
+          const pointEnd = { dateTime: `${minute >= 1440 ? addDays(event.startDate, 1) : event.startDate}T${String(Math.floor(minute % 1440 / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}:00`, timeZone: timezone };
           const payload = {
             summary: event.title, description: event.description, location: event.location,
             start: event.allDay ? { date: event.startDate } : { dateTime: `${event.startDate}T${event.startTime}:00`, timeZone: timezone },
-            end: event.allDay ? { date: addDays(event.endDate, 1) } : { dateTime: `${event.endDate}T${event.endTime}:00`, timeZone: timezone },
-            extendedProperties: { private: { familyOrganizerId: event.id } },
+            end: event.allDay ? { date: addDays(event.endDate, 1) } : event.startOnly ? pointEnd : { dateTime: `${event.endDate}T${event.endTime}:00`, timeZone: timezone },
+            extendedProperties: { private: { familyOrganizerId: event.id, familyStartOnly: event.startOnly ? '1' : '0', familyMemberIds: JSON.stringify(event.memberIds || (event.memberId ? [event.memberId] : [])) } },
           };
           if (event.googleEventId) await this.request(event.googleAccountId, path + '/' + encodeURIComponent(remoteId), { method: 'PATCH', body: JSON.stringify(payload) });
           else {
@@ -148,7 +150,12 @@ export class GoogleSync {
     const ownRecord = ownId ? this.store.get('events', ownId) : null;
     const validOwnId = ownRecord && ownRecord.googleAccountId === account.id && ownRecord.calendarId === calendar.id && (!ownRecord.googleEventId || ownRecord.googleEventId === event.id);
     const id = existing?.id || (validOwnId && !event.recurringEventId ? ownId : 'g-' + hash(account.id + calendar.id + event.id).slice(0, 32));
-    return { id, title: (event.summary || 'Ohne Titel').slice(0, 160), startDate: start.date, endDate: allDay ? addDays(end.date, -1) : end.date, startTime: start.time, endTime: end.time, allDay, memberId: calendar.memberId || existing?.memberId || '', location: (event.location || '').slice(0, 300), description: (event.description || '').slice(0, 5000), googleAccountId: account.id, calendarId: calendar.id, googleEventId: event.id, googleReadOnly: !['owner', 'writer'].includes(calendar.accessRole) };
+    let memberIds = calendar.memberId ? [calendar.memberId] : existing?.memberIds || (existing?.memberId ? [existing.memberId] : []);
+    if (validOwnId) {
+      try { const selected = JSON.parse(event.extendedProperties.private.familyMemberIds); if (Array.isArray(selected) && selected.length <= 20 && selected.every(m => this.store.get('members', m))) memberIds = [...new Set(selected)]; } catch {}
+    }
+    const startOnly = !allDay && !!validOwnId && event.extendedProperties?.private?.familyStartOnly === '1';
+    return { id, title: (event.summary || 'Ohne Titel').slice(0, 160), startDate: start.date, endDate: startOnly ? start.date : allDay ? addDays(end.date, -1) : end.date, startTime: start.time, endTime: startOnly ? '' : end.time, allDay, startOnly, memberIds, memberId: memberIds[0] || '', location: (event.location || '').slice(0, 300), description: (event.description || '').slice(0, 5000), googleAccountId: account.id, calendarId: calendar.id, googleEventId: event.id, googleReadOnly: !['owner', 'writer'].includes(calendar.accessRole) };
   }
   async pullCalendar(account, calendar) {
     const date = this.store.state().serverDate;
@@ -176,7 +183,7 @@ export class GoogleSync {
         seen.add(event.id);
         if (pending.has(event.id)) continue;
         const existing = this.store.get('events', event.id);
-        if (!existing || Object.entries(event).some(([key, value]) => existing[key] !== value)) this.store.put('events', event.id, event);
+        if (!existing || Object.entries(event).some(([key, value]) => JSON.stringify(existing[key]) !== JSON.stringify(value))) this.store.put('events', event.id, event);
       }
       for (const old of this.store.all('events').filter(e => e.googleAccountId === account.id && e.calendarId === calendar.id)) {
         // Außerhalb des Abruffensters werden importierte Termine nicht gelöscht.

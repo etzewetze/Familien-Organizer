@@ -2,7 +2,9 @@
 
 Eine eigenständige, deutschsprachige Familienzentrale zum Selbsthosten. Funktional an den beschriebenen Familienkalender angelehnt; eigener Quellcode, eigenes Design und keine Abhängigkeit von Dæly. Keine übernommenen Markenassets oder proprietären Programmteile.
 
-**Version 0.2.0 ergänzt Geburtstage und den Rezeptimport per Webseiten-Link.** Sie ist für einen privaten Haushalt im eigenen Netz gedacht. Alle Familiengeräte verwenden dasselbe Familienpasswort und dieselben Bearbeitungsrechte. Eine native App und Stundenpläne folgen später.
+**Version 0.3.0 ergänzt den Kalender mit Stundenraster, Aufgabenverteilung und drei Mahlzeiten pro Tag.** Sie ist für einen privaten Haushalt im eigenen Netz gedacht. Familiengeräte verwenden dasselbe Familienpasswort; manuelle Punkte und Software-Updates benötigen zusätzlich das Elternpasswort. Eine native App und Stundenpläne folgen später.
+
+**Bereits laufender Container?** Einmal den [vollständigen Update-Befehl](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) verwenden. Danach steht **Einstellungen → Update** zur Verfügung. Den Container-Ersteller nur für neue LXC verwenden. Bedienung: [PLANER.md](docs/PLANER.md).
 
 ## Neuen Proxmox-LXC automatisch anlegen
 
@@ -96,19 +98,19 @@ Im Browser `http://localhost:8080` öffnen, Familiennamen, Mitglieder und ein Pa
 
 ## Enthaltene Funktionen
 
-| Bereich | Stand in 0.2 |
+| Bereich | Stand in 0.3 |
 |---|---|
-| Kalender | Wochen-, Monats- und Listenansicht; ganztägige und mehrtägige Termine; Personenfarben und Filter; anlegen, bearbeiten, löschen |
+| Kalender | 24-Stunden-Raster; ausgeschriebene Tage und vollständige Daten; Termine nach Dauer, Überlappungen nebeneinander; Personenwahl und Terminassistent; ganztägig, Zeitspanne oder feste Startzeit mit 15-Minuten-Ausblendung |
 | Geburtstage | Eigener Reiter; Name, Tag und Monat; optional Geburtsjahr und Person; jährliche Anzeige im Kalender mit Alter; Ersatzdatum für den 29. Februar wählbar |
 | Google Kalender | Mehrere Konten über OAuth; Kalenderauswahl und Personenzuordnung; importieren und Änderungen zurückschreiben; Wiederholungsversuche bei Verbindungsfehlern |
-| Aufgaben und Routinen | Einmalig, täglich, werktags oder wöchentlich; Zuordnung zu Personen; Abhaken nach Tag |
-| Punkte | Einmalige Gutschrift je Erledigung; selbst definierte Belohnungen; Einlösungen und Punktestand |
-| Essen und Rezepte | Wochenplan, Rezeptverwaltung, Zutaten, Zubereitung und Portionszahlen; öffentliche Rezeptlinks als editierbare Vorschau importieren |
+| Aufgaben und Routinen | Allgemein und Bereiche für alle Personen mit Punkten unter dem Namen; Drag-and-drop, Touch-Griff und Zuordnungsdialog; optionales Aufgabenbild; einmalig, täglich, werktags oder wöchentlich |
+| Punkte und Belohnungen | Eigener Belohnungsreiter; Einlösen und Historie; manuelle Punkte mit Begründung und Elternpasswort; einmalige Gutschrift pro Erledigung |
+| Essen und Rezepte | Frühstück, Mittag und Abendbrot für jeden Tag; Rezepte per Drag-and-drop oder Auswahl planen; Portionen, Zutaten, Zubereitung und Rezeptlink-Import |
 | Einkauf | Zutaten skalieren und zusammenführen; erneut übernehmen ohne Verdopplung; manuelle Ergänzungen und Abhaken |
 | Listen und Notizen | Eigene Checklisten, Kategorien, Mengen und angeheftete Notizen |
 | Fotos | Nur auf dem Gerät gespeicherte Bilder; Container-Ordner und Upload; Netzwerk-Bilderliste; Immich-Alben; Diashow mit Uhr |
 | Geräte | Responsive Weboberfläche für Handy, Tablet, PC und Wandbildschirm; manueller Vollbildmodus |
-| Betrieb | SQLite, systemd für LXC, optional Docker, vollständiges Sicherungsskript und Datenexport |
+| Betrieb | SQLite, systemd für LXC, optional Docker; Update-Knopf im LXC mit vorheriger Sicherung, Rücksetzen und Ergebnisanzeige; Sicherungsskript und Datenexport |
 
 Unter **Essen & Rezepte → Rezeptlink importieren** einen direkten Rezeptlink einfügen, die Vorschau prüfen und speichern. Der Import liest öffentlich angebotene Rezeptdaten, etwa von Seiten wie Chefkoch, sofern die betreffende Seite diese Daten ausliefert und den Serverabruf zulässt. Quellenlink, Zutaten und Zubereitung werden lokal gespeichert. Nicht jede Webseite lässt sich automatisch auslesen; eine manuelle Eingabe bleibt möglich. Details in [INTEGRATIONS.md](docs/INTEGRATIONS.md#rezepte-aus-dem-internet).
 
@@ -123,7 +125,9 @@ Die vollständige Anleitung steht in [docs/LXC.md](docs/LXC.md). Ein unprivilegi
 3. `bash scripts/install-lxc.sh` ausführen; Debian-Pakete, Node.js 24 und der systemd-Dienst werden automatisch eingerichtet.
 4. `http://CONTAINER-IP:8080` öffnen und Familie einrichten.
 
-Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Der Dienst startet nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf Proxmox gemeldet; das Update auf 0.2.0 ist dort noch zu prüfen. Der [Update-Befehl vom Proxmox-Host](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) lädt den vollständigen neuen Stand in denselben Container.
+Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Anwendung und Update-Dienst starten nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf Proxmox gemeldet; 0.3.0 ist auf dem Zielsystem noch zu prüfen. Der [Update-Befehl vom Proxmox-Host](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) lädt den vollständigen neuen Stand in denselben Container.
+
+Anschließend unter **Einstellungen → Elternpasswort** ein eigenes Passwort anlegen. **Update** startet Sicherung, Download und Installation im Hintergrund; bei Erfolg oder Fehler erscheint der Status dort. Der separate lokale Dienst arbeitet während des Anwendungsneustarts weiter. Details und Diagnose: [Updates über die Oberfläche](docs/LXC.md#updates-über-die-oberfläche).
 
 ## Google und Fotos einrichten
 
@@ -138,13 +142,13 @@ npm test
 node scripts/backup.mjs /pfad/zu/sicherungen
 ```
 
-Das Sicherungsskript erzeugt einen konsistenten SQLite-Schnappschuss und kopiert Schlüssel, Fotos und gegebenenfalls `.env`. Es ist keine Verschlüsselung des gesamten Backups: Sicherungsordner privat aufbewahren. Wiederherstellung steht in der LXC-Anleitung. Der JSON-Export in der Oberfläche ist ein lesbarer Datenexport; er ersetzt die vollständige Sicherung und deren Wiederherstellung nicht.
+Das Sicherungsskript erzeugt einen konsistenten SQLite-Schnappschuss und kopiert Schlüssel, Fotos, Aufgabenbilder und gegebenenfalls `.env`. Es ist keine Verschlüsselung des gesamten Backups: Sicherungsordner privat aufbewahren. Wiederherstellung steht in der LXC-Anleitung. Der JSON-Export in der Oberfläche ist ein lesbarer Datenexport; er ersetzt die vollständige Sicherung und deren Wiederherstellung nicht.
 
 [PROJECT_STATE.md](PROJECT_STATE.md) hält Umfang, Prüfungen, Grenzen und nächste Schritte fest. Für die Fortsetzung genügt das Projektpaket zusammen mit dieser Datei. Der Quellcode liegt im öffentlichen Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer). Zugangsdaten, Familiendaten, Fotos und Sicherungen bleiben auf dem eigenen Server.
 
 ## Technik
 
-Node.js mit eingebautem HTTP-Server und `node:sqlite`; SQLite im WAL-Modus; ES-Module, HTML und CSS ohne fremde Laufzeitpakete. Keine CDNs, Analysedienste, externen Fonts oder kostenpflichtigen Cloud-Datenbanken. Ausgehende Zugriffe finden bei aktivierten Google-/Bilder-Anbindungen statt. Sitzungen nutzen HttpOnly-Cookies; Schreibzugriffe prüfen Anfragequelle und Header. Die Oberfläche maskiert gespeicherte Texte; Punktebuchungen laufen in Datenbanktransaktionen.
+Node.js mit eingebautem HTTP-Server und `node:sqlite`; SQLite im WAL-Modus; ES-Module, HTML und CSS ohne fremde Laufzeitpakete. Keine CDNs, Analysedienste, externen Fonts oder kostenpflichtigen Cloud-Datenbanken. Ausgehende Zugriffe finden bei aktivierten Google-/Bilder-Anbindungen, Rezeptimporten und angeforderten Updates statt. Sitzungen nutzen HttpOnly-Cookies; Schreibzugriffe prüfen Anfragequelle und Header. Die Oberfläche maskiert gespeicherte Texte; Punktebuchungen laufen in Datenbanktransaktionen.
 
 Die Datenbank hat eine Schema-Version als Grundlage für spätere Migrationen. Die HTTP-API kann später von einer App genutzt werden; eine App ist in dieser Version nicht vorgezogen worden.
 

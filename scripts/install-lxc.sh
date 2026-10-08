@@ -9,6 +9,13 @@ configure() {
   runtime_link=/opt/familien-organisierer-node
   backup_root=/var/backups/familien-organisierer
   unit_file=/etc/systemd/system/familien-organisierer.service
+  updater_dir=/opt/familien-organisierer-updater
+  updater_config=/etc/familien-organisierer-updater.json
+  updater_unit=/etc/systemd/system/familien-organisierer-updater.service
+  updater_state=/var/lib/familien-organisierer-updater
+  updater_socket=/run/familien-organisierer-update/control.sock
+  updater_changed=false
+  updater_was_active=false
   lock_file=/run/lock/familien-organisierer-install.lock
   os_release=/etc/os-release
   systemd_directory=/run/systemd/system
@@ -68,7 +75,7 @@ check_target() {
 
 check_source() {
   local item
-  for item in server.mjs package.json src public scripts/lxc-config.mjs scripts/backup.mjs deploy/familien-organisierer.service .env.example README.md LICENSE; do
+  for item in server.mjs package.json src public scripts/lxc-config.mjs scripts/backup.mjs scripts/update-agent.mjs src/update-runner.mjs deploy/familien-organisierer.service deploy/familien-organisierer-updater.service .env.example README.md LICENSE; do
     [ -e "$source_dir/$item" ] || die "Projektdatei fehlt: $item. Bitte das ganze Projekt entpacken/klonen."
   done
   [ ! -L "$app_dir" ] || die 'Der Anwendungsordner darf kein Symlink sein.'
@@ -143,7 +150,7 @@ prepare_app() {
     install -m 0600 "$stage_dir/.env.example" "$stage_dir/.env"
   fi
   local configuration
-  configuration="$("$selected_node" "$stage_dir/scripts/lxc-config.mjs" "$stage_dir/.env" "$app_dir" "$runtime_root" "$backup_root")"
+  configuration="$("$selected_node" "$stage_dir/scripts/lxc-config.mjs" "$stage_dir/.env" "$app_dir" "$runtime_root" "$backup_root" "$updater_dir" "$updater_state" "$updater_config" "$updater_unit" "$unit_file")"
   local config_values
   mapfile -t config_values <<< "$configuration"
   data_dir="${config_values[0]}"
@@ -157,6 +164,46 @@ const [source, target, app, runtime] = process.argv.slice(2);
 const unit = readFileSync(source, 'utf8').replaceAll('/opt/familien-organisierer-node', runtime).replaceAll('/opt/familien-organisierer/', app + '/').replaceAll('WorkingDirectory=/opt/familien-organisierer\n', 'WorkingDirectory=' + app + '\n');
 writeFileSync(target, unit);
 NODE
+  install -d -m 0755 "$work_dir/updater/scripts" "$work_dir/updater/src"
+  install -m 0644 "$stage_dir/scripts/update-agent.mjs" "$work_dir/updater/scripts/update-agent.mjs"
+  install -m 0644 "$stage_dir/src/update-runner.mjs" "$work_dir/updater/src/update-runner.mjs"
+  "$selected_node" --input-type=module - "$stage_dir/deploy/familien-organisierer-updater.service" "$work_dir/updater.service" "$work_dir/updater.json" "$app_dir" "$runtime_link" "$updater_dir" "$updater_config" "$updater_state" "$data_dir" "$photo_dir" "$health_url" "$unit_file" "$updater_socket" "$backup_root" <<'NODE'
+import { readFileSync, writeFileSync } from 'node:fs';
+const [source, unit, config, appDir, runtimeLink, updaterDir, configPath, stateRoot, dataDir, photoDir, healthUrl, unitFile, socket, backupRoot] = process.argv.slice(2);
+writeFileSync(unit, readFileSync(source, 'utf8').replaceAll('/opt/familien-organisierer-updater', updaterDir).replaceAll('/opt/familien-organisierer-node', runtimeLink).replaceAll('/etc/familien-organisierer-updater.json', configPath));
+writeFileSync(config, JSON.stringify({ appDir, runtimeLink, backupRoot, stateRoot, dataDir, photoDir, healthUrl, unitFile, socket }));
+NODE
+
+}
+
+install_updater() {
+  if [ -d "$updater_dir" ]; then cp -a "$updater_dir" "$work_dir/previous-updater"; fi
+  if [ -f "$updater_unit" ]; then cp -a "$updater_unit" "$work_dir/previous-updater.service"; fi
+  if [ -f "$updater_config" ]; then cp -a "$updater_config" "$work_dir/previous-updater.json"; fi
+  if systemctl is-active --quiet familien-organisierer-updater.service; then updater_was_active=true; fi
+  updater_changed=true
+  install -d -o root -g root -m 0700 "$updater_state"
+  install -d -o root -g root -m 0755 "$updater_dir/scripts" "$updater_dir/src"
+  install -o root -g root -m 0644 "$work_dir/updater/scripts/update-agent.mjs" "$updater_dir/scripts/update-agent.mjs"
+  install -o root -g root -m 0644 "$work_dir/updater/src/update-runner.mjs" "$updater_dir/src/update-runner.mjs"
+  install -o root -g root -m 0600 "$work_dir/updater.json" "$updater_config"
+  install -o root -g root -m 0644 "$work_dir/updater.service" "$updater_unit"
+  systemctl daemon-reload
+  systemctl enable familien-organisierer-updater.service
+  # Ein gerade von diesem Dienst ausgeführtes Update darf seinen Auftrag nicht beenden.
+  if ! $updater_was_active; then systemctl start familien-organisierer-updater.service; fi
+  local attempt
+  for attempt in {1..10}; do
+    if systemctl is-active --quiet familien-organisierer-updater.service && \
+       curl --fail --silent --max-time 2 --unix-socket "$updater_socket" http://localhost/status -o "$work_dir/updater-health.json" && \
+       "$selected_node" --input-type=module - "$work_dir/updater-health.json" <<'NODE'
+import { readFileSync } from 'node:fs';
+try { if (JSON.parse(readFileSync(process.argv[2], 'utf8')).supported !== true) process.exit(1); } catch { process.exit(1); }
+NODE
+    then return 0; fi
+    sleep 1
+  done
+  die 'Der Updatedienst konnte nicht gestartet werden. Bitte das Dienstjournal prüfen.'
 }
 
 prepare_account() {
@@ -231,6 +278,12 @@ NODE
 rollback() {
   say 'Installation fehlgeschlagen – vorherigen Stand wiederherstellen …' >&2
   local restore_failed=false
+  if $updater_changed; then
+    if ! $updater_was_active; then systemctl stop familien-organisierer-updater.service >/dev/null 2>&1 || restore_failed=true; fi
+    if [ -d "$work_dir/previous-updater" ]; then cp -a "$work_dir/previous-updater/." "$updater_dir/" || restore_failed=true; fi
+    if [ -f "$work_dir/previous-updater.json" ]; then cp -a "$work_dir/previous-updater.json" "$updater_config" || restore_failed=true; else rm -f "$updater_config" || restore_failed=true; fi
+    if [ -f "$work_dir/previous-updater.service" ]; then cp -a "$work_dir/previous-updater.service" "$updater_unit" || restore_failed=true; else systemctl disable familien-organisierer-updater.service >/dev/null 2>&1 || true; rm -f "$updater_unit" || restore_failed=true; fi
+  fi
   if ! systemctl stop "$service_name" >/dev/null 2>&1; then
     say "Der Dienst konnte nicht sicher gestoppt werden. Daten wurden nicht zurückkopiert. Arbeitsordner behalten: $work_dir; Sicherungen: $backup_root" >&2
     work_dir=''
@@ -318,6 +371,7 @@ main() {
   save_previous
   activate
   wait_for_app
+  install_updater
   finished=true
   say "Familien Organisierer $expected_version läuft."
   local address port

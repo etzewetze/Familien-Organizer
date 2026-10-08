@@ -57,10 +57,14 @@ export class Model {
       case 'events': {
         const startDate = day(data.startDate), endDate = day(data.endDate || startDate);
         const allDay = !!data.allDay;
+        const startOnly = !allDay && !!data.startOnly;
         const startTime = allDay ? '' : text(data.startTime || '09:00', 5);
-        const endTime = allDay ? '' : text(data.endTime || '10:00', 5);
-        check(allDay || [startTime, endTime].every(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)), 'Ungültige Uhrzeit.');
-        check(endDate >= startDate && (allDay || endDate > startDate || endTime > startTime), 'Das Terminende muss nach dem Beginn liegen.');
+        const endTime = allDay || startOnly ? '' : text(data.endTime || '10:00', 5);
+        check(allDay || (startOnly ? [startTime] : [startTime, endTime]).every(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)), 'Ungültige Uhrzeit.');
+        check(startOnly ? endDate === startDate : endDate >= startDate && (allDay || endDate > startDate || endTime > startTime), 'Das Terminende muss nach dem Beginn liegen.');
+        const selected = data.memberIds === undefined ? (data.memberId ? [data.memberId] : []) : data.memberIds;
+        check(Array.isArray(selected) && selected.length <= 20, 'Bitte Alle oder Familienmitglieder auswählen.');
+        const memberIds = [...new Set(selected.map(id => this.member(id)))];
         const googleAccountId = text(data.googleAccountId, 100), calendarId = text(data.calendarId, 300);
         if (old?.googleAccountId) check(googleAccountId === old.googleAccountId && calendarId === old.calendarId, 'Google-Termine können nicht zwischen Kalendern verschoben werden.');
         if (googleAccountId) {
@@ -68,7 +72,8 @@ export class Model {
           const calendar = account?.calendars?.find(c => c.id === calendarId && c.selected);
           check(calendar && ['owner', 'writer'].includes(calendar.accessRole), 'Dieser Google-Kalender ist nicht schreibbar oder nicht ausgewählt.');
         } else check(!calendarId, 'Bitte Google-Konto auswählen.');
-        return { title: title(), startDate, endDate, startTime, endTime, allDay, memberId: memberId(), location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false };
+        check(!old?.googleReadOnly, 'Dieser Google-Kalender ist schreibgeschützt.', 403);
+        return { title: title(), startDate, endDate, startTime, endTime, allDay, startOnly, memberIds, memberId: memberIds[0] || '', location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false };
       }
       case 'birthdays': {
         const month = number(data.month, 1, 12, true), birthdayDay = number(data.day, 1, 31, true);
@@ -84,7 +89,9 @@ export class Model {
         const repeat = data.repeat || 'none';
         check(['none', 'daily', 'weekdays', 'weekly'].includes(repeat), 'Ungültige Wiederholung.');
         const startDate = day(data.startDate, repeat !== 'weekly');
-        return { title: title(), memberId: memberId(), points: number(data.points || 0, 0, 1000, true), repeat, startDate, description: text(data.description, 2000) };
+        const imageFile = text(data.imageFile, 100);
+        check(!imageFile || /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\.(?:jpg|png|webp|gif)$/.test(imageFile), 'Ungültiges Aufgabenbild.');
+        return { title: title(), memberId: memberId(), points: number(data.points || 0, 0, 1000, true), repeat, startDate, description: text(data.description, 2000), imageFile };
       }
       case 'recipes': {
         check(Array.isArray(data.ingredients) && data.ingredients.length <= 100, 'Maximal 100 Zutaten je Rezept.');
@@ -93,7 +100,9 @@ export class Model {
       }
       case 'meals': {
         check(this.store.get('recipes', data.recipeId), 'Rezept nicht gefunden.');
-        return { date: day(data.date), recipeId: data.recipeId, servings: number(data.servings || 4, 1, 100, true) };
+        const slot = data.slot || old?.slot || 'dinner';
+        check(['breakfast', 'lunch', 'dinner'].includes(slot), 'Bitte Frühstück, Mittag oder Abendbrot auswählen.');
+        return { date: day(data.date), slot, recipeId: data.recipeId, servings: number(data.servings || 4, 1, 100, true) };
       }
       case 'lists': return { title: title() };
       case 'items': {
@@ -113,9 +122,11 @@ export class Model {
       if (id) check(old, 'Eintrag wurde nicht gefunden.', 404);
       if (old) check(data._rev === old._rev, 'Der Eintrag wurde auf einem anderen Gerät geändert. Bitte neu öffnen.', 409);
       const value = this.validate(kind, data, old);
-      const recordId = old?.id || (kind === 'meals' ? value.date : this.store.id());
-      if (!old && this.store.get(kind, recordId)) throw new AppError('Für diesen Tag ist bereits eine Mahlzeit geplant. Bitte den bestehenden Plan bearbeiten.', 409);
-      if (kind === 'meals') check(recordId === value.date, 'Zum Verschieben die Mahlzeit neu planen.');
+      const recordId = old?.id || (kind === 'meals' ? value.date + (data.slot ? '-' + value.slot : '') : this.store.id());
+      if (kind === 'meals') {
+        check(!this.store.all('meals').some(m => m.id !== old?.id && m.date === value.date && (m.slot || 'dinner') === value.slot), 'Diese Mahlzeit ist bereits geplant. Bitte den bestehenden Plan bearbeiten.', 409);
+        if (old) check(old.date === value.date && (old.slot || 'dinner') === value.slot, 'Zum Verschieben die Mahlzeit neu planen.');
+      }
       const saved = this.store.put(kind, recordId, value);
       if (kind === 'events' && value.googleAccountId) this.enqueue(saved, 'save');
       return saved;
@@ -126,6 +137,7 @@ export class Model {
   }
   delete(kind, id, rev) {
     check(KINDS.includes(kind), 'Bereich nicht gefunden.', 404);
+    check(kind !== 'pointAwards', 'Punktebuchungen werden als Historie aufbewahrt.', 403);
     return this.store.transaction(() => {
       const record = this.store.get(kind, id);
       check(record, 'Eintrag nicht gefunden.', 404);
@@ -156,6 +168,29 @@ export class Model {
         this.store.db.prepare('DELETE FROM completions WHERE task_id=? AND day=?').run(taskId, key);
       }
       this.store.bump();
+    });
+  }
+  assignTask(taskId, data) {
+    return this.store.transaction(() => {
+      const task = this.store.get('tasks', taskId);
+      check(task, 'Aufgabe nicht gefunden.', 404);
+      check(task._rev === data._rev, 'Die Aufgabe wurde auf einem anderen Gerät geändert. Bitte neu laden.', 409);
+      const date = day(data.date);
+      const key = task.repeat === 'none' ? 'once' : date;
+      check(!this.store.db.prepare('SELECT 1 FROM completions WHERE task_id=? AND day=?').get(taskId, key), 'Erledigte Aufgaben zuerst wieder öffnen, bevor sie verteilt werden.', 409);
+      return this.store.put('tasks', taskId, { ...task, memberId: this.member(data.memberId, true) });
+    });
+  }
+  awardPoints(data) {
+    return this.store.transaction(() => {
+      const memberId = this.member(data.memberId), points = number(data.points, 1, 100000, true), reason = text(data.reason, 160, true);
+      check(typeof data.requestId === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(data.requestId), 'Ungültige Buchungskennung.');
+      const existing = this.store.get('pointAwards', data.requestId);
+      if (existing) {
+        check(existing.memberId === memberId && existing.points === points && existing.reason === reason, 'Buchungskennung bereits verwendet.', 409);
+        return existing;
+      }
+      return this.store.put('pointAwards', data.requestId, { memberId, points, reason, awardedAt: new Date().toISOString() });
     });
   }
   redeem(rewardId, memberId, requestId) {

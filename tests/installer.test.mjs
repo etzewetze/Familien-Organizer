@@ -35,6 +35,13 @@ function fixture(t) {
 const fs=require('node:fs'), path=require('node:path'), {DatabaseSync}=require('node:sqlite');
 const root=process.env.MOCK_STATE, args=process.argv.slice(2), command=args[0];
 fs.appendFileSync(path.join(root,'systemctl'),JSON.stringify(args)+'\\n');
+if(args.includes('familien-organisierer-updater.service')) {
+  const active=path.join(root,'updater-active');
+  if(command==='is-active') process.exit(fs.existsSync(active)?0:3);
+  if(command==='start') fs.writeFileSync(active,'yes');
+  if(command==='stop') fs.rmSync(active,{force:true});
+  process.exit(0);
+}
 const active=path.join(root,'active'), enabled=path.join(root,'enabled');
 if(command==='is-active') process.exit(fs.existsSync(active)?0:3);
 if(command==='is-enabled') process.exit(fs.existsSync(enabled)?0:1);
@@ -55,7 +62,10 @@ if(command==='start') {
   javascript('curl', `
 const fs=require('node:fs'),path=require('node:path'); const args=process.argv.slice(2), output=args[args.indexOf('-o')+1], url=args.find(value=>/^https?:/.test(value));
 fs.appendFileSync(path.join(process.env.MOCK_STATE,'curl'),url+'\\n');
-if(url.endsWith('/api/health')) {
+if(url==='http://localhost/status') {
+  if(process.env.MOCK_UPDATER_FAIL==='yes') process.exit(7);
+  fs.writeFileSync(output,JSON.stringify({supported:true,phase:'idle'}));
+} else if(url.endsWith('/api/health')) {
   if(fs.existsSync(path.join(process.env.MOCK_APP,'src','FAIL_HEALTH'))) process.exit(7);
   const version=JSON.parse(fs.readFileSync(path.join(process.env.MOCK_APP,'package.json'),'utf8')).version;
   fs.writeFileSync(output,JSON.stringify({ok:true,version}));
@@ -73,6 +83,11 @@ runtime_root="$MOCK_RUNTIME_ROOT"
 runtime_link="$MOCK_RUNTIME_LINK"
 backup_root="$MOCK_BACKUPS"
 unit_file="$MOCK_UNIT"
+updater_dir="$MOCK_ROOT/updater"
+updater_config="$MOCK_ROOT/etc/updater.json"
+updater_unit="$MOCK_ROOT/etc/updater.service"
+updater_state="$MOCK_ROOT/updater-state"
+updater_socket="$MOCK_ROOT/updater.sock"
 lock_file="$MOCK_ROOT/lock/install.lock"
 os_release="$MOCK_ROOT/os-release"
 systemd_directory="$MOCK_ROOT/systemd"
@@ -143,7 +158,18 @@ test('Erstinstallation richtet Laufzeit, Dienst, private Konfiguration und HTTP-
   const service = readFileSync(f.unit, 'utf8'); assert.ok(service.includes(`ExecStart=${f.runtimeLink}/bin/node ${f.app}/server.mjs`)); assert.ok(service.includes(`EnvironmentFile=-${f.app}/.env`));
   assert.equal(existsSync(join(f.app, '.git')), false); assert.equal(existsSync(join(f.app, 'data')), false);
   assert.ok(existsSync(join(f.state, 'active'))); assert.ok(existsSync(join(f.state, 'enabled')));
+  assert.ok(existsSync(join(f.root, 'updater/scripts/update-agent.mjs')));
+  const updaterConfig = JSON.parse(readFileSync(join(f.root, 'etc/updater.json'), 'utf8'));
+  assert.equal(updaterConfig.dataDir, f.data); assert.equal(updaterConfig.backupRoot, f.backups);
+  assert.equal(statSync(join(f.root, 'etc/updater.json')).mode & 0o777, 0o600);
+  assert.throws(() => installConfiguration(join(f.app, '.env'), f.app, dirname(f.runtimeLink), f.backups, [f.data]), /getrennt/);
+  assert.ok(existsSync(join(f.state, 'updater-active')));
   const downloads = readFileSync(join(f.state, 'curl'), 'utf8'); assert.match(downloads, /https:\/\/nodejs\.org\/dist\/v24\.19\.0\/node-v24\.19\.0-linux-x64.tar.xz/); assert.match(downloads, /http:\/\/127.0.0.1:8080\/api\/health/);
+});
+test('Fehlgeschlagener Start des Updatedienstes nimmt eine Erstinstallation zurück', t => {
+  const f = fixture(t), result = f.run([], { MOCK_UPDATER_FAIL: 'yes' });
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /Updatedienst konnte nicht gestartet/);
+  assert.equal(existsSync(f.app), false); assert.equal(existsSync(f.unit), false); assert.equal(existsSync(join(f.root, 'etc/updater.json')), false); assert.equal(existsSync(join(f.state, 'updater-active')), false);
 });
 
 test('Update behält Konfiguration, Notizen, Schlüssel und Fotos und entfernt alten Code', t => {

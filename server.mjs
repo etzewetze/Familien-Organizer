@@ -8,12 +8,13 @@ import { Model, AppError, check, text, number, networkUrl } from './src/model.mj
 import { GoogleSync } from './src/google.mjs';
 import { Photos } from './src/photos.mjs';
 import { importRecipe } from './src/recipe-import.mjs';
+import { UpdaterClient } from './src/updater-client.mjs';
 import { seed } from './src/seed.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
 const hash = value => createHash('sha256').update(value).digest('hex');
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
 function passwordHash(password, salt = randomBytes(16).toString('hex')) {
   return { salt, hash: scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString('hex') };
@@ -24,9 +25,25 @@ export function createApp(env = process.env, services = {}) {
   const store = new Store(env.DATA_DIR || join(ROOT, 'data'));
   const model = new Model(store), google = new GoogleSync(store, model, env);
   const photos = new Photos(store, env.PHOTO_DIR || join(store.directory, 'photos'));
+  const taskPhotos = new Photos(store, join(store.directory, 'task-images'));
+  const updater = services.updater || new UpdaterClient(env.UPDATER_SOCKET);
   const loadRecipe = services.importRecipe || importRecipe;
   let activeRecipeImports = 0;
   const failures = new Map();
+  const parentFailures = new Map();
+  function verifyPassword(stored, value) {
+    const attempt = passwordHash(typeof value === 'string' ? value.slice(0, 200) : '', stored?.salt || 'not-configured');
+    return !!stored && timingSafeEqual(Buffer.from(attempt.hash, 'hex'), Buffer.from(stored.hash, 'hex'));
+  }
+  function verifyParent(req, password) {
+    check(store.meta('parentPassword'), 'Zuerst ein Elternpasswort in den Einstellungen anlegen.', 403);
+    const address = req.socket.remoteAddress;
+    const entry = parentFailures.get(address) || { attempts: 0, start: Date.now() };
+    if (Date.now() - entry.start > 600000) { entry.attempts = 0; entry.start = Date.now(); }
+    check(entry.attempts < 10, 'Zu viele Versuche. Bitte in 10 Minuten erneut versuchen.', 429);
+    if (!verifyPassword(store.meta('parentPassword'), password)) { entry.attempts++; parentFailures.set(address, entry); throw new AppError('Das Elternpasswort stimmt nicht.', 403); }
+    parentFailures.delete(address);
+  }
   const cookie = token => `family_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${env.COOKIE_SECURE === 'true' || env.APP_URL?.startsWith('https:') ? '; Secure' : ''}`;
   function newSession(response) {
     const token = randomBytes(32).toString('base64url');
@@ -128,6 +145,24 @@ export function createApp(env = process.env, services = {}) {
           store.setMeta('password', passwordHash(validPassword(data.newPassword)));
           store.db.prepare('DELETE FROM sessions').run(); newSession(res); return json(res, { ok: true });
         }
+        if (path === '/api/parent-password' && req.method === 'PUT') {
+          const data = await body(req);
+          check(verifyPassword(store.meta('password'), data.familyPassword), 'Das Familienpasswort stimmt nicht.', 403);
+          if (store.meta('parentPassword')) verifyParent(req, data.currentPassword);
+          check(typeof data.newPassword === 'string' && data.newPassword.length >= 8 && data.newPassword.length <= 200, 'Das Elternpasswort braucht 8 bis 200 Zeichen.');
+          check(data.newPassword === data.confirmPassword, 'Die neuen Passwörter stimmen nicht überein.');
+          store.transaction(() => { store.setMeta('parentPassword', passwordHash(data.newPassword)); store.bump(); });
+          return json(res, { ok: true });
+        }
+        if (path === '/api/points/award' && req.method === 'POST') {
+          const data = await body(req); verifyParent(req, data.password);
+          return json(res, model.awardPoints(data), 201);
+        }
+        if (path === '/api/updates/status' && req.method === 'GET') return json(res, { ...await updater.status(), currentVersion: VERSION });
+        if (path === '/api/updates/start' && req.method === 'POST') {
+          const data = await body(req); verifyParent(req, data.password);
+          return json(res, await updater.start(), 202);
+        }
         if (path === '/api/settings' && req.method === 'PUT') {
           const data = await body(req), current = store.meta('settings');
           check(data._revision === store.meta('revision'), 'Die Einstellungen wurden zwischenzeitlich geändert. Bitte neu laden.', 409);
@@ -166,6 +201,8 @@ export function createApp(env = process.env, services = {}) {
         }
         const completeRoute = path.match(/^\/api\/tasks\/([a-zA-Z0-9-]+)\/complete$/);
         if (completeRoute && req.method === 'POST') { model.complete(completeRoute[1], await body(req), today()); return json(res, { ok: true }); }
+        const assignRoute = path.match(/^\/api\/tasks\/([a-zA-Z0-9-]+)\/assign$/);
+        if (assignRoute && req.method === 'POST') return json(res, model.assignTask(assignRoute[1], await body(req)));
         const redeemRoute = path.match(/^\/api\/rewards\/([a-zA-Z0-9-]+)\/redeem$/);
         if (redeemRoute && req.method === 'POST') { const data = await body(req); model.redeem(redeemRoute[1], data.memberId, data.requestId); return json(res, { ok: true }); }
         if (path === '/api/shopping/generate' && req.method === 'POST') return json(res, model.generateShopping((await body(req)).week));
@@ -185,6 +222,15 @@ export function createApp(env = process.env, services = {}) {
         }
         if (path === '/api/photos' && req.method === 'GET') return json(res, photos.inventory());
         if (path === '/api/photos/upload' && req.method === 'POST') return json(res, photos.upload(await body(req, true)), 201);
+        if (path === '/api/tasks/image' && req.method === 'POST') {
+          check(!req.headers['content-length'] || Number(req.headers['content-length']) <= 5 * 1024 * 1024, 'Das Aufgabenbild darf höchstens 5 MB groß sein.', 413);
+          const bytes = await body(req, true); check(bytes.length <= 5 * 1024 * 1024, 'Das Aufgabenbild darf höchstens 5 MB groß sein.', 413);
+          return json(res, { imageFile: taskPhotos.upload(bytes).name }, 201);
+        }
+        if (path === '/api/tasks/image' && req.method === 'GET') {
+          const file = taskPhotos.file(url.searchParams.get('file') || '');
+          res.writeHead(200, { 'Content-Type': file.type }); createReadStream(file.path).on('error', () => res.destroy()).pipe(res); return;
+        }
         if (path === '/api/photos/file' && req.method === 'GET') {
           const file = photos.file(url.searchParams.get('file') || '');
           res.writeHead(200, { 'Content-Type': file.type }); createReadStream(file.path).on('error', () => res.destroy()).pipe(res); return;
@@ -219,7 +265,7 @@ export function createApp(env = process.env, services = {}) {
   server.headersTimeout = 15000;
   const syncTimer = setInterval(() => { if (google.configured) void google.sync().catch(() => {}); }, 300000);
   syncTimer.unref();
-  const cleanupTimer = setInterval(() => { for (const [key, entry] of failures) if (Date.now() - entry.start > 600000) failures.delete(key); }, 600000);
+  const cleanupTimer = setInterval(() => { for (const map of [failures, parentFailures]) for (const [key, entry] of map) if (Date.now() - entry.start > 600000) map.delete(key); }, 600000);
   cleanupTimer.unref();
   server.on('close', () => { clearInterval(syncTimer); clearInterval(cleanupTimer); });
   return { server, store, model, google, photos };

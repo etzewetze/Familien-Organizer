@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync, chmodSync, existsSync } from 'n
 import { resolve, join } from 'node:path';
 import { randomBytes, randomUUID, createCipheriv, createDecipheriv } from 'node:crypto';
 
-export const KINDS = ['members', 'events', 'birthdays', 'tasks', 'recipes', 'meals', 'lists', 'items', 'notes', 'rewards'];
+export const KINDS = ['members', 'events', 'birthdays', 'tasks', 'recipes', 'meals', 'lists', 'items', 'notes', 'rewards', 'pointAwards'];
 export class Store {
   constructor(directory) {
     this.directory = resolve(directory);
@@ -79,7 +79,8 @@ export class Store {
     catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   balance(memberId) {
-    const earned = this.db.prepare('SELECT COALESCE(SUM(points),0) n FROM completions WHERE member_id=?').get(memberId).n;
+    const earned = this.db.prepare('SELECT COALESCE(SUM(points),0) n FROM completions WHERE member_id=?').get(memberId).n
+      + this.all('pointAwards').filter(a => a.memberId === memberId).reduce((sum, a) => sum + a.points, 0);
     const spent = this.db.prepare('SELECT COALESCE(SUM(cost),0) n FROM redemptions WHERE member_id=?').get(memberId).n;
     return { earned, spent, available: earned - spent };
   }
@@ -98,6 +99,7 @@ export class Store {
       google: this.publicAccounts(),
       pendingSync: this.db.prepare('SELECT record_id,operation,error,attempts FROM outbox').all(),
       immichConfigured: !!this.meta('immichSecret'),
+      parentPasswordConfigured: !!this.meta('parentPassword'),
     };
   }
   encrypt(value) {

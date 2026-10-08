@@ -1,0 +1,19 @@
+[Unit]
+Description=Familien Organisierer Update-Dienst
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=family-organizer
+WorkingDirectory=/opt/familien-organisierer-updater
+ExecStart=/opt/familien-organisierer-node/bin/node /opt/familien-organisierer-updater/scripts/update-agent.mjs /etc/familien-organisierer-updater.json
+RuntimeDirectory=familien-organisierer-update
+RuntimeDirectoryMode=0750
+UMask=0077
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

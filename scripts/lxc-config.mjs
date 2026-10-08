@@ -12,7 +12,7 @@ function physicalPath(path) {
 function contains(parent, child) { return child === parent || child.startsWith(parent + sep); }
 
 // .env wird als Daten gelesen, niemals als Shellcode ausgeführt.
-export function installConfiguration(file, appDirectory, runtimeDirectory, backupDirectory) {
+export function installConfiguration(file, appDirectory, runtimeDirectory, backupDirectory, protectedPaths = []) {
   const env = parseEnv(readFileSync(file, 'utf8'));
   const data = env.DATA_DIR || '/var/lib/familien-organisierer';
   const photos = env.PHOTO_DIR || join(data, 'photos');
@@ -23,7 +23,7 @@ export function installConfiguration(file, appDirectory, runtimeDirectory, backu
   const app = physicalPath(resolve(appDirectory)), runtime = physicalPath(resolve(runtimeDirectory));
   const backups = physicalPath(resolve(backupDirectory));
   for (const path of [dataDir, photoDir]) {
-    if ([app, runtime, backups].some(other => contains(path, other) || contains(other, path))) {
+    if ([app, runtime, backups, ...protectedPaths.map(p => physicalPath(resolve(p)))].some(other => contains(path, other) || contains(other, path))) {
       throw new Error('Daten und Fotos müssen getrennt von Quellcode, Laufzeit und Sicherungen liegen.');
     }
   }
@@ -39,8 +39,8 @@ export function installConfiguration(file, appDirectory, runtimeDirectory, backu
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    if (process.argv.length !== 6) throw new Error('Konfiguration, App-, Laufzeit- und Sicherungspfad erforderlich.');
-    const config = installConfiguration(...process.argv.slice(2));
+    if (process.argv.length < 6) throw new Error('Konfiguration, App-, Laufzeit- und Sicherungspfad erforderlich.');
+    const config = installConfiguration(...process.argv.slice(2, 6), process.argv.slice(6));
     process.stdout.write([config.dataDir, config.photoDir, config.healthUrl, config.version].join('\n') + '\n');
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
