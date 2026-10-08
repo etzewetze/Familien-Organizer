@@ -69,3 +69,14 @@ test('Noch nicht übertragene Löschung taucht beim Google-Nachladen nicht erneu
   google.request = async () => ({ items: [{ id: 'remote-delete', summary: 'Zu löschen', start: { dateTime: today + 'T09:00:00+02:00' }, end: { dateTime: today + 'T10:00:00+02:00' }, extendedProperties: { private: { familyOrganizerId: event.id } } }] });
   await google.pullCalendar(account, calendar); assert.equal(store.all('events').length, 0); assert.equal(store.state().pendingSync.length, 1);
 });
+
+test('Eigene Farben für Alle bleiben beim Google-Rundlauf erhalten und fremde Farben werden nicht übernommen', async t => {
+  const { google, model, store, account, calendar } = fixture(t), date=store.state().serverDate;
+  const local=model.save('events','',{title:'Familie',startDate:date,allDay:true,memberIds:[],color:'#ee8800',googleAccountId:'account',calendarId:'primary'});
+  let payload; google.request=async (a,path,options)=>{payload=JSON.parse(options.body);return {};}; await google.pushOutbox();
+  assert.equal(payload.extendedProperties.private.familyColor,'#ee8800');
+  const current=store.get('events',local.id), remote={id:current.googleEventId,...payload};
+  assert.equal(google.fromRemote(account,calendar,remote).color,'#ee8800');
+  const invalid={...remote,extendedProperties:{private:{...payload.extendedProperties.private,familyColor:'url(evil)'}}}; assert.equal(google.fromRemote(account,calendar,invalid).color,'');
+  const foreign={...remote,id:'unrelated',extendedProperties:{private:{familyColor:'#cc0000'}}}; assert.equal(google.fromRemote(account,calendar,foreign).color,'');
+});

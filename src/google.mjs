@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { AppError, check, addDays, text } from './model.mjs';
+import { isColor } from '../public/appearance.js';
 
 const hash = s => createHash('sha256').update(s).digest('hex');
 const GOOGLE_API = 'https://www.googleapis.com/calendar/v3';
@@ -116,7 +117,7 @@ export class GoogleSync {
             summary: event.title, description: event.description, location: event.location,
             start: event.allDay ? { date: event.startDate } : { dateTime: `${event.startDate}T${event.startTime}:00`, timeZone: timezone },
             end: event.allDay ? { date: addDays(event.endDate, 1) } : event.startOnly ? pointEnd : { dateTime: `${event.endDate}T${event.endTime}:00`, timeZone: timezone },
-            extendedProperties: { private: { familyOrganizerId: event.id, familyStartOnly: event.startOnly ? '1' : '0', familyMemberIds: JSON.stringify(event.memberIds || (event.memberId ? [event.memberId] : [])) } },
+            extendedProperties: { private: { familyOrganizerId: event.id, familyStartOnly: event.startOnly ? '1' : '0', familyMemberIds: JSON.stringify(event.memberIds || (event.memberId ? [event.memberId] : [])), familyColor: event.color || '' } },
           };
           if (event.googleEventId) await this.request(event.googleAccountId, path + '/' + encodeURIComponent(remoteId), { method: 'PATCH', body: JSON.stringify(payload) });
           else {
@@ -155,7 +156,9 @@ export class GoogleSync {
       try { const selected = JSON.parse(event.extendedProperties.private.familyMemberIds); if (Array.isArray(selected) && selected.length <= 20 && selected.every(m => this.store.get('members', m))) memberIds = [...new Set(selected)]; } catch {}
     }
     const startOnly = !allDay && !!validOwnId && event.extendedProperties?.private?.familyStartOnly === '1';
-    return { id, title: (event.summary || 'Ohne Titel').slice(0, 160), startDate: start.date, endDate: startOnly ? start.date : allDay ? addDays(end.date, -1) : end.date, startTime: start.time, endTime: startOnly ? '' : end.time, allDay, startOnly, memberIds, memberId: memberIds[0] || '', location: (event.location || '').slice(0, 300), description: (event.description || '').slice(0, 5000), googleAccountId: account.id, calendarId: calendar.id, googleEventId: event.id, googleReadOnly: !['owner', 'writer'].includes(calendar.accessRole) };
+    const remoteColor = validOwnId ? event.extendedProperties?.private?.familyColor : existing?.color;
+    const color = !memberIds.length && isColor(remoteColor) ? remoteColor : '';
+    return { id, title: (event.summary || 'Ohne Titel').slice(0, 160), startDate: start.date, endDate: startOnly ? start.date : allDay ? addDays(end.date, -1) : end.date, startTime: start.time, endTime: startOnly ? '' : end.time, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color, location: (event.location || '').slice(0, 300), description: (event.description || '').slice(0, 5000), googleAccountId: account.id, calendarId: calendar.id, googleEventId: event.id, googleReadOnly: !['owner', 'writer'].includes(calendar.accessRole) };
   }
   async pullCalendar(account, calendar) {
     const date = this.store.state().serverDate;

@@ -96,7 +96,7 @@ test('HTTP: Geburtstage sind synchronisiert; Rezeptimport bleibt bis zum Speiche
   assert.equal(birthdayResponse.status, 201); const birthday = await birthdayResponse.json();
   const login = await request('/api/login', 'POST', { password: 'test-password-2026' }), secondCookie = login.headers.get('set-cookie').split(';')[0];
   const second = await (await request('/api/state', 'GET', undefined, { Cookie: secondCookie })).json(); assert.equal(second.birthdays[0].id, birthday.id); assert.equal(second.events.length, 0);
-  const exported = await (await request('/api/export')).json(); assert.equal(exported.birthdays[0].birthYear, 1990); assert.equal(exported.version, '0.3.0');
+  const exported = await (await request('/api/export')).json(); assert.equal(exported.birthdays[0].birthYear, 1990); assert.equal(exported.version, '0.4.0');
   assert.equal((await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }, { Origin: 'https://foreign.example' })).status, 403); assert.equal(imports, 0);
   const previewResponse = await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }); assert.equal(previewResponse.status, 200);
   const preview = await previewResponse.json(); assert.equal(preview.recipe.sourceUrl, 'https://rezepte.example/pasta'); assert.equal(preview.recipe.ingredients[0].quantity, 400);
@@ -109,4 +109,37 @@ test('HTTP: Geburtstage sind synchronisiert; Rezeptimport bleibt bis zum Speiche
   assert.equal((await request('/birthdays.js')).status, 200);
   assert.equal((await request('/api/records/birthdays/' + birthday.id, 'DELETE', { _rev: birthday._rev })).status, 200);
   assert.equal(app.store.state().birthdays.length, 0);
+});
+
+test('HTTP: Profil- und Hintergrundbilder sind privat, gemeinsam verfügbar und konfliktgeschützt', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'family-ui-images-')), app = createApp({ DATA_DIR: directory });
+  await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { await new Promise(resolve => app.server.close(resolve)); app.store.close(); rmSync(directory, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${app.server.address().port}`, password = 'family-image-fixture'; let cookie;
+  const request = (path, method = 'GET', data, additional = {}) => fetch(base + path, { method, headers: { 'X-Family-Request': '1', 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...additional }, ...(data ? { body: JSON.stringify(data) } : {}) });
+  const setup = await request('/api/setup', 'POST', { password, names: ['Anna','Ben'] }); cookie = setup.headers.get('set-cookie').split(';')[0];
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yG90AAAAASUVORK5CYII=', 'base64');
+  const upload = () => fetch(base + '/api/images/ui', { method: 'POST', headers: { Cookie: cookie, 'X-Family-Request': '1' }, body: png });
+  assert.equal((await fetch(base + '/api/images/ui', { method: 'POST', headers: { Cookie: cookie }, body: png })).status, 403);
+  const response = await upload(); assert.equal(response.status, 201); const image = (await response.json()).imageFile;
+  assert.equal((await fetch(base + '/api/images/ui?file=' + image)).status, 401);
+  const served = await request('/api/images/ui?file=' + image); assert.equal(served.status, 200); assert.equal(served.headers.get('content-type'), 'image/png'); assert.deepEqual(Buffer.from(await served.arrayBuffer()), png);
+  for (const path of ['../master.key','..%2Fmaster.key']) assert.equal((await request('/api/images/ui?file=' + path)).status, 404);
+  symlinkSync(join(directory,'master.key'),join(directory,'ui-images','outside.png')); assert.equal((await request('/api/images/ui?file=outside.png')).status, 404);
+  assert.equal((await fetch(base + '/api/images/ui', { method: 'POST', headers: { Cookie: cookie, 'X-Family-Request': '1' }, body: Buffer.from('kein Bild') })).status, 400);
+  let state = await (await request('/api/state')).json(), member = state.members[0];
+  const changed = await request('/api/records/members/' + member.id,'PUT',{...member,avatarImage:image}); assert.equal(changed.status,200); const updated = await changed.json();
+  assert.equal((await request('/api/records/members/' + member.id,'PUT',{...member,name:'Alt'})).status,409);
+  state = await (await request('/api/state')).json();
+  const settings = {...state.settings,headerColor:'#123456',allColor:'#ff7700',backgroundImage:image,calendarHourSize:52,calendarAutoWidth:false,_revision:state.revision};
+  assert.equal((await request('/api/settings','PUT',settings)).status,200);
+  assert.equal((await request('/api/settings','PUT',settings)).status,409);
+  const login = await request('/api/login','POST',{password}), second = login.headers.get('set-cookie').split(';')[0];
+  const otherState = await (await request('/api/state','GET',undefined,{Cookie:second})).json(); assert.equal(otherState.members[0].avatarImage,image); assert.equal(otherState.settings.backgroundImage,image); assert.equal(otherState.settings.headerColor,'#123456');
+  assert.equal((await request('/api/settings','PUT',{...otherState.settings,_revision:otherState.revision,headerColor:'url(evil)'})).status,400);
+  assert.equal((await request('/api/settings','PUT',{...otherState.settings,_revision:otherState.revision,backgroundImage:'../master.key'})).status,400);
+  assert.equal((await request('/api/records/members/' + member.id,'PUT',{...updated,avatarImage:''})).status,200);
+  const after = await (await request('/api/state')).json();
+  assert.equal((await request('/api/settings','PUT',{...after.settings,_revision:after.revision,backgroundImage:''})).status,200);
+  assert.equal((await (await request('/api/state')).json()).settings.backgroundImage,'');
 });

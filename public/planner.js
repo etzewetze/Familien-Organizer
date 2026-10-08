@@ -9,6 +9,26 @@ export function eventWindow(event, date) {
   return Number.isFinite(start) && Number.isFinite(end) && end > start ? { event, start, end } : null;
 }
 
+export function hourScale(heights) {
+  if (heights.length !== 24 || heights.some(value => !Number.isFinite(value) || value <= 0)) throw new Error('Ungültiges Stundenraster.');
+  let total = 0;
+  const hours = heights.map((height, hour) => { const row = { hour, top: total, height }; total += height; return row; });
+  return { hours, total,
+    position(minute) { const value = Math.max(0, Math.min(1440, minute)); if (value === 1440) return total; const row = hours[Math.floor(value / 60)]; return row.top + value % 60 / 60 * row.height; },
+    minuteAt(pixel) { const value = Math.max(0, Math.min(total, pixel)); if (value === total) return 1440; const row = hours.find(row => value < row.top + row.height); return row.hour * 60 + (value - row.top) / row.height * 60; },
+  };
+}
+
+export function timeScale(days, hourSize = 64, compact = true) {
+  const occupied = Array(24).fill(!compact);
+  for (const { date, events } of days) for (const event of events) {
+    const interval = eventWindow(event, date); if (!interval) continue;
+    for (let hour = 0; hour < 24; hour++) if (interval.start < (hour + 1) * 60 && interval.end > hour * 60) occupied[hour] = true;
+  }
+  const short = Math.max(26, Math.round(hourSize * .55));
+  return hourScale(occupied.map(active => active ? hourSize : short));
+}
+
 // Each connected overlap group shares columns; adjacent appointments use the full width.
 export function layoutTimedEvents(events, date) {
   const intervals = events.map(event => eventWindow(event, date)).filter(Boolean).sort((a, b) => a.start - b.start || b.end - a.end);

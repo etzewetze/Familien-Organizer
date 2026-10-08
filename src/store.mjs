@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, readFileSync, writeFileSync, chmodSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { randomBytes, randomUUID, createCipheriv, createDecipheriv } from 'node:crypto';
+import { appearanceDefaults } from '../public/appearance.js';
 
 export const KINDS = ['members', 'events', 'birthdays', 'tasks', 'recipes', 'meals', 'lists', 'items', 'notes', 'rewards', 'pointAwards'];
 export class Store {
@@ -89,7 +90,7 @@ export class Store {
   }
   state() {
     const data = Object.fromEntries(KINDS.map(k => [k, this.all(k)]));
-    const settings = this.meta('settings', {});
+    const settings = { ...appearanceDefaults, ...this.meta('settings', {}) };
     return {
       ...data, revision: this.meta('revision'), settings,
       serverDate: new Intl.DateTimeFormat('sv-SE', { timeZone: settings.timezone || 'Europe/Berlin' }).format(new Date()),

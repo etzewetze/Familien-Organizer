@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store.mjs';
 import { Model } from '../src/model.mjs';
-import { eventMembers, eventWindow, layoutTimedEvents, parsePlannerDrag } from '../public/planner.js';
+import { eventMembers, eventWindow, layoutTimedEvents, parsePlannerDrag, timeScale, hourScale } from '../public/planner.js';
 
 function fixture(t) {
   const path = mkdtempSync(join(tmpdir(), 'family-planner-')), store = new Store(path), model = new Model(store);
@@ -74,4 +74,17 @@ test('Manuelle Punkte sind idempotente Buchungen mit Begründung und können als
 test('Drag-Daten erlauben nur Aufgaben und Rezepte mit gültiger Kennung und Revision', () => {
   assert.deepEqual(parsePlannerDrag('{"kind":"task","id":"abc-123","rev":5}'), { kind: 'task', id: 'abc-123', rev: 5 });
   for (const data of ['garbage', '{"kind":"shell","id":"a","rev":1}', '{"kind":"recipe","id":"../a","rev":1}', '{"kind":"task","id":"a","rev":"2"}']) assert.equal(parsePlannerDrag(data), null);
+});
+
+test('Leere Stunden verdichten sich gemeinsam; Terminlängen und Scrollzeit bleiben exakt', () => {
+  const date='2026-10-05', appointment={startDate:date,endDate:date,startTime:'07:00',endTime:'09:00'}, point={...appointment,startTime:'16:00',endTime:'',startOnly:true};
+  const scale=timeScale([{date,events:[appointment,point,{...appointment,allDay:true}]}],64,true);
+  assert.equal(scale.hours[7].height,64); assert.equal(scale.hours[8].height,64); assert.ok(scale.hours[6].height<64); assert.equal(scale.hours[16].height,64);
+  assert.equal(scale.position(540)-scale.position(420),128); assert.equal(scale.position(480)-scale.position(420),64); assert.equal(scale.position(975)-scale.position(960),16);
+  for(const minute of [0,1,359,420,450,900,975,1439,1440]) assert.ok(Math.abs(scale.minuteAt(scale.position(minute))-minute)<1e-9);
+  assert.equal(timeScale([{date,events:[]}],64,false).total,1536);
+  assert.ok(timeScale([{date,events:[{...appointment,allDay:true}]}],64,true).hours.every(row=>row.height<64));
+  const overnight=timeScale([{date,events:[{...appointment,startTime:'23:00',endDate:'2026-10-06',endTime:'01:00'}]},{date:'2026-10-06',events:[{...appointment,startTime:'23:00',endDate:'2026-10-06',endTime:'01:00'}]}],64,true);
+  assert.equal(overnight.hours[0].height,64); assert.equal(overnight.hours[23].height,64);
+  assert.throws(()=>hourScale([0]));
 });

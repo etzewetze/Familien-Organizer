@@ -4,7 +4,7 @@ import { resolve, join, extname, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomBytes, createHash, scryptSync, timingSafeEqual } from 'node:crypto';
 import { Store } from './src/store.mjs';
-import { Model, AppError, check, text, number, networkUrl } from './src/model.mjs';
+import { Model, AppError, check, text, number, networkUrl, appearanceSettings } from './src/model.mjs';
 import { GoogleSync } from './src/google.mjs';
 import { Photos } from './src/photos.mjs';
 import { importRecipe } from './src/recipe-import.mjs';
@@ -14,7 +14,7 @@ import { seed } from './src/seed.mjs';
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
 const hash = value => createHash('sha256').update(value).digest('hex');
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
 function passwordHash(password, salt = randomBytes(16).toString('hex')) {
   return { salt, hash: scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString('hex') };
@@ -26,6 +26,7 @@ export function createApp(env = process.env, services = {}) {
   const model = new Model(store), google = new GoogleSync(store, model, env);
   const photos = new Photos(store, env.PHOTO_DIR || join(store.directory, 'photos'));
   const taskPhotos = new Photos(store, join(store.directory, 'task-images'));
+  const uiPhotos = new Photos(store, join(store.directory, 'ui-images'));
   const updater = services.updater || new UpdaterClient(env.UPDATER_SOCKET);
   const loadRecipe = services.importRecipe || importRecipe;
   let activeRecipeImports = 0;
@@ -65,8 +66,7 @@ export function createApp(env = process.env, services = {}) {
     res.setHeader('Cache-Control', 'no-store');
   }
   function json(res, value, status = 200) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); }
-  async function body(req, raw = false) {
-    const max = raw ? 20 * 1024 * 1024 : 1024 * 1024;
+  async function body(req, raw = false, max = raw ? 20 * 1024 * 1024 : 1024 * 1024) {
     check(!req.headers['content-length'] || Number(req.headers['content-length']) <= max, 'Datei oder Anfrage ist zu groß.', 413);
     const chunks = []; let size = 0;
     for await (const part of req) { size += part.length; check(size <= max, 'Anfrage ist zu groß.', 413); chunks.push(part); }
@@ -168,7 +168,7 @@ export function createApp(env = process.env, services = {}) {
           check(data._revision === store.meta('revision'), 'Die Einstellungen wurden zwischenzeitlich geändert. Bitte neu laden.', 409);
           const timezone = text(data.timezone || 'Europe/Berlin', 60, true);
           try { new Intl.DateTimeFormat('de-DE', { timeZone: timezone }).format(new Date()); } catch { throw new AppError('Ungültige Zeitzone.'); }
-          const settings = { familyName: text(data.familyName, 60, true), timezone, photoInterval: number(data.photoInterval, 3, 300, true), photoFit: data.photoFit === 'cover' ? 'cover' : 'contain', remoteManifestUrl: networkUrl(data.remoteManifestUrl), immichUrl: networkUrl(data.immichUrl), immichAlbumId: text(data.immichAlbumId, 100) };
+          const settings = { familyName: text(data.familyName, 60, true), timezone, photoInterval: number(data.photoInterval, 3, 300, true), photoFit: data.photoFit === 'cover' ? 'cover' : 'contain', remoteManifestUrl: networkUrl(data.remoteManifestUrl), immichUrl: networkUrl(data.immichUrl), immichAlbumId: text(data.immichAlbumId, 100), ...appearanceSettings(data, current) };
           store.transaction(() => {
             if (data.immichKey) store.setMeta('immichSecret', store.encrypt(text(data.immichKey, 500, true)));
             if (current.immichUrl !== settings.immichUrl && !data.immichKey) store.setMeta('immichSecret', null);
@@ -222,6 +222,11 @@ export function createApp(env = process.env, services = {}) {
         }
         if (path === '/api/photos' && req.method === 'GET') return json(res, photos.inventory());
         if (path === '/api/photos/upload' && req.method === 'POST') return json(res, photos.upload(await body(req, true)), 201);
+        if (path === '/api/images/ui' && req.method === 'POST') return json(res, { imageFile: uiPhotos.upload(await body(req, true, 5 * 1024 * 1024)).name }, 201);
+        if (path === '/api/images/ui' && req.method === 'GET') {
+          const file = uiPhotos.file(url.searchParams.get('file') || '');
+          res.writeHead(200, { 'Content-Type': file.type }); createReadStream(file.path).on('error', () => res.destroy()).pipe(res); return;
+        }
         if (path === '/api/tasks/image' && req.method === 'POST') {
           check(!req.headers['content-length'] || Number(req.headers['content-length']) <= 5 * 1024 * 1024, 'Das Aufgabenbild darf höchstens 5 MB groß sein.', 413);
           const bytes = await body(req, true); check(bytes.length <= 5 * 1024 * 1024, 'Das Aufgabenbild darf höchstens 5 MB groß sein.', 413);

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { KINDS } from './store.mjs';
+import { appearanceDefaults, isColor, isImageFile } from '../public/appearance.js';
 
 export class AppError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -20,6 +21,17 @@ export function number(value, min = 0, max = 10000, integer = false) {
   const n = Number(value);
   check(Number.isFinite(n) && n >= min && n <= max && (!integer || Number.isInteger(n)), `Zahl muss zwischen ${min} und ${max} liegen.`);
   return n;
+}
+export function appearanceSettings(data, current = {}) {
+  const settings = {};
+  for (const [key, fallback] of Object.entries(appearanceDefaults)) {
+    const value = data[key] ?? current[key] ?? fallback;
+    if (key.endsWith('Color')) { check(isColor(value), 'Bitte eine gültige Farbe auswählen.'); settings[key] = value; }
+    else if (key === 'backgroundImage') { settings[key] = text(value, 100); check(!settings[key] || isImageFile(settings[key]), 'Ungültiges Hintergrundbild.'); }
+    else if (key === 'calendarHourSize') settings[key] = number(value, 52, 100, true);
+    else { check(typeof value === 'boolean', 'Ungültige Kalenderdarstellung.'); settings[key] = value; }
+  }
+  return settings;
 }
 export function networkUrl(value, optional = true) {
   if (!value && optional) return '';
@@ -52,7 +64,9 @@ export class Model {
     switch (kind) {
       case 'members': {
         check(/^#[0-9a-f]{6}$/i.test(data.color), 'Ungültige Farbe.');
-        return { name: text(data.name, 50, true), color: data.color, role: data.role === 'child' ? 'child' : 'adult' };
+        const avatarImage = text(data.avatarImage ?? old?.avatarImage, 100);
+        check(!avatarImage || isImageFile(avatarImage), 'Ungültiges Profilbild.');
+        return { name: text(data.name, 50, true), color: data.color, role: data.role === 'child' ? 'child' : 'adult', avatarImage };
       }
       case 'events': {
         const startDate = day(data.startDate), endDate = day(data.endDate || startDate);
@@ -65,6 +79,8 @@ export class Model {
         const selected = data.memberIds === undefined ? (data.memberId ? [data.memberId] : []) : data.memberIds;
         check(Array.isArray(selected) && selected.length <= 20, 'Bitte Alle oder Familienmitglieder auswählen.');
         const memberIds = [...new Set(selected.map(id => this.member(id)))];
+        const color = text(data.color ?? old?.color, 7);
+        check(!color || isColor(color), 'Ungültige Terminfarbe.');
         const googleAccountId = text(data.googleAccountId, 100), calendarId = text(data.calendarId, 300);
         if (old?.googleAccountId) check(googleAccountId === old.googleAccountId && calendarId === old.calendarId, 'Google-Termine können nicht zwischen Kalendern verschoben werden.');
         if (googleAccountId) {
@@ -73,7 +89,7 @@ export class Model {
           check(calendar && ['owner', 'writer'].includes(calendar.accessRole), 'Dieser Google-Kalender ist nicht schreibbar oder nicht ausgewählt.');
         } else check(!calendarId, 'Bitte Google-Konto auswählen.');
         check(!old?.googleReadOnly, 'Dieser Google-Kalender ist schreibgeschützt.', 403);
-        return { title: title(), startDate, endDate, startTime, endTime, allDay, startOnly, memberIds, memberId: memberIds[0] || '', location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false };
+        return { title: title(), startDate, endDate, startTime, endTime, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color: memberIds.length ? '' : color, location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false };
       }
       case 'birthdays': {
         const month = number(data.month, 1, 12, true), birthdayDay = number(data.day, 1, 31, true);

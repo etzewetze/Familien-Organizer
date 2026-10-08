@@ -19,7 +19,9 @@ if (existsSync(join(root, '.env'))) copyFileSync(join(root, '.env'), join(target
 if (existsSync(photos)) cpSync(photos, join(target, 'photos'), { recursive: true, dereference: false });
 const taskImages = join(data, 'task-images');
 if (existsSync(taskImages)) cpSync(taskImages, join(target, 'task-images'), { recursive: true, dereference: false });
+const uiImages = join(data, 'ui-images');
+if (existsSync(uiImages)) cpSync(uiImages, join(target, 'ui-images'), { recursive: true, dereference: false });
 const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
-writeFileSync(join(target, 'backup.json'), JSON.stringify({ version, createdAt: new Date().toISOString(), photosIncluded: existsSync(photos), taskImagesIncluded: existsSync(taskImages), sourcePhotoDirectory: photos }, null, 2), { mode: 0o600 });
-for (const name of readdirSync(target)) if (!['photos', 'task-images'].includes(name)) chmodSync(join(target, name), 0o600);
+writeFileSync(join(target, 'backup.json'), JSON.stringify({ version, createdAt: new Date().toISOString(), photosIncluded: existsSync(photos), taskImagesIncluded: existsSync(taskImages), uiImagesIncluded: existsSync(uiImages), sourcePhotoDirectory: photos }, null, 2), { mode: 0o600 });
+for (const name of readdirSync(target)) if (!['photos', 'task-images', 'ui-images'].includes(name)) chmodSync(join(target, name), 0o600);
 console.log(target);

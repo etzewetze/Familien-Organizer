@@ -7,29 +7,30 @@ import vm from 'node:vm';
 import { Store } from '../src/store.mjs';
 import { seed } from '../src/seed.mjs';
 import { birthdaysOnDate, nextBirthday } from '../public/birthdays.js';
-import { eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag } from '../public/planner.js';
+import { eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale } from '../public/planner.js';
+import { appearanceDefaults, appearanceFor, eventColor, calendarColumns, isImageFile, themeProperties } from '../public/appearance.js';
 
 // Ausführung der Ansichtslogik ohne echten Browser. Ersetzt keine visuelle QA.
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'family-ui-')), store = new Store(directory);
   store.setMeta('settings', { familyName: 'Familie Test', timezone: 'Europe/Berlin', photoInterval: 15, photoFit: 'contain', remoteManifestUrl: '', immichUrl: '' });
   seed(store, ['Anna', 'Ben', 'Mia', 'Leo'], true, store.state().serverDate);
-  const elements = new Map();
+  const elements = new Map(), listeners = new Map(), styleValues = new Map(), stored = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, { innerHTML: '', open: false, dataset: {}, classList: { add() {}, toggle() {} }, append() {}, remove() {}, addEventListener() {}, querySelector: s => element(s), showModal() { this.open = true; }, close() { this.open = false; } });
     return elements.get(id);
   };
   const context = vm.createContext({
-    document: { querySelector: s => element(s), querySelectorAll: () => [], createElement: s => element(s), addEventListener() {}, activeElement: null },
-    location: { hash: '#home' }, localStorage: { getItem: () => null }, innerWidth: 1440,
+    document: { querySelector: s => element(s), querySelectorAll: () => [], createElement: s => element(s), addEventListener(name, handler) { const list = listeners.get(name) || []; list.push(handler); listeners.set(name, list); }, documentElement: { style: { setProperty: (key, value) => styleValues.set(key, value) } }, activeElement: null },
+    location: { hash: '#home' }, localStorage: { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value) }, innerWidth: 1440,
     addEventListener() {}, setInterval() {}, setTimeout() {}, clearInterval() {},
-    Intl, Date, console, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, initialState: store.state(),
-    FormData: class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key] ?? null; } getAll(key) { return [].concat(this.fields[key] || []); } },
+    Intl, Date, console, URL, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, appearanceDefaults, appearanceFor, eventColor, calendarColumns, isImageFile, themeProperties, initialState: store.state(),
+    FormData: class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key] ?? null; } getAll(key) { return [].concat(this.fields[key] || []); } *[Symbol.iterator]() { for (const [key, value] of Object.entries(this.fields)) for (const item of [].concat(value)) yield [key, item]; } },
   });
   const source = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8').replace(/^import [^\n]+\n/gm, '').replace('void boot();', '');
   vm.runInContext(source + '\nS=initialState; status={googleConfigured:false}; cursor=S.serverDate;', context);
   t.after(() => { store.close(); rmSync(directory, { recursive: true, force: true }); });
-  return { context, elements, run: source => vm.runInContext(source, context) };
+  return { context, elements, listeners, styleValues, stored, run: source => vm.runInContext(source, context) };
 }
 test('Alle zehn Ansichten und Kalenderdarstellungen erzeugen HTML ohne Laufzeitfehler', t => {
   const { run } = fixture(t);
@@ -50,6 +51,8 @@ test('Formulardialoge aller Bereiche sind verfügbar und unzugeordnete Termine b
   for (const kind of ['events', 'birthdays', 'tasks', 'recipes', 'lists', 'items', 'notes', 'rewards', 'members']) { run(`editRecord('${kind}')`); assert.ok(elements.get('#editor').innerHTML.includes(kind === 'events' ? 'event-wizard-form' : 'record-form')); }
   run("filter=S.members[0].id;const familyEvent=S.events.find(e=>!e.memberId);editRecord('events',familyEvent.id)");
   assert.ok(elements.get('#editor').innerHTML.includes('value="all" checked'));
+  assert.ok(elements.get('#editor').innerHTML.includes('event-edit-form'));
+  assert.ok(!elements.get('#editor').innerHTML.includes('wizard-progress'));
 });
 
 test('Geburtstage erscheinen in allen Kalenderansichten und öffnen den Geburtstagseintrag', t => {
@@ -91,8 +94,8 @@ test('Kalender zeigt ausgeschriebene Tage, vollständige Daten, Zeitraster und a
   assert.ok(html.includes('time-event start-only')); assert.ok(html.includes('16:00 Abholen')); assert.ok(html.includes('Anna, Ben'));
   const header = run('headerMembers()'); assert.ok(header.includes('header-person')); assert.ok(header.includes('Anna')); assert.ok(header.includes('--person:#'));
   run("route='calendar';render()");
-  const grid = elements.get('.time-scroll'); grid.dataset.week = '2026-10-05'; grid.scrollTop = 1260; grid.scrollLeft = 210;
-  run('render()'); assert.equal(grid.scrollTop, 1260); assert.equal(grid.scrollLeft, 210);
+  const grid = elements.get('.time-scroll'); grid.dataset.week = '2026-10-05'; grid.dataset.hourHeights = elements.get('#app').innerHTML.match(/data-hour-heights="([^"]+)"/)[1]; grid.scrollTop = 240; grid.scrollLeft = 210;
+  run('render()'); assert.equal(grid.scrollTop, 240); assert.equal(grid.scrollLeft, 210);
 });
 test('Terminassistent führt über Personen und Details zum Datum; Tages-Plus überspringt die Datumseingabe', t => {
   const { run, elements } = fixture(t);
@@ -127,4 +130,57 @@ test('Drag-and-drop sendet die ursprüngliche Aufgabenrevision und plant das Rez
   calls.length = 0;
   await run("applyPlannerDrop({kind:'recipe',id:S.recipes[0].id,rev:-1},{dataset:{mealDate:S.serverDate,mealSlot:'lunch'}})");
   assert.equal(calls.length, 0);
+});
+
+test('Profile zeigen private Bilder mit Initialen als Rückfall; zusätzliche Personenleisten entfallen', t => {
+  const { run, styleValues } = fixture(t);
+  run("S.members[0].avatarImage='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png';S.settings.headerColor='#112233';S.settings.allColor='#dd7700';render()");
+  const header = run('headerMembers()'); assert.ok(header.includes('/api/images/ui?file=aaaaaaaa')); assert.ok(header.includes('data-profile-image')); assert.ok(header.includes('--person:#dd7700'));
+  for (const view of ['homePage', 'birthdaysPage', 'tasksPage']) { const html = run(`${view}()`); assert.ok(!html.includes('family-filters')); assert.ok(!html.includes('task-tabs')); }
+  assert.equal(styleValues.get('--header'), '#112233'); assert.equal(styleValues.get('--header-ink'), '#ffffff');
+  run("S.members[0].avatarImage='../master.key'"); assert.ok(!run('avatar(S.members[0].id)').includes('<img'));
+  run("editRecord('members',S.members[0].id)"); assert.ok(run("editor.innerHTML").includes('member-image-input'));
+});
+test('Headerfilter steuert Aufgaben; Allgemein bleibt erreichbar und die Essensausrichtung wird gemerkt', async t => {
+  const { run, listeners, stored } = fixture(t);
+  const click = listeners.get('click')[0];
+  run("route='tasks';render()");
+  const target = { dataset: { filter: run('S.members[1].id') } };
+  await click({ target: { closest: () => target } });
+  assert.ok(run('tasksPage()').includes('single-column')); assert.ok(run('headerMembers()').includes('data-task-drop=')); assert.equal(run('taskBoard'), target.dataset.filter);
+  target.dataset = { taskBoard: '' }; await click({ target: { closest: () => target } }); assert.equal(run('taskBoard'), ''); assert.equal(run('filter'), '');
+  assert.ok(run('tasksPage()').includes('Allgemein'));
+  run("route='meals';setMealLayout('vertical')"); assert.equal(stored.get('mealLayout'), 'vertical'); assert.ok(run('mealsPage()').includes('meal-plan vertical'));
+  run("setMealLayout('horizontal')"); assert.ok(run('mealsPage()').includes('meal-plan horizontal')); assert.equal(stored.get('mealLayout'), 'horizontal');
+});
+test('Bestehender Termin zeigt alle Angaben und speichert Startzeit, Personen, eigene Farbe und Revision gemeinsam', async t => {
+  const { context, run, elements } = fixture(t), calls = [];
+  context.fetch = async (url, options) => { calls.push({ url, options }); return { ok: true, json: async () => url === '/api/state' ? context.initialState : {} }; };
+  run("editRecord('events',S.events[0].id)"); const html = elements.get('#editor').innerHTML;
+  for (const name of ['title', 'description', 'location', 'startDate', 'endDate', 'startTime', 'endTime', 'event-person', 'eventColor']) assert.ok(html.includes(`name="${name}"`));
+  assert.ok(html.includes('event-edit-form')); assert.ok(!html.includes('wizard-progress'));
+  const revision = run('editing.old._rev');
+  await run("saveEventEditor({fields:{'event-person':['all'],title:'Gemeinsam',description:'Details',location:'Adresse',startDate:S.serverDate,timeMode:'point',startTime:'16:00',eventColor:'#aabbcc'}})");
+  const sent = JSON.parse(calls.find(call => call.url.startsWith('/api/records/events/')).options.body);
+  assert.equal(sent._rev, revision); assert.equal(sent.startOnly, true); assert.equal(sent.endDate, sent.startDate); assert.equal(sent.endTime, ''); assert.deepEqual(sent.memberIds, []); assert.equal(sent.color, '#aabbcc'); assert.equal(sent.location, 'Adresse');
+});
+test('Profilbild-Upload ist vor der Personenspeicherung abgeschlossen und wird als Referenz gespeichert', async t => {
+  const { context, run, elements } = fixture(t), calls = [], image = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png';
+  context.fetch = async (url, options) => { calls.push({ url, options }); return { ok: true, json: async () => url === '/api/state' ? context.initialState : { imageFile: image } }; };
+  run("editRecord('members',S.members[0].id)");
+  elements.set('#member-image-input', { files: [{ size: 20, type: 'image/png' }] });
+  await run("saveEditor({fields:{name:'Anna',color:'#123456',role:'adult'}})");
+  assert.equal(calls[0].url, '/api/images/ui'); assert.equal(calls[0].options.headers['X-Family-Request'], '1');
+  assert.equal(JSON.parse(calls[1].options.body).avatarImage, image); assert.ok(calls[1].url.startsWith('/api/records/members/'));
+});
+
+test('Darstellung speichern lädt das Hintergrundbild zuerst und erhält die Einstellungenrevision', async t => {
+  const { context, run, elements } = fixture(t), calls = [], image = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png';
+  context.fetch = async (url, options) => { calls.push({url,options}); return {ok:true,json:async()=>url==='/api/state'?context.initialState:{imageFile:image}}; };
+  run("route='settings';render()"); elements.set('#background-image-input',{files:[{size:20,type:'image/png'}]});
+  const revision = run('S.revision');
+  await run("saveAppearance({fields:{headerColor:'#224466',calendarHourSize:'52',calendarAutoWidth:'on'},dataset:{revision:S.revision}}, {})");
+  const writes = calls.filter(call => call.options.method !== 'GET');
+  assert.equal(writes[0].url,'/api/images/ui'); assert.equal(writes[1].url,'/api/settings');
+  const sent = JSON.parse(writes[1].options.body); assert.equal(sent.backgroundImage,image); assert.equal(sent.headerColor,'#224466'); assert.equal(sent._revision,revision); assert.equal(sent.calendarHourSize,52); assert.equal(sent.calendarAutoWidth,true);
 });
