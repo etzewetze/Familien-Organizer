@@ -8,7 +8,7 @@ import { Store } from '../src/store.mjs';
 import { seed } from '../src/seed.mjs';
 import { birthdaysOnDate, nextBirthday } from '../public/birthdays.js';
 import { eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale } from '../public/planner.js';
-import { appearanceDefaults, appearanceFor, eventColor, calendarColumns, isImageFile, themeProperties } from '../public/appearance.js';
+import { appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties } from '../public/appearance.js';
 
 // Ausführung der Ansichtslogik ohne echten Browser. Ersetzt keine visuelle QA.
 function fixture(t) {
@@ -24,7 +24,7 @@ function fixture(t) {
     document: { querySelector: s => element(s), querySelectorAll: () => [], createElement: s => element(s), addEventListener(name, handler) { const list = listeners.get(name) || []; list.push(handler); listeners.set(name, list); }, documentElement: { style: { setProperty: (key, value) => styleValues.set(key, value) } }, activeElement: null },
     location: { hash: '#home' }, localStorage: { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value) }, innerWidth: 1440,
     addEventListener() {}, setInterval() {}, setTimeout() {}, clearInterval() {},
-    Intl, Date, console, URL, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, appearanceDefaults, appearanceFor, eventColor, calendarColumns, isImageFile, themeProperties, initialState: store.state(),
+    Intl, Date, console, URL, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties, initialState: store.state(),
     FormData: class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key] ?? null; } getAll(key) { return [].concat(this.fields[key] || []); } *[Symbol.iterator]() { for (const [key, value] of Object.entries(this.fields)) for (const item of [].concat(value)) yield [key, item]; } },
   });
   const source = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8').replace(/^import [^\n]+\n/gm, '').replace('void boot();', '');
@@ -246,4 +246,19 @@ test('Ein abgeschlossener Rezeptbild-Upload überschreibt keinen inzwischen gewe
   run("editRecord('notes')");const nextDialog=elements.get('#editor').innerHTML;
   release({ok:true,json:async()=>({imageFile:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png'})});await saving;
   assert.equal(calls.length,1);assert.equal(calls[0].url,'/api/images/ui');assert.equal(elements.get('#editor').innerHTML,nextDialog);
+});
+
+test('Drei Personenfarben erscheinen gemeinsam in Übersicht, Woche, Monat und Liste, auch bei einem Starttermin', t => {
+  const {run}=fixture(t);
+  run("S.serverDate='2026-10-07';cursor=S.serverDate;S.members[0].color='#ff0000';S.members[1].color='#00ff00';S.members[2].color='#0000ff';S.events=[{id:'shared',title:'Gemeinsam',startDate:cursor,endDate:cursor,startTime:'07:00',endTime:'09:00',memberIds:S.members.slice(0,3).map(m=>m.id),allDay:false}]");
+  const marker='--event-marker:linear-gradient(to bottom,#ff0000 0%,#00ff00 50%,#0000ff 100%)';
+  for(const mode of ['week','month','agenda']) assert.ok(run(`calendarMode='${mode}';calendarPage()`).includes(marker));
+  assert.ok(run('homePage()').includes(marker));
+  run("S.events[0].allDay=true;calendarMode='week'"); assert.ok(run('calendarPage()').includes(marker));
+  run("S.events[0].allDay=false;S.events[0].startOnly=true;S.events[0].endTime=''");
+  const point=run('calendarPage()'); assert.ok(point.includes('time-event start-only')); assert.ok(point.includes(marker));
+  assert.ok(point.includes('--event-background:linear-gradient(to bottom,#ffcccc 0%,#ccffcc 50%,#ccccff 100%)'));
+  run('filter=S.members[1].id');assert.ok(run('calendarPage()').includes(marker));
+  run("S.members[1].color='#ffff00'");assert.ok(run('calendarPage()').includes('#ffff00 50%'));
+  run("filter='';S.events[0].memberIds=[S.members[0].id]");const single=run('calendarPage()');assert.ok(!single.includes('--event-marker:'));assert.ok(single.includes('--person:#ff0000'));
 });

@@ -98,7 +98,7 @@ test('HTTP: Geburtstage sind synchronisiert; Rezeptimport bleibt bis zum Speiche
   assert.equal(birthdayResponse.status, 201); const birthday = await birthdayResponse.json();
   const login = await request('/api/login', 'POST', { password: 'test-password-2026' }), secondCookie = login.headers.get('set-cookie').split(';')[0];
   const second = await (await request('/api/state', 'GET', undefined, { Cookie: secondCookie })).json(); assert.equal(second.birthdays[0].id, birthday.id); assert.equal(second.events.length, 0);
-  const exported = await (await request('/api/export')).json(); assert.equal(exported.birthdays[0].birthYear, 1990); assert.equal(exported.version, '0.5.0');
+  const exported = await (await request('/api/export')).json(); assert.equal(exported.birthdays[0].birthYear, 1990); assert.equal(exported.version, '0.5.1');
   assert.equal((await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }, { Origin: 'https://foreign.example' })).status, 403); assert.equal(imports, 0);
   const previewResponse = await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }); assert.equal(previewResponse.status, 200);
   const preview = await previewResponse.json(); assert.equal(preview.recipe.sourceUrl, 'https://rezepte.example/pasta'); assert.equal(preview.recipe.ingredients[0].quantity, 400);

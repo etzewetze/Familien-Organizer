@@ -16,11 +16,32 @@ export function appearanceFor(settings = {}) {
   return result;
 }
 
-export function eventColor(event, members, settings) {
+function eventColors(event, members, settings) {
   const people = Array.isArray(event.memberIds) ? event.memberIds : event.memberId ? [event.memberId] : [];
   const theme = appearanceFor(settings);
-  if (people.length) return members.find(member => member.id === people[0])?.color || theme.allColor;
-  return isColor(event.color) ? event.color : theme.allColor;
+  if (!people.length) return [isColor(event.color) ? event.color : theme.allColor];
+  return [...new Set(people)].slice(0, 20).map(id => {
+    const color = members.find(member => member.id === id)?.color;
+    return isColor(color) ? color : theme.allColor;
+  });
+}
+
+export function eventColor(event, members, settings) {
+  return eventColors(event, members, settings)[0];
+}
+
+const colorGradient = colors => `linear-gradient(to bottom,${colors.map((color, index) => `${color} ${Math.round(index * 10000 / (colors.length - 1)) / 100}%`).join(',')})`;
+export function eventProperties(event, members, settings) {
+  const colors = eventColors(event, members, settings);
+  const properties = { '--person': colors[0], '--person-bg': colors[0] + '24' };
+  if (colors.length > 1) {
+    const theme = appearanceFor(settings);
+    properties['--event-background'] = colorGradient(colors.map(color => blend(color, theme.surfaceColor, .2)));
+    properties['--event-marker'] = colorGradient(colors);
+    properties['--event-border-width'] = '0px';
+    properties['--event-time-ink'] = theme.textColor;
+  }
+  return properties;
 }
 
 export function calendarColumns(eventsByDay, automatic = true) {

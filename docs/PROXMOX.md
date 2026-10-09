@@ -1,6 +1,6 @@
 # Automatische Container-Erstellung auf Proxmox
 
-`scripts/create-proxmox-lxc.sh` läuft **auf dem Proxmox-Host als root**. Es erstellt einen neuen LXC und ruft darin `scripts/install-lxc.sh` auf. Unterstützt werden Proxmox VE >=8 auf x86_64. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 gemeldet; eine vollständige Prüfung auf dem Zielsystem und das Update auf 0.5.0 stehen noch aus. Automatisierte Tests bilden die Proxmox-Befehle kontrolliert nach.
+`scripts/create-proxmox-lxc.sh` läuft **auf dem Proxmox-Host als root**. Es erstellt einen neuen LXC und ruft darin `scripts/install-lxc.sh` auf. Unterstützt werden Proxmox VE >=8 auf x86_64. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 gemeldet; eine vollständige Prüfung auf dem Zielsystem und das Update auf 0.5.1 stehen noch aus. Automatisierte Tests bilden die Proxmox-Befehle kontrolliert nach.
 
 ## Download und Start
 

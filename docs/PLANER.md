@@ -32,9 +32,11 @@ Geburtstage zeigen einen Kuchen und den Namen, etwa **🎂 Anna · 36 Jahre**. O
 
 **Bestehenden Termin bearbeiten:** Antippen öffnet ein vollständiges Formular mit Personen, Überschrift, Beschreibung, Adresse, Farbe, Datum und Zeitangaben. Alle Angaben lassen sich gemeinsam bearbeiten und speichern; der Assistent wird nur beim Anlegen verwendet. Lesegeschützte Google-Termine lassen sich ansehen.
 
-Termine für Personen verwenden deren zugeteilte Farbe. Termine für Alle folgen der Standardfarbe aus den Einstellungen, solange keine eigene Terminfarbe gewählt wurde. Mit **Standardfarbe für Alle verwenden** eine eigene Farbe wieder aufheben. Änderungen der Standardfarbe wirken dann auch auf diese bestehenden Termine. Die eigene Farbe wird bei einem Google-Rundlauf über private Metadaten erhalten; sie ist keine beliebige Farbänderung der Google-Oberfläche.
+Termine für eine Person verwenden deren zugeteilte Farbe. Bei mehreren Personen geht der Verlauf von oben nach unten durch **alle ausgewählten Personenfarben**. Drei Kinder erscheinen beispielsweise als Rot → Grün → Blau. Der kräftige Farbstreifen zeigt die Originalfarben; der Hintergrund verwendet hellere, zur Kartenfarbe passende Farbtöne für lesbaren Text. Der Verlauf folgt der gespeicherten Personenreihenfolge und endet in der Farbe der letzten Person. Das gilt für Übersicht, Woche, Monat und Liste, auch für ganztägige Termine. Änderungen einer Personenfarbe wirken auf vorhandene Termine.
 
-Eine feste Zeit ohne Ende blendet über 15 Minuten nach unten aus. Es wird kein Endzeitpunkt als Familiendatum gespeichert. Bei Google ist ein Ende erforderlich: Dort wird ein 15-Minuten-Termin mit privater Kennzeichnung übertragen; die Familienzentrale zeigt ihn weiterhin ohne Ende. Ganztägige Termine und Zeitspannen können ein anderes Enddatum erhalten.
+Termine für Alle folgen der Standardfarbe aus den Einstellungen, solange keine eigene Terminfarbe gewählt wurde. Mit **Standardfarbe für Alle verwenden** eine eigene Farbe wieder aufheben. Änderungen der Standardfarbe wirken dann auch auf diese bestehenden Termine. Die eigene Farbe wird bei einem Google-Rundlauf über private Metadaten erhalten; sie ist keine beliebige Farbänderung der Google-Oberfläche.
+
+Eine feste Zeit ohne Ende nutzt ein 15-Minuten-Feld. Bei einer Person oder Alle blendet es nach unten aus. Bei mehreren Personen geht es durch die Personenfarben und endet mit einem deckenden Hintergrund in der letzten Farbe. Es wird kein Endzeitpunkt als Familiendatum gespeichert. Bei Google ist ein Ende erforderlich: Dort wird ein 15-Minuten-Termin mit privater Kennzeichnung übertragen; die Familienzentrale zeigt ihn weiterhin ohne Ende. Ganztägige Termine und Zeitspannen können ein anderes Enddatum erhalten.
 
 ## Aufgaben und Routinen
 

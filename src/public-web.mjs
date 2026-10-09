@@ -47,7 +47,7 @@ export function requestPinnedPage(url, address, { signal, transport = url.protoc
     const req = transport(url, {
       method: 'GET', agent: false, family: address.family, autoSelectFamily: false, signal,
       lookup: (hostname, options, callback) => options.all ? callback(null, [address]) : callback(null, address.address, address.family),
-      headers: { 'User-Agent': 'Familien-Organizer/0.5.0 (private recipe import)', Accept: accept, 'Accept-Encoding': 'identity' },
+      headers: { 'User-Agent': 'Familien-Organizer/0.5.1 (private recipe import)', Accept: accept, 'Accept-Encoding': 'identity' },
     }, async response => {
       if (response.statusCode !== 200) {
         const result = { status: response.statusCode, headers: response.headers, bytes: Buffer.alloc(0) };
