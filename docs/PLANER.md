@@ -26,7 +26,7 @@ Geburtstage zeigen einen Kuchen und den Namen, etwa **🎂 Anna · 36 Jahre**. O
 
 1. „Termin“ oben oder das Plus am gewünschten Tag drücken.
 2. Alle, eine Person oder mehrere Personen auswählen.
-3. Überschrift eingeben; Beschreibung und Adresse/Ort sind optional. Für Alle ist hier eine eigene Terminfarbe auswählbar.
+3. Überschrift eingeben; Beschreibung, Adresse/Ort, ein Bild als Symbol und ein Emoji sind optional. Für Alle ist hier eine eigene Terminfarbe auswählbar.
 4. Datum auswählen. Beim Tages-Plus ist es bereits gesetzt, deshalb wird dieser Schritt übersprungen.
 5. Ganztägig, Zeitspanne oder feste Zeit ohne Ende wählen und speichern.
 
@@ -44,7 +44,7 @@ Eine feste Zeit ohne Ende nutzt ein 15-Minuten-Feld. Bei einer Person oder Alle 
 
 Eine Aufgabe aus Allgemein in die gewünschte Personenspalte oder auf deren Profil im Header ziehen. Mit Touch den kleinen Griff verwenden; dadurch bleibt normales Scrollen auf der restlichen Karte möglich. Alternativ die Aufgabe bearbeiten und unter **Zuordnen** eine Person auswählen. Eine Rückzuordnung zu Allgemein ist ebenfalls möglich.
 
-Aufgaben enthalten ein optionales Bild bis 5 MB, Titel, Punkte, Zuordnung und Wiederholung. Bilder werden für alle Geräte im Container gespeichert und mit gesichert. Bei Routinen gilt eine geänderte Zuordnung für die weiteren Wiederholungen. Bereits verdiente Punkte bleiben bei der Person, die die Aufgabe erledigt hat.
+Aufgaben enthalten ein optionales Bild bis 5 MB, ein optionales Emoji, Titel, Punkte, Zuordnung und Wiederholung. Bilder werden für alle Geräte im Container gespeichert und mit gesichert. Bei Routinen gilt eine geänderte Zuordnung für die weiteren Wiederholungen. Bereits verdiente Punkte bleiben bei der Person, die die Aufgabe erledigt hat.
 
 Das Kästchen hakt die Aufgabe ab. Eine zugeordnete Aufgabe schreibt die Punkte direkt dieser Person gut; bei einer allgemeinen Aufgabe wird gefragt, wer sie erledigt hat. Eine Erledigung kann nicht doppelt Punkte erzeugen. Erledigte Aufgaben zuerst wieder öffnen, bevor sie verschoben werden.
 
@@ -70,6 +70,36 @@ Vorhandene Pläne aus älteren Versionen werden als Abendbrot angezeigt. Sie wer
 
 Rezeptlink-Import: [INTEGRATIONS.md](INTEGRATIONS.md#rezepte-aus-dem-internet). Software-Update: [LXC.md](LXC.md#updates-über-die-oberfläche).
 
+## Bilder und Emojis für Termine und Aufgaben
+
+Ein eigenes Bild beim Anlegen oder Bearbeiten auswählen. JPEG, PNG, WebP und GIF bis 5 MB sind möglich. Termine zeigen es als kleines Symbol in Übersicht, Woche, Monat und Liste. Aufgaben zeigen es neben dem Titel. Ohne Bild gibt es keinen Platzhalter. Die Auswahl bleibt beim Wechsel zwischen den Schritten des Terminassistenten erhalten; erst beim Speichern wird das Bild hochgeladen. Mit **Bild entfernen** die Referenz entfernen. Bilddateien bleiben in den Sicherungen erhalten.
+
+**😊 Emoji auswählen** öffnet eine Auswahl mit Kategorien wie Familie, Sport, Essen oder Haushalt und einer deutschen Suche. Ein einzelnes Emoji lässt sich auch aus der Geräte-Tastatur einfügen, einschließlich Hauttönen und zusammengesetzten Familien-Emojis. **Entfernen** leert das Emoji. Bild und Emoji dürfen gleichzeitig gesetzt sein. Darstellung und verfügbare Emoji-Zeichen hängen von der Geräteschrift ab.
+
+Terminsymbole bleiben beim Google-Abgleich in diesem Organizer erhalten. Die Bilddatei und die Emoji-Auswahl werden nicht zu Google übertragen.
+
+## Wetter und weitere Orte
+
+Die Wetteranzeige neben der Uhr antippen. Sie öffnet eine Wetteransicht, die keinen eigenen Eintrag in der Seitenleiste besitzt. Zunächst einen Ort oder eine Postleitzahl suchen und den passenden Treffer hinzufügen. Bis zu acht Orte werden für die Familie gespeichert. Über die Ortsbuttons wechseln; **In Kopfzeile anzeigen** bestimmt, welcher Ort neben der Uhr erscheint. Einen gespeicherten Ort kannst du wieder entfernen.
+
+Die Kopfzeile zeigt Temperatur und Wetterlage. Ein möglicher Niederschlag in den nächsten drei Stunden wird angezeigt, wenn das Modell mindestens 60 Prozent Wahrscheinlichkeit und eine Niederschlagsmenge prognostiziert. Die Detailansicht enthält die aktuelle Lage, stündliche Aussichten und 14 Tageskarten mit Höchst-/Tiefsttemperatur, Niederschlag, Wind und Böen. **Weitere Wetterdaten** öffnet unter anderem gefühlte Temperaturen, Schnee, UV-Index, Sonnenauf- und -untergang. Zeiten gelten am ausgewählten Ort. Fehlen Daten, erscheint ein Strich; liefert der Dienst weniger Tage, steht ein Hinweis dabei.
+
+Der Server speichert Wetterdaten 15 Minuten zwischen. Bei einem Ausfall wird der letzte Stand höchstens sechs Stunden und deutlich als veraltet angezeigt. **Aktualisieren** lädt den zuletzt verfügbaren Serverstand. Die Angaben stammen aus Wettermodellen; besonders spätere Tage sind unsicher. Internet ist für den optionalen Wetterdienst erforderlich. Weitere Informationen: [INTEGRATIONS.md](INTEGRATIONS.md#wetter).
+
+## Tabletmodus und Inaktivität
+
+Unter **Einstellungen → Dieses Gerät · Tabletmodus** den automatischen Wechsel einschalten. Wartezeit zwischen 30 Sekunden und einer Stunde sowie **Dunkler Ruhebildschirm** oder **Bilderrahmen als Bildschirmschoner** wählen. Die Fotoquelle wird für diesen Browser festgelegt. Bei Immich zunächst das Album im Bilderrahmen auswählen. Fehlen Fotos oder ist die Quelle nicht erreichbar, erscheint der dunkle Ruhebildschirm.
+
+Eine Berührung oder ein Tastendruck beendet den automatischen Modus. Die erste Berührung wird abgefangen, damit darunter keine Aufgabe abgehakt oder Aktion gestartet wird. Ein manuell gestarteter Bilderrahmen behält seine Bedienelemente. Offene Formulare, Drag-Aufträge und laufende Updates unterbrechen den automatischen Wechsel.
+
+**Display wach halten** verwendet die Screen Wake Lock API, sofern Browser und HTTPS dies unterstützen. Das hält das Display bei Nutzung und im Bilderrahmen wach. Im dunklen Ruhemodus wird die Sperre freigegeben; danach kann die Standby-Einstellung des Tablets greifen. Der Browser kann weder echtes Display-Ausschalten noch Hardware-Aufwecken durch Berührung erzwingen. Ob das ausgeschaltete Display auf Tippen reagiert, hängt vom Tablet ab. Die native App bleibt ein späterer Schritt. Der Tabletmodus ist standardmäßig aus und wird pro Browser gespeichert.
+
+## Änderungen nach einem Update
+
+Nach dem Wechsel auf eine neue Version und nach einem erfolgreichen Web-Update werden alle Geräte abgemeldet. Mit dem bisherigen Familienpasswort wieder anmelden. Die Änderungsübersicht erscheint anschließend; **Verstanden** bzw. Schließen merkt sich diesen Stand für diesen Browser. Ein späteres Update zeigt sie erneut. Unter **Einstellungen → Software aktualisieren → Änderungen ansehen** kannst du sie jederzeit öffnen. Ein normaler Neustart derselben Version meldet dich nicht ab.
+
+Beim erstmaligen Upgrade von einer älteren Oberfläche auf 0.6.0 die Browserseite nach der Abmeldung neu laden. Eure Daten und Passwörter bleiben erhalten. Alle Änderungsnotizen stehen zusätzlich in [CHANGELOG.md](../CHANGELOG.md).
+
 ## Prüfstand
 
-Ansichten, vollständiges Bearbeitungsformular, Assistent, variable Zeitberechnung, Mehrfachzuordnung, Datenkonflikte, Bildzugriff und Drag-Aufträge werden automatisiert geprüft. Eine echte visuelle und Touch-Abnahme auf Handy, Tablet und Wanddisplay steht aus, da in der Entwicklungsumgebung kein Browser ausführbar ist.
+Ansichten, vollständiges Bearbeitungsformular, Assistent, variable Zeitberechnung, Mehrfachzuordnung, Datenkonflikte, Bildzugriff, Drag-Aufträge, Wetter-Cache und -Fehler, Update-Abmeldung, Änderungsübersicht, automatische Ruhe-/Fotomodi und Wake-Lock-Rennen werden automatisiert geprüft. Eine echte visuelle und Touch-Abnahme auf Handy, Tablet und Wanddisplay steht aus, da in der Entwicklungsumgebung kein Browser ausführbar ist.

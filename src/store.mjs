@@ -93,6 +93,7 @@ export class Store {
     const settings = { ...appearanceDefaults, ...this.meta('settings', {}) };
     return {
       ...data, revision: this.meta('revision'), settings,
+      weather: this.meta('weather', { locations: [], primaryId: '' }),
       serverDate: new Intl.DateTimeFormat('sv-SE', { timeZone: settings.timezone || 'Europe/Berlin' }).format(new Date()),
       completions: this.db.prepare('SELECT * FROM completions').all(),
       redemptions: this.db.prepare('SELECT * FROM redemptions ORDER BY redeemed_at DESC LIMIT 100').all(),

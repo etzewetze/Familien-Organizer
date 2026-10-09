@@ -9,6 +9,10 @@ import { seed } from '../src/seed.mjs';
 import { birthdaysOnDate, nextBirthday } from '../public/birthdays.js';
 import { eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale } from '../public/planner.js';
 import { appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties } from '../public/appearance.js';
+import { VERSION } from '../public/releases.js';
+import { emojis, emojiCategories, findEmojis, isEmoji } from '../public/symbols.js';
+import { weatherCode, weatherValue, weatherTime, rainOutlook } from '../public/weather.js';
+import { deviceConfig, idleAction } from '../public/device-mode.js';
 
 // Ausführung der Ansichtslogik ohne echten Browser. Ersetzt keine visuelle QA.
 function fixture(t) {
@@ -17,7 +21,7 @@ function fixture(t) {
   seed(store, ['Anna', 'Ben', 'Mia', 'Leo'], true, store.state().serverDate);
   const elements = new Map(), listeners = new Map(), styleValues = new Map(), stored = new Map();
   const element = id => {
-    if (!elements.has(id)) elements.set(id, { innerHTML: '', open: false, dataset: {}, classList: { add() {}, toggle() {} }, append() {}, remove() {}, addEventListener() {}, querySelector: s => element(s), showModal() { this.open = true; }, close() { this.open = false; } });
+    if (!elements.has(id)) elements.set(id, { innerHTML: '', open: false, dataset: {}, classList: { add() {}, toggle() {} }, append() {}, remove() {}, addEventListener() {}, setAttribute() {}, querySelector: s => element(s), querySelectorAll: () => [], showModal() { this.open = true; }, close() { this.open = false; } });
     return elements.get(id);
   };
   const context = vm.createContext({
@@ -25,6 +29,7 @@ function fixture(t) {
     location: { hash: '#home' }, localStorage: { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value) }, innerWidth: 1440,
     addEventListener() {}, setInterval() {}, setTimeout() {}, clearInterval() {},
     Intl, Date, console, URL, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties, initialState: store.state(),
+    VERSION, emojis, emojiCategories, findEmojis, isEmoji, weatherCode, weatherValue, weatherTime, rainOutlook, deviceConfig, idleAction,
     FormData: class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key] ?? null; } getAll(key) { return [].concat(this.fields[key] || []); } *[Symbol.iterator]() { for (const [key, value] of Object.entries(this.fields)) for (const item of [].concat(value)) yield [key, item]; } },
   });
   const source = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8').replace(/^import [^\n]+\n/gm, '').replace('void boot();', '');
@@ -261,4 +266,91 @@ test('Drei Personenfarben erscheinen gemeinsam in Übersicht, Woche, Monat und L
   run('filter=S.members[1].id');assert.ok(run('calendarPage()').includes(marker));
   run("S.members[1].color='#ffff00'");assert.ok(run('calendarPage()').includes('#ffff00 50%'));
   run("filter='';S.events[0].memberIds=[S.members[0].id]");const single=run('calendarPage()');assert.ok(!single.includes('--event-marker:'));assert.ok(single.includes('--person:#ff0000'));
+});
+test('Terminsymbole erscheinen in allen Kalenderansichten; ohne Symbol wird kein Platzhalter erzeugt', t => {
+  const { run } = fixture(t);
+  run("S.events=[{id:'symbol',title:'Fitness',startDate:cursor,endDate:cursor,startTime:'10:00',endTime:'11:00',memberIds:[],emoji:'🏋️',imageFile:'12345678-1234-1234-1234-123456789012.png'}]");
+  for (const mode of ['week', 'month', 'agenda']) {
+    const html = run(`calendarMode='${mode}';calendarPage()`); assert.ok(html.includes('🏋️')); assert.ok(html.includes('data-record-image')); assert.ok(html.includes('/api/images/ui?file='));
+  }
+  assert.ok(run('homePage()').includes('🏋️'));
+  assert.equal(run('recordSymbols({})'), ''); assert.equal(run("recordSymbols({emoji:'<img src=x>',imageFile:'../secret'})"), '');
+  run("S.tasks[0].emoji='🧹'"); assert.ok(run('taskRow(S.tasks[0],cursor)').includes('🧹'));
+  assert.ok(run("emojiField('🎂')").includes('Emoji auswählen')); assert.ok(run("emojiChoices('geburtstag')").includes('🎂')); assert.ok(!run("emojiChoices('<script>')").includes('<script>'));
+});
+test('Terminwizard behält Bild und Emoji beim Zurückgehen und lädt das Bild erst vor dem Speichern hoch', async t => {
+  const { context, run, elements } = fixture(t), requests = [];
+  context.symbolFile = Object.assign(new Blob(['png'], { type: 'image/png' }), { name: 'mein-bild.png' });
+  context.fetch = async (url, options) => { requests.push({ url, options }); return { ok: true, json: async () => url === '/api/images/ui' ? { imageFile: '12345678-1234-1234-1234-123456789012.png' } : url === '/api/state' ? context.initialState : { ok: true } }; };
+  run("editRecord('events','',{startDate:cursor,fixedDate:true})");
+  await run("advanceEventWizard({fields:{'event-person':'all'}})");
+  run("previewEventImage({id:'event-image-input',files:[symbolFile]})");
+  await run("advanceEventWizard({fields:{title:'Fitness',description:'Sport',location:'Halle',emoji:'🏋️',useDefaultColor:'on'}})");
+  assert.equal(requests.length, 0); assert.equal(run('editing.symbol.file === symbolFile'), true);
+  run('editing.index--;renderEventWizard()'); assert.ok(elements.get('#editor').innerHTML.includes('mein-bild.png')); assert.ok(elements.get('#editor').innerHTML.includes('🏋️'));
+  await run("advanceEventWizard({fields:{title:'Fitness',description:'Sport',location:'Halle',emoji:'🏋️',useDefaultColor:'on'}})");
+  await run("advanceEventWizard({fields:{timeMode:'span',startTime:'10:00',endTime:'11:00',endDate:cursor}})");
+  assert.deepEqual(requests.map(r => r.url), ['/api/images/ui', '/api/records/events', '/api/state']);
+  const saved = JSON.parse(requests[1].options.body); assert.equal(saved.emoji, '🏋️'); assert.equal(saved.imageFile, '12345678-1234-1234-1234-123456789012.png'); assert.equal(saved.title, 'Fitness');
+});
+test('Ein verzögerter Terminsymbol-Upload speichert keinen inzwischen geschlossenen oder ersetzten Dialog', async t => {
+  const { context, run } = fixture(t), requests = []; let release;
+  context.symbolFile = new Blob(['png'], { type: 'image/png' });
+  context.fetch = (url, options) => { requests.push({ url, options }); return new Promise(resolve => { release = resolve; }); };
+  run("openEventEditor(S.events[0]);editing.symbol.file=symbolFile");
+  const pending = run("saveEventEditor({fields:{'event-person':'all',title:'Familie',wizardAllDay:'on',startDate:cursor,endDate:cursor,useDefaultColor:'on',emoji:'🎉'}})");
+  run("editRecord('notes')"); release({ ok: true, json: async () => ({ imageFile: '12345678-1234-1234-1234-123456789012.png' }) }); await pending;
+  assert.equal(requests.length, 1); assert.equal(run('editing.kind'), 'notes');
+});
+test('Wetter bleibt ohne Menüeintrag erreichbar, maskiert Ortsnamen und zeigt alle 14 Tage mit fehlenden Werten', async t => {
+  const { context, run, elements } = fixture(t);
+  run("S.weather={locations:[{id:'berlin',name:'<img src=x>',region:'Berlin',country:'Deutschland'}],primaryId:'berlin'};weatherActiveId='berlin'");
+  context.weatherFixture = { timezone: 'Europe/Berlin', fetchedAt: '2026-10-09T08:00:00Z', stale: false, current: { time: 1791532800, temperature_2m: 18, weather_code: 0, is_day: 1 }, hourly: [], daily: Array.from({ length: 14 }, (_, i) => ({ time: 1791496800 + i * 86400, weather_code: 2, temperature_2m_max: 20, temperature_2m_min: 10, sunrise: null, sunset: null, sunshine_duration: null, daylight_duration: null })) };
+  context.fetch = async () => ({ ok: true, json: async () => context.weatherFixture });
+  await run("loadWeather('berlin')");
+  const html = run("route='weather';weatherPage()"); assert.equal((html.match(/panel weather-day/g) || []).length, 14); assert.ok(html.includes('&lt;img src=x&gt;')); assert.ok(!html.includes('<img src=x>')); assert.ok(!html.includes('NaN')); assert.ok(!html.includes('undefined')); assert.ok(html.includes('14-Tage-Vorhersage')); assert.ok(html.includes('Weitere Wetterdaten'));
+  assert.ok(!run('navigation()').includes('data-nav="weather"')); assert.ok(run('weatherHeader()').includes('18 °C'));
+  run('render()'); assert.ok(elements.get('#app').innerHTML.includes('id="weather-content"'));
+});
+test('Änderungsübersicht wird erst beim Schließen quittiert und kann später wieder geöffnet werden', async t => {
+  const { context, run, elements, stored } = fixture(t);
+  context.fetch = async () => ({ ok: true, json: async () => ({ version: '0.6.0', changeId: '0.6.0:fixture', releases: [{ version: '0.6.0', title: '<b>Neu</b>', date: '2026-10-09', changes: ['Wetter <script>'] }] }) });
+  await run('showChangelog()'); assert.ok(elements.get('#editor').open); assert.ok(elements.get('#editor').innerHTML.includes('&lt;b&gt;Neu&lt;/b&gt;')); assert.equal(stored.has('lastChangelog'), false);
+  run('acknowledgeChangelog();editor.close()'); assert.equal(stored.get('lastChangelog'), '0.6.0:fixture');
+  await run('showChangelog()'); assert.equal(elements.get('#editor').open, false);
+  await run('showChangelog(true)'); assert.equal(elements.get('#editor').open, true);
+});
+test('Update-Abmeldung entfernt private Dialoge und Anzeigezustand und stellt das Login dar', async t => {
+  const { context, run, elements } = fixture(t);
+  context.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: 'Bitte anmelden.', code: 'SESSION_EXPIRED', version: '0.6.0' }) });
+  run("editRecord('notes');photoItems=[{id:'private',url:'/api/photos/private'}];displayMode='photos';weatherCache.set('private',{data:{private:true}})");
+  await assert.rejects(run("api('/state')"), /Bitte anmelden/);
+  assert.equal(run('S'), null); assert.equal(elements.get('#editor').open, false); assert.equal(elements.get('#editor').innerHTML, ''); assert.equal(run('photoItems.length'), 0); assert.equal(run('weatherCache.size'), 0); assert.equal(run('displayMode'), 'active'); assert.ok(elements.get('#app').innerHTML.includes('auth-form'));
+});
+test('Dunkler Ruhemodus beendet sich beim ersten Tippen und verschluckt dabei die Aktion darunter', async t => {
+  const { run, elements } = fixture(t);
+  run("displayConfig=deviceConfig({enabled:true,timeout:30});lastActivity=Date.now()-31000");
+  await run('checkDeviceIdle()'); assert.equal(run('displayMode'), 'sleep'); assert.equal(elements.get('#display-rest').hidden, false);
+  run("let prevented=false,stopped=false;deviceActivity({type:'pointerdown',preventDefault(){prevented=true},stopImmediatePropagation(){stopped=true}})");
+  assert.equal(run('prevented && stopped'), true); assert.equal(run('displayMode'), 'active'); assert.equal(elements.get('#display-rest').hidden, true); assert.ok(run('suppressWakeClickUntil>Date.now()'));
+  run("lastActivity=Date.now()-31000;editor.open=true"); await run('checkDeviceIdle()'); assert.equal(run('displayMode'), 'active');
+});
+test('Automatischer Bilderrahmen wartet auf Fotos, wird durch Aktivität abgebrochen und kann erneut starten', async t => {
+  const { context, run } = fixture(t); let release;
+  run("displayConfig=deviceConfig({enabled:true,timeout:30,action:'photos'});photoSource='server';photoLoaded=false;lastActivity=Date.now()-31000");
+  context.fetch = () => new Promise(resolve => { release = resolve; });
+  const pending = run('checkDeviceIdle()'); run("deviceActivity({type:'pointermove'})");
+  release({ ok: true, json: async () => [{ id: 'one', name: 'Foto', url: '/api/photos/one' }] }); await pending; assert.equal(run('displayMode'), 'active'); assert.equal(run('displayLoading'), false);
+  run('lastActivity=Date.now()-31000'); await run('checkDeviceIdle()'); assert.equal(run('displayMode'), 'photos'); assert.equal(run('slideActive'), true);
+  run("deviceActivity({type:'keydown',preventDefault(){},stopImmediatePropagation(){}})"); assert.equal(run('displayMode'), 'active'); assert.equal(run('slideActive'), false);
+  run('photoItems=[];photoLoaded=true;lastActivity=Date.now()-31000'); await run('checkDeviceIdle()'); assert.equal(run('displayMode'), 'sleep');
+});
+test('Wake Lock wird im Ruhemodus freigegeben; ein verspätetes Ergebnis hält das schlafende Gerät nicht wach', async t => {
+  const { context, run } = fixture(t); let resolve, released = 0;
+  context.isSecureContext = true; context.navigator = { wakeLock: { request: () => new Promise(r => { resolve = r; }) } };
+  run('displayConfig=deviceConfig({enabled:true});displayMode="active"'); const pending = run('syncWakeLock()'); run('enterDisplayRest()');
+  resolve({ release: async () => { released++; }, addEventListener() {} }); await pending; assert.equal(released, 1); assert.equal(run('wakeLock'), null);
+  context.navigator.wakeLock.request = async () => ({ release: async () => { released++; }, addEventListener() {} });
+  run('displayMode="active"'); await run('syncWakeLock()'); assert.ok(run('wakeLock')); run('enterDisplayRest()'); await Promise.resolve(); assert.equal(released, 2);
+  context.navigator.wakeLock.request = async () => { throw new Error('denied'); }; run('displayMode="active"'); await run('syncWakeLock()'); assert.match(run('wakeStatus'), /nicht erlaubt/);
 });

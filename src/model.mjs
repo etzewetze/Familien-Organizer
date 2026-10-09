@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { KINDS } from './store.mjs';
 import { appearanceDefaults, isColor, isImageFile } from '../public/appearance.js';
+import { isEmoji } from '../public/symbols.js';
 
 export class AppError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -61,6 +62,12 @@ export class Model {
   validate(kind, data, old = null) {
     const title = () => text(data.title, 160, true);
     const memberId = () => this.member(data.memberId, true);
+    const symbols = () => {
+      const emoji = text(data.emoji ?? old?.emoji, 64), imageFile = text(data.imageFile ?? old?.imageFile, 100);
+      check(isEmoji(emoji), 'Bitte ein einzelnes Emoji auswählen.');
+      check(!imageFile || isImageFile(imageFile), kind === 'tasks' ? 'Ungültiges Aufgabenbild.' : 'Ungültiges Terminsymbol.');
+      return { emoji, imageFile };
+    };
     switch (kind) {
       case 'members': {
         check(/^#[0-9a-f]{6}$/i.test(data.color), 'Ungültige Farbe.');
@@ -89,7 +96,7 @@ export class Model {
           check(calendar && ['owner', 'writer'].includes(calendar.accessRole), 'Dieser Google-Kalender ist nicht schreibbar oder nicht ausgewählt.');
         } else check(!calendarId, 'Bitte Google-Konto auswählen.');
         check(!old?.googleReadOnly, 'Dieser Google-Kalender ist schreibgeschützt.', 403);
-        return { title: title(), startDate, endDate, startTime, endTime, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color: memberIds.length ? '' : color, location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false };
+        return { title: title(), startDate, endDate, startTime, endTime, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color: memberIds.length ? '' : color, location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false, ...symbols() };
       }
       case 'birthdays': {
         const month = number(data.month, 1, 12, true), birthdayDay = number(data.day, 1, 31, true);
@@ -105,9 +112,7 @@ export class Model {
         const repeat = data.repeat || 'none';
         check(['none', 'daily', 'weekdays', 'weekly'].includes(repeat), 'Ungültige Wiederholung.');
         const startDate = day(data.startDate, repeat !== 'weekly');
-        const imageFile = text(data.imageFile, 100);
-        check(!imageFile || /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\.(?:jpg|png|webp|gif)$/.test(imageFile), 'Ungültiges Aufgabenbild.');
-        return { title: title(), memberId: memberId(), points: number(data.points || 0, 0, 1000, true), repeat, startDate, description: text(data.description, 2000), imageFile };
+        return { title: title(), memberId: memberId(), points: number(data.points || 0, 0, 1000, true), repeat, startDate, description: text(data.description, 2000), ...symbols() };
       }
       case 'recipes': {
         check(Array.isArray(data.ingredients) && data.ingredients.length <= 100, 'Maximal 100 Zutaten je Rezept.');

@@ -80,3 +80,13 @@ test('Eigene Farben für Alle bleiben beim Google-Rundlauf erhalten und fremde F
   const invalid={...remote,extendedProperties:{private:{...payload.extendedProperties.private,familyColor:'url(evil)'}}}; assert.equal(google.fromRemote(account,calendar,invalid).color,'');
   const foreign={...remote,id:'unrelated',extendedProperties:{private:{familyColor:'#cc0000'}}}; assert.equal(google.fromRemote(account,calendar,foreign).color,'');
 });
+test('Terminsymbole bleiben beim Google-Abgleich lokal erhalten und fremde Bildverweise werden ignoriert', async t => {
+  const { google, model, store, account, calendar } = fixture(t), date = store.state().serverDate;
+  const imageFile = '12345678-1234-1234-1234-123456789012.png';
+  const event = model.save('events', '', { title: 'Familie', startDate: date, allDay: true, emoji: '🎉', imageFile, googleAccountId: account.id, calendarId: calendar.id });
+  let payload; google.request = async (a, path, options) => { payload = JSON.parse(options.body); return {}; }; await google.pushOutbox();
+  assert.ok(!JSON.stringify(payload).includes(imageFile));
+  const current = store.get('events', event.id), remote = { ...payload, id: current.googleEventId };
+  const returned = google.fromRemote(account, calendar, remote); assert.equal(returned.emoji, '🎉'); assert.equal(returned.imageFile, imageFile);
+  const foreign = google.fromRemote(account, calendar, { ...remote, id: 'other', extendedProperties: { private: { familyEmoji: '🔥', familyImage: imageFile } } }); assert.equal(foreign.imageFile, ''); assert.equal(foreign.emoji, '');
+});

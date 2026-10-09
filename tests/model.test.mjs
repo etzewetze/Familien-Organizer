@@ -14,6 +14,17 @@ function fixture(t) {
   t.after(() => { store.close(); rmSync(directory, { recursive: true, force: true }); });
   return { store, model, member };
 }
+test('Termine und Aufgaben speichern optionale Symbole, erhalten sie bei älteren Geräten und entfernen sie ausdrücklich', t => {
+  const { model } = fixture(t), imageFile = '12345678-1234-1234-1234-123456789012.png';
+  for (const kind of ['events', 'tasks']) {
+    const fields = kind === 'events' ? { startDate: '2026-10-09', allDay: true } : { repeat: 'none' };
+    const saved = model.save(kind, '', { ...fields, title: 'Symbol', emoji: '👨‍👩‍👧‍👦', imageFile });
+    assert.equal(saved.emoji, '👨‍👩‍👧‍👦'); assert.equal(saved.imageFile, imageFile);
+    const changed = model.save(kind, saved.id, { ...fields, title: 'Älteres Gerät', _rev: saved._rev }); assert.equal(changed.emoji, saved.emoji); assert.equal(changed.imageFile, imageFile);
+    const removed = model.save(kind, saved.id, { ...changed, emoji: '', imageFile: '' }); assert.equal(removed.emoji, ''); assert.equal(removed.imageFile, '');
+    for (const invalid of [{ emoji: '<img>' }, { emoji: '🎂🎉' }, { imageFile: '../master.key' }, { imageFile: 'https://images.example/icon.png' }, { imageFile: '12345678-1234-1234-1234-123456789012.svg' }]) assert.throws(() => model.save(kind, '', { ...fields, title: 'Ungültig', ...invalid }));
+  }
+});
 test('Erledigung ist idempotent und vergibt täglich exakt einmal Punkte', t => {
   const { store, model, member } = fixture(t);
   const task = model.save('tasks', '', { title: 'Aufräumen', memberId: member.id, points: 10, repeat: 'daily', startDate: '2026-10-05' });

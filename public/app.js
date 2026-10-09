@@ -1,6 +1,10 @@
 import { birthdaysOnDate, nextBirthday } from './birthdays.js';
 import { eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale } from './planner.js';
 import { appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties } from './appearance.js';
+import { VERSION } from './releases.js';
+import { emojiCategories, findEmojis, isEmoji } from './symbols.js';
+import { weatherCode, weatherValue, weatherTime, rainOutlook } from './weather.js';
+import { deviceConfig, idleAction } from './device-mode.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const E = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -46,6 +50,12 @@ let mealLayout = localStorage.getItem('mealLayout') === 'vertical' ? 'vertical' 
 let photoSource = localStorage.getItem('photoSource') || 'local', photoItems = [], photoLoaded = false, photoLoading = false, photoAlbum = localStorage.getItem('photoAlbum') || '', albums = [], photoUrls = new Map();
 let taskBoard = 'all', updaterState = null, updateUnavailableSince = 0, updatePollBusy = false, taskPreviewUrl = '', pointerDrag = null, nativeDrag = null, suppressDragClick = false;
 let memberPreviewUrl = '', backgroundPreviewUrl = '', recipePreviewUrl = '';
+let eventPreviewUrl = '', changelogSeenId = '', changelogRequest = 0;
+let weatherActiveId = '', weatherSearchResults = [], weatherSearchQuery = '', weatherSearchError = '', weatherSearchBusy = false, weatherSearchSequence = 0, weatherSession = 0;
+const weatherCache = new Map(), weatherPending = new Set();
+let displayConfig;
+try { displayConfig = deviceConfig(JSON.parse(localStorage.getItem('deviceMode') || '{}')); } catch { displayConfig = deviceConfig(); }
+let displayMode = 'active', lastActivity = Date.now(), displaySequence = 0, displayLoading = false, suppressWakeClickUntil = 0, wakeLock = null, wakePending = false, wakeStatus = '';
 const calendarScrollPositions = new Map();
 let slideTimer, slideIndex = 0, slidePaused = false, slideActive = false;
 const ds = date => new Date(date + 'T12:00:00');
@@ -91,7 +101,7 @@ async function api(path, method = 'GET', data) {
   try { response = await fetch('/api' + path, options); }
   catch { throw new Error('Der Server ist gerade nicht erreichbar. Bitte die Verbindung prüfen.'); }
   const output = await response.json();
-  if (!response.ok) { if (response.status === 401 && S) { S = null; renderAuth(true); } throw new Error(output.error || 'Die Anfrage ist fehlgeschlagen.'); }
+  if (!response.ok) { if (response.status === 401 && output.code === 'SESSION_EXPIRED') { requireLogin(output.version); } throw new Error(output.error || 'Die Anfrage ist fehlgeschlagen.'); }
   return output;
 }
 async function refresh(renderView = true) {
@@ -104,15 +114,15 @@ async function refresh(renderView = true) {
 async function mutate(path, method, data, message) {
   await api(path, method, data); await refresh(false); render(); if (message) toast(message);
 }
-function go(next) { if (!nav.some(n => n[0] === next) && next !== 'settings') next = 'home'; if (route === next) { render(); return; } location.hash = next; }
+function go(next) { if (!nav.some(n => n[0] === next) && !['settings', 'weather'].includes(next)) next = 'home'; if (route === next) { render(); return; } location.hash = next; }
 function renderAuth(login = false) {
   applyAppearance(appearanceDefaults);
   const art = `<aside class="auth-art"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong></div></div><h1>Ein Ort für<br>euren Alltag.</h1><p>Gemeinsam planen, Aufgaben teilen und mehr Zeit füreinander haben.</p><div class="auth-feature">${I('calendar')}Eure Termine auf einen Blick</div><div class="auth-feature">${I('tasks')}Kleine Aufgaben. Gemeinsame Erfolge.</div><div class="auth-feature">${I('shield')}Bei euch zu Hause gespeichert</div></aside>`;
-  app.innerHTML = `<div class="auth-page">${art}<main class="auth-form-wrap"><form class="auth-form" id="auth-form"><h2>${login ? 'Willkommen zurück' : 'Hallo, liebe Familie.'}</h2><p>${login ? 'Melde dich mit eurem Familienpasswort an.' : 'Richtet eure eigene Familienzentrale ein. Namen und Farben könnt ihr später jederzeit ändern.'}</p>${login ? '' : `<label class="form-field">Name eurer Familie<input name="familyName" value="Unsere Familie" required maxlength="60" autocomplete="organization"></label><label class="form-field">Familienmitglieder<textarea name="names" rows="3" placeholder="Ein Name pro Zeile" required></textarea><span class="field-hint">Ein bis zwanzig Personen, jeweils in einer eigenen Zeile.</span></label>`}<label class="form-field">Familienpasswort<input type="password" name="password" required ${login ? '' : 'minlength="12"'} maxlength="200" autocomplete="${login ? 'current-password' : 'new-password'}">${login ? '' : '<span class="field-hint">Mindestens 12 Zeichen. Dieses Passwort gilt für eure Geräte.</span>'}</label>${login ? '' : '<label class="checkbox-field"><input type="checkbox" name="demo">Beispiele zum Ausprobieren hinzufügen</label>'}<p class="form-error" id="auth-error" role="alert"></p><button class="button primary" type="submit">${login ? 'Anmelden' : 'Familienzentrale einrichten'}</button><p class="auth-version">Familien Organisierer · Version ${E(status?.version || '0.5.1')} · Selbst gehostet</p></form></main></div>`;
+  app.innerHTML = `<div class="auth-page">${art}<main class="auth-form-wrap"><form class="auth-form" id="auth-form"><h2>${login ? 'Willkommen zurück' : 'Hallo, liebe Familie.'}</h2><p>${login ? 'Melde dich mit eurem Familienpasswort an.' : 'Richtet eure eigene Familienzentrale ein. Namen und Farben könnt ihr später jederzeit ändern.'}</p>${login ? '' : `<label class="form-field">Name eurer Familie<input name="familyName" value="Unsere Familie" required maxlength="60" autocomplete="organization"></label><label class="form-field">Familienmitglieder<textarea name="names" rows="3" placeholder="Ein Name pro Zeile" required></textarea><span class="field-hint">Ein bis zwanzig Personen, jeweils in einer eigenen Zeile.</span></label>`}<label class="form-field">Familienpasswort<input type="password" name="password" required ${login ? '' : 'minlength="12"'} maxlength="200" autocomplete="${login ? 'current-password' : 'new-password'}">${login ? '' : '<span class="field-hint">Mindestens 12 Zeichen. Dieses Passwort gilt für eure Geräte.</span>'}</label>${login ? '' : '<label class="checkbox-field"><input type="checkbox" name="demo">Beispiele zum Ausprobieren hinzufügen</label>'}<p class="form-error" id="auth-error" role="alert"></p><button class="button primary" type="submit">${login ? 'Anmelden' : 'Familienzentrale einrichten'}</button><p class="auth-version">Familien Organisierer · Version ${E(status?.version || VERSION)} · Selbst gehostet</p></form></main></div>`;
   $('#auth-form').addEventListener('submit', async event => {
     event.preventDefault(); const form = event.currentTarget, data = Object.fromEntries(new FormData(form));
     const button = $('button[type=submit]', form); button.disabled = true;
-    try { if (!login) { data.names = data.names.split('\n').map(n => n.trim()).filter(Boolean); data.demo = !!data.demo; } await api(login ? '/login' : '/setup', 'POST', data); await refresh(false); render(); }
+    try { if (!login) { data.names = data.names.split('\n').map(n => n.trim()).filter(Boolean); data.demo = !!data.demo; } await api(login ? '/login' : '/setup', 'POST', data); await refresh(false); status.version = S.version || status.version; render(); lastActivity = Date.now(); void syncWakeLock(); await showChangelog(); }
     catch (error) { $('#auth-error').textContent = error.message; }
     finally { button.disabled = false; }
   });
@@ -121,7 +131,7 @@ function pageHead(title, subtitle, action = '') {
   return `<div class="page-head"><div><h1>${E(title)}</h1>${subtitle ? `<p>${E(subtitle)}</p>` : ''}</div><div class="head-actions">${action}</div></div>`;
 }
 function navigation() {
-  return `<aside class="rail" id="rail"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong><small>Unser Alltag. Zusammen.</small></div></div><div><div class="rail-label">Familienzentrale</div><nav class="nav-list" aria-label="Hauptnavigation">${nav.map(([id, label, icon]) => `<button class="nav-item ${route === id ? 'active' : ''}" data-nav="${id}" ${route === id ? 'aria-current="page"' : ''}>${I(icon)}${label}</button>`).join('')}<button class="nav-item" disabled>${I('book')}Stundenpläne<span class="badge">Später</span></button></nav></div><div class="nav-bottom"><button class="nav-item ${route === 'settings' ? 'active' : ''}" data-nav="settings">${I('settings')}Einstellungen</button></div><div class="self-hosted"><strong>${I('shield')}Euer eigener Server</strong>Familien Organisierer · ${E(status?.version || '0.5.1')}</div></aside>`;
+  return `<aside class="rail" id="rail"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong><small>Unser Alltag. Zusammen.</small></div></div><div><div class="rail-label">Familienzentrale</div><nav class="nav-list" aria-label="Hauptnavigation">${nav.map(([id, label, icon]) => `<button class="nav-item ${route === id ? 'active' : ''}" data-nav="${id}" ${route === id ? 'aria-current="page"' : ''}>${I(icon)}${label}</button>`).join('')}<button class="nav-item" disabled>${I('book')}Stundenpläne<span class="badge">Später</span></button></nav></div><div class="nav-bottom"><button class="nav-item ${route === 'settings' ? 'active' : ''}" data-nav="settings">${I('settings')}Einstellungen</button></div><div class="self-hosted"><strong>${I('shield')}Euer eigener Server</strong>Familien Organisierer · ${E(status?.version || VERSION)}</div></aside>`;
 }
 function render() {
   if (!S) return;
@@ -129,14 +139,15 @@ function render() {
   if (route !== 'settings' && backgroundPreviewUrl) { URL.revokeObjectURL(backgroundPreviewUrl); backgroundPreviewUrl = ''; }
   const previousGrid = $('.time-scroll');
   if (previousGrid?.dataset.week) { const heights = previousGrid.dataset.hourHeights?.split(',').map(Number) || Array(24).fill(Number(previousGrid.dataset.hourSize) || 64); calendarScrollPositions.set(previousGrid.dataset.week, { minute: hourScale(heights).minuteAt(previousGrid.scrollTop), left: previousGrid.scrollLeft }); }
-  if (!nav.some(n => n[0] === route) && route !== 'settings') route = 'home';
-  const pages = { home: homePage, calendar: calendarPage, birthdays: birthdaysPage, tasks: tasksPage, rewards: rewardsPage, meals: mealsPage, lists: listsPage, notes: notesPage, photos: photosPage, settings: settingsPage };
-  app.innerHTML = `<div class="shell">${navigation()}<div class="workspace"><header class="topbar"><div class="topbar-left">${iconBtn('Menü öffnen', 'menu', 'menu')}<span class="family-title">${E(S.settings.familyName)}</span></div>${headerMembers()}<div class="topbar-right"><span class="local-clock" aria-label="Aktuelle Uhrzeit">${clockText()}</span><span class="connection ${online ? '' : 'offline'}" id="connection">${online ? 'Verbunden' : 'Verbindung fehlt'}</span>${iconBtn('Bilderrahmen öffnen', 'photos', 'photos')}${iconBtn('Vollbild', 'fullscreen', 'expand')}</div></header>${online ? '' : '<div class="offline-banner">Verbindung zum Server fehlt. Änderungen sind erst nach der Verbindung möglich.</div>'}<main class="main" id="main">${pages[route]()}</main></div></div><nav class="mobile-nav" aria-label="Schnellnavigation">${[['home', 'Heute', 'home'], ['calendar', 'Kalender', 'calendar'], ['tasks', 'Aufgaben', 'tasks'], ['rewards', 'Belohnungen', 'star'], ['meals', 'Essen', 'food']].map(([id, label, icon]) => `<button data-nav="${id}" class="${route === id ? 'active' : ''}">${I(icon)}${label}</button>`).join('')}<button data-action="menu">${I('menu')}Mehr</button></nav>`;
+  if (!nav.some(n => n[0] === route) && !['settings', 'weather'].includes(route)) route = 'home';
+  const pages = { home: homePage, calendar: calendarPage, birthdays: birthdaysPage, tasks: tasksPage, rewards: rewardsPage, meals: mealsPage, lists: listsPage, notes: notesPage, photos: photosPage, settings: settingsPage, weather: weatherPage };
+  app.innerHTML = `<div class="shell">${navigation()}<div class="workspace"><header class="topbar"><div class="topbar-left">${iconBtn('Menü öffnen', 'menu', 'menu')}<span class="family-title">${E(S.settings.familyName)}</span></div>${headerMembers()}<div class="topbar-right">${weatherHeader()}<span class="local-clock" aria-label="Aktuelle Uhrzeit">${clockText()}</span><span class="connection ${online ? '' : 'offline'}" id="connection">${online ? 'Verbunden' : 'Verbindung fehlt'}</span>${iconBtn('Bilderrahmen öffnen', 'photos', 'photos')}${iconBtn('Vollbild', 'fullscreen', 'expand')}</div></header>${online ? '' : '<div class="offline-banner">Verbindung zum Server fehlt. Änderungen sind erst nach der Verbindung möglich.</div>'}<main class="main" id="main">${pages[route]()}</main></div></div><nav class="mobile-nav" aria-label="Schnellnavigation">${[['home', 'Heute', 'home'], ['calendar', 'Kalender', 'calendar'], ['tasks', 'Aufgaben', 'tasks'], ['rewards', 'Belohnungen', 'star'], ['meals', 'Essen', 'food']].map(([id, label, icon]) => `<button data-nav="${id}" class="${route === id ? 'active' : ''}">${I(icon)}${label}</button>`).join('')}<button data-action="menu">${I('menu')}Mehr</button></nav>`;
   $('[data-action="menu"]', $('.topbar')).classList.add('mobile-menu');
   $('[data-action="photos"]', $('.topbar')).classList.add('picture-shortcut');
   document.querySelectorAll('#settings-family,#settings-photos,#settings-appearance').forEach(form => { form.dataset.revision = S.revision; });
   if (route === 'photos' && !photoLoaded && !photoLoading) void loadPhotos();
   updateDisabled();
+  ensureWeather();
   if (route === 'calendar' && calendarMode === 'week') { const grid = $('.time-scroll'), position = calendarScrollPositions.get(monday(cursor)); if (grid) { grid.scrollTop = weekTimeScale(cursor).position(position?.minute ?? 360); grid.scrollLeft = position?.left ?? 0; } }
   if (route === 'settings') { paintUpdateStatus(); void pollUpdateStatus(); }
 }
@@ -148,7 +159,7 @@ function updateDisabled() { if (!online) document.querySelectorAll('[data-edit],
 function eventCard(e, compact = false) {
   const people = eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle';
   const time = e.birthdayId ? 'Geburtstag · jährlich' : e.allDay ? 'Ganztägig' : e.startOnly ? `${e.startTime} · ohne Ende` : `${e.startTime}–${e.endTime}`;
-  return `<button class="event-card ${e.birthdayId ? 'birthday-event' : ''}" style="${eventStyle(e)}" data-edit="${e.birthdayId ? 'birthdays' : 'events'}" data-id="${e.birthdayId || e.id}" title="${E(e.title)}"><span class="event-time">${E(time)}</span><strong>${E(e.title)}</strong>${compact ? '' : `<span class="event-person">${E(people)}${e.googleAccountId ? ' · Google' : ''}</span>`}</button>`;
+  return `<button class="event-card ${e.birthdayId ? 'birthday-event' : ''}" style="${eventStyle(e)}" data-edit="${e.birthdayId ? 'birthdays' : 'events'}" data-id="${e.birthdayId || e.id}" title="${E(e.title)}"><span class="event-time">${E(time)}</span><strong>${recordSymbols(e)}${E(e.title)}</strong>${compact ? '' : `<span class="event-person">${E(people)}${e.googleAccountId ? ' · Google' : ''}</span>`}</button>`;
 }
 function dayHeading(date, css = '') {
   return `<div class="day-heading ${css}"><div><strong>${fullWeekday(date)}</strong><span>${fullDate(date)}</span></div><button class="icon-button day-plus" data-edit="events" data-date="${date}" aria-label="Termin am ${E(fullDate(date))} hinzufügen">${I('plus')}</button></div>`;
@@ -172,13 +183,13 @@ function timeWeek(date) {
   const columns = days.map((day, index) => `<div class="time-day ${day === S.serverDate ? 'today' : ''}" aria-label="${E(fullWeekday(day) + ', ' + fullDate(day))}">${rows}${layoutTimedEvents(events[index], day).map(({ event: e, start, end, column, columns }) => {
     const people = eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle';
     const label = `${e.title}, ${e.startTime}${e.startOnly ? ', ohne Ende' : ' bis ' + e.endTime}, ${people}${e.location ? ', ' + e.location : ''}`;
-    return `<button class="time-event ${e.startOnly ? 'start-only' : ''}" data-edit="events" data-id="${e.id}" style="${eventStyle(e)};top:${scale.position(start) / scale.total * 100}%;height:${(scale.position(end) - scale.position(start)) / scale.total * 100}%;left:calc(${column / columns * 100}% + 3px);width:calc(${100 / columns}% - 6px)" title="${E(label)}" aria-label="${E(label)}">${e.startOnly ? `<strong>${E(e.startTime)} ${E(e.title)}</strong>` : `<span class="event-time">${E(e.startTime)}${e.endDate !== e.startDate ? ' …' : '–' + E(e.endTime)}</span><strong>${E(e.title)}</strong>${end - start >= 60 ? `<span class="event-person">${E(people)}</span>${e.location ? `<span class="event-person">${E(e.location)}</span>` : ''}` : ''}`}</button>`;
+    return `<button class="time-event ${e.startOnly ? 'start-only' : ''}" data-edit="events" data-id="${e.id}" style="${eventStyle(e)};top:${scale.position(start) / scale.total * 100}%;height:${(scale.position(end) - scale.position(start)) / scale.total * 100}%;left:calc(${column / columns * 100}% + 3px);width:calc(${100 / columns}% - 6px)" title="${E(label)}" aria-label="${E(label)}">${e.startOnly ? `<strong>${recordSymbols(e)}${E(e.startTime)} ${E(e.title)}</strong>` : `<span class="event-time">${E(e.startTime)}${e.endDate !== e.startDate ? ' …' : '–' + E(e.endTime)}</span><strong>${recordSymbols(e)}${E(e.title)}</strong>${end - start >= 60 ? `<span class="event-person">${E(people)}</span>${e.location ? `<span class="event-person">${E(e.location)}</span>` : ''}` : ''}`}</button>`;
   }).join('')}</div>`).join('');
   return `<div class="time-scroll" data-week="${monday(date)}" data-hour-size="${theme.calendarHourSize}" data-hour-heights="${scale.hours.map(row => row.height).join(',')}" tabindex="0" aria-label="Wochenkalender, 24 Stunden"><div class="time-grid" style="grid-template-columns:${grid.template};min-width:${grid.minimum}px;--hour-size:${theme.calendarHourSize}px;--calendar-total:${scale.total}px">${headers}${allDay}${axis}${columns}</div></div>`;
 }
 function taskRow(task, date, compact = false) {
   const done = !!completion(task, date), repeats = { daily: 'Täglich', weekdays: 'Mo–Fr', weekly: 'Wöchentlich', none: 'Einmalig' };
-  return `<div class="todo-row ${done ? 'done' : ''}" ${compact || done ? '' : `draggable="true" data-drag-kind="task" data-drag-id="${task.id}" data-drag-rev="${task._rev}"`}>${!compact && !done ? `<button class="drag-handle" data-drag-handle aria-label="${E(task.title)} verschieben">${I('menu')}</button>` : ''}<button class="check-button ${done ? 'checked' : ''}" data-complete="${task.id}" data-date="${date}" role="checkbox" aria-checked="${done}" aria-label="${E(task.title)} ${done ? 'wieder öffnen' : 'abhaken'}">${done ? I('check') : ''}</button>${task.imageFile ? `<img class="task-image" src="/api/tasks/image?file=${encodeURIComponent(task.imageFile)}" alt="" loading="lazy">` : ''}<div class="spacer"><div class="todo-title">${E(task.title)}</div><div class="todo-detail">${E(member(task.memberId)?.name || 'Allgemein')}${compact ? '' : ` · ${repeats[task.repeat]}`}</div></div>${task.points ? `<span class="points-tag">${I('star')}${task.points}</span>` : ''}${compact ? avatar(task.memberId) : iconBtn('Aufgabe bearbeiten', 'edit-task', 'edit', `data-edit="tasks" data-id="${task.id}"`)}</div>`;
+  return `<div class="todo-row ${done ? 'done' : ''}" ${compact || done ? '' : `draggable="true" data-drag-kind="task" data-drag-id="${task.id}" data-drag-rev="${task._rev}"`}>${!compact && !done ? `<button class="drag-handle" data-drag-handle aria-label="${E(task.title)} verschieben">${I('menu')}</button>` : ''}<button class="check-button ${done ? 'checked' : ''}" data-complete="${task.id}" data-date="${date}" role="checkbox" aria-checked="${done}" aria-label="${E(task.title)} ${done ? 'wieder öffnen' : 'abhaken'}">${done ? I('check') : ''}</button>${recordSymbols(task, 'tasks')}<div class="spacer"><div class="todo-title">${E(task.title)}</div><div class="todo-detail">${E(member(task.memberId)?.name || 'Allgemein')}${compact ? '' : ` · ${repeats[task.repeat]}`}</div></div>${task.points ? `<span class="points-tag">${I('star')}${task.points}</span>` : ''}${compact ? avatar(task.memberId) : iconBtn('Aufgabe bearbeiten', 'edit-task', 'edit', `data-edit="tasks" data-id="${task.id}"`)}</div>`;
 }
 function homePage() {
   const date = S.serverDate, tasks = visibleTasks(date), complete = tasks.filter(t => completion(t, date)).length;
@@ -200,7 +211,7 @@ function calendarPage() {
     }).join('')}</div></div>`;
   } else content = Array.from({ length: 7 }, (_, i) => {
     const date = addDays(monday(cursor), i);
-    return `<section class="agenda-day">${dayHeading(date)}${visibleEvents(date).length ? visibleEvents(date).map(e => `<button class="agenda-event" data-edit="${e.birthdayId ? 'birthdays' : 'events'}" data-id="${e.birthdayId || e.id}"><span class="agenda-time">${e.allDay ? 'Ganztägig' : E(e.startTime) + (e.startOnly ? ' · ohne Ende' : '–' + E(e.endTime))}</span><span class="agenda-line" style="${eventStyle(e)}"></span><span class="spacer"><strong>${E(e.title)}</strong><span class="todo-detail" style="display:block">${E(eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle')}${e.location ? ' · ' + E(e.location) : ''}</span></span>${e.birthdayId ? '<span class="tag">Geburtstag</span>' : ''}</button>`).join('') : '<p class="small muted">Keine Termine.</p>'}</section>`;
+    return `<section class="agenda-day">${dayHeading(date)}${visibleEvents(date).length ? visibleEvents(date).map(e => `<button class="agenda-event" data-edit="${e.birthdayId ? 'birthdays' : 'events'}" data-id="${e.birthdayId || e.id}"><span class="agenda-time">${e.allDay ? 'Ganztägig' : E(e.startTime) + (e.startOnly ? ' · ohne Ende' : '–' + E(e.endTime))}</span><span class="agenda-line" style="${eventStyle(e)}"></span><span class="spacer"><strong>${recordSymbols(e)}${E(e.title)}</strong><span class="todo-detail" style="display:block">${E(eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle')}${e.location ? ' · ' + E(e.location) : ''}</span></span>${e.birthdayId ? '<span class="tag">Geburtstag</span>' : ''}</button>`).join('') : '<p class="small muted">Keine Termine.</p>'}</section>`;
   }).join('');
   return `${pageHead('Unser Kalender', 'Platz für euren Tag. Zeit für eure Familie.', `<button class="button primary" data-edit="events">${I('plus')}<span>Termin</span></button>`)}<div class="panel calendar-panel"><div class="panel-head"><div class="week-toolbar">${iconBtn('Vorheriger Zeitraum', 'prev', 'left')}<span class="week-caption">${E(caption)}</span>${iconBtn('Nächster Zeitraum', 'next', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><div class="view-switch">${modes.map(([id, label]) => `<button data-mode="${id}" class="${calendarMode === id ? 'active' : ''}">${label}</button>`).join('')}</div></div>${content}</div>${S.pendingSync.length ? '<p class="small muted section-gap">Google: Änderungen warten auf Synchronisierung.</p>' : ''}`;
 }
@@ -244,7 +255,7 @@ function photosPage() {
   return `${pageHead('Eure schönsten Momente.', 'Ein Bilderrahmen für euer Zuhause.', btn('Diashow starten', 'start-slides', 'play', 'primary', photoItems.length ? '' : 'disabled'))}<div class="photo-sources">${sources.map(([id, name, icon, hint]) => `<button class="source-card ${photoSource === id ? 'active' : ''}" data-photo-source="${id}">${I(icon)}<strong>${name}</strong><small>${hint}</small></button>`).join('')}</div><div class="panel"><div class="panel-head"><h2>${E(sources.find(s => s[0] === photoSource)?.[1] || '')}</h2><span class="small muted">${photoItems.length} Bilder</span></div><div class="panel-body"><div class="photo-toolbar">${['local', 'server'].includes(photoSource) ? `<label class="button primary upload-button">${I('plus')}${photoSource === 'local' ? 'Fotos auf diesem Gerät auswählen' : 'Fotos zum Server hochladen'}<input type="file" id="photo-upload" accept="image/jpeg,image/png,image/webp,image/gif" multiple></label>` : ''}${photoSource === 'immich' ? `<select id="immich-album" aria-label="Immich-Album"><option value="">Album auswählen</option>${albums.map(a => `<option value="${E(a.id)}" ${photoAlbum === a.id ? 'selected' : ''}>${E(a.name)} (${a.count})</option>`).join('')}</select>` : ''}${btn('Neu laden', 'reload-photos', 'refresh')}${['remote', 'immich'].includes(photoSource) ? '<button class="panel-link" data-nav="settings">Quelle einrichten</button>' : ''}</div>${photoLoading ? '<div class="empty"><span class="loader"></span><p>Bilder werden geladen …</p></div>' : photoItems.length ? `<div class="photo-grid">${photoItems.map((p, i) => `<div class="photo-thumbnail" data-slide="${i}" role="button" tabindex="0" aria-label="${E(p.name)} in Diashow öffnen"><img src="${E(p.url)}" alt="${E(p.name)}" loading="lazy"><span class="photo-caption">${E(p.name)}</span>${photoSource === 'local' ? `<button class="photo-delete" data-remove-local="${E(p.id)}" aria-label="${E(p.name)} vom Gerät entfernen">${I('trash')}</button>` : ''}</div>`).join('')}</div>` : empty('Hier kommen eure Fotos hin', photoSource === 'local' ? 'Ausgewählte Fotos bleiben in diesem Browser auf diesem Gerät gespeichert.' : photoSource === 'server' ? 'Ladet Fotos hoch oder legt sie im Bilderordner eures Containers ab.' : photoSource === 'immich' ? 'Verbindet Immich in den Einstellungen und wählt ein Album aus.' : 'Tragt in den Einstellungen eine Adresse ein, die eure Bilderliste liefert.', 'photos')}<p class="small muted section-gap">${photoSource === 'local' ? 'Beim Löschen der Browserdaten werden auch diese lokalen Fotos entfernt.' : 'Die Bilderquelle bleibt innerhalb eures eigenen Netzes. API-Schlüssel werden nur auf dem Server gespeichert.'} Wechsel alle ${S.settings.photoInterval} Sekunden.</p></div></div>`;
 }
 function settingsPage() {
-  return `${pageHead('Euer Zuhause. Eure Einstellungen.', 'Familie, Kalender und Bilderquellen verwalten.')}<div class="settings-grid"><section class="panel"><div class="panel-head"><h2>Unsere Familie</h2>${iconBtn('Familienmitglied hinzufügen', 'new-member', 'plus', 'data-edit="members"')}</div><div class="panel-body"><form id="settings-family" class="stack"><label class="form-field">Name der Familie<input name="familyName" value="${E(S.settings.familyName)}" required maxlength="60"></label><label class="form-field">Zeitzone<input name="timezone" value="${E(S.settings.timezone)}" required placeholder="Europe/Berlin"></label><div><button class="button primary" type="submit">Speichern</button></div></form><div class="section-gap">${S.members.map(m => `<div class="member-edit">${avatar(m.id, 'large')}<div class="spacer"><strong class="small">${E(m.name)}</strong><div class="todo-detail">${m.role === 'child' ? 'Kind' : 'Erwachsen'}</div></div>${iconBtn('Familienmitglied bearbeiten', 'edit-member', 'edit', `data-edit="members" data-id="${m.id}"`)}</div>`).join('')}</div><p class="field-hint section-gap">Die Auswahl „Kind“ wird zur Anzeige verwendet. In Allgemeine Familiendaten können alle angemeldeten Geräte bearbeiten. Manuelle Punkte und Software-Updates benötigen das Elternpasswort.</p></div></section><section class="panel"><div class="panel-head"><h2>Google Kalender</h2>${btn('Synchronisieren', 'google-sync', 'refresh')}</div><div class="panel-body"><p class="small muted">Mehrere Google-Konten verbinden und für jeden Kalender ein Familienmitglied auswählen. Abgleich automatisch alle 5 Minuten.</p>${btn('Google-Konto verbinden', 'google-connect', 'plus', 'primary')}${!status.googleConfigured ? '<div class="info-box section-gap">Zuerst Google-Zugangsdaten und die Adresse dieser Familienzentrale auf dem Server einrichten. Die Schritte stehen in der Installationsanleitung.</div>' : ''}${S.google.map(a => `<section class="integration-card"><div class="integration-heading"><span class="google-logo">G</span><div class="spacer"><strong class="small">${E(a.email)}</strong><div class="todo-detail">${a.lastSync ? `Letzter Abgleich: ${new Date(a.lastSync).toLocaleString('de-DE')}` : 'Noch nicht synchronisiert'}</div></div>${iconBtn('Konto trennen', 'google-disconnect', 'close', `data-account="${a.id}"`)}</div><form data-calendar-form="${a.id}">${a.calendars.map(c => `<div class="calendar-setting"><label class="checkbox-field"><input type="checkbox" name="cal-${E(c.id)}" value="${E(c.id)}" ${c.selected ? 'checked' : ''}><span>${E(c.title)}${!['owner', 'writer'].includes(c.accessRole) ? '<span class="todo-detail" style="display:block">Nur lesen</span>' : ''}</span></label><select data-cal-member="${E(c.id)}" aria-label="Familienmitglied für ${E(c.title)}"><option value="">Alle</option>${S.members.map(m => `<option value="${m.id}" ${c.memberId === m.id ? 'selected' : ''}>${E(m.name)}</option>`).join('')}</select></div>`).join('')}<div class="form-actions"><button type="button" class="button" data-action="google-refresh" data-account="${a.id}">Kalender neu laden</button><button class="button primary" type="submit">Auswahl speichern</button></div></form>${a.error ? `<p class="integration-error">${E(a.error)}</p>` : ''}</section>`).join('')}${S.pendingSync.length ? `<div class="info-box section-gap">${S.pendingSync.length} Änderung(en) warten auf Google.${S.pendingSync.filter(p => p.error).map(p => `<div class="integration-error">${E(p.error)}</div>`).join('')}</div>` : ''}</div></section><section class="panel"><div class="panel-head"><h2>Bilderrahmen & Quellen</h2></div><div class="panel-body"><form id="settings-photos"><div class="form-grid">${field('Bildwechsel (Sekunden)', 'photoInterval', S.settings.photoInterval, 'number', 'min="3" max="300" required')}${selectField('Darstellung', 'photoFit', S.settings.photoFit, [['contain', 'Ganzes Bild'], ['cover', 'Bildschirm ausfüllen']])}${field('Netzwerk-Bilderliste (URL)', 'remoteManifestUrl', S.settings.remoteManifestUrl, 'url', 'placeholder="http://192.168.1.20:8090/photos.json"', true)}${field('Immich-Adresse', 'immichUrl', S.settings.immichUrl, 'url', 'placeholder="http://192.168.1.30:2283"', true)}${field('Immich-API-Schlüssel', 'immichKey', '', 'password', `autocomplete="off" placeholder="${S.immichConfigured ? 'Gespeichert · leer lassen zum Behalten' : 'Schlüssel eintragen'}"`, true)}<p class="field-hint" style="grid-column:1/-1;margin:0">Beim Ändern der Immich-Adresse den Schlüssel erneut eingeben. Die Netzwerkadresse muss eine JSON-Liste von Bildadressen liefern.</p></div><div class="form-actions"><button class="button primary" type="submit">Speichern</button></div></form></div></section><section class="panel"><div class="panel-head"><h2>Daten & Zugang</h2></div><div class="panel-body"><p class="small muted">Alle gemeinsamen Daten liegen auf eurem Server. Ein Export enthält eure Familiendaten, aber keine Passwörter oder API-Schlüssel.</p><a class="button" href="/api/export" download>${I('download')}Familiendaten exportieren</a><p class="field-hint section-gap">Für eine vollständig wiederherstellbare Sicherung den Datenordner mit Datenbank und Schlüssel sichern. Anleitung: docs/LXC.md.</p><form id="password-form" class="stack section-gap"><h3>Familienpasswort ändern</h3>${field('Bisheriges Passwort', 'currentPassword', '', 'password', 'required autocomplete="current-password"')}${field('Neues Passwort', 'newPassword', '', 'password', 'required minlength="12" maxlength="200" autocomplete="new-password"')}<div><button class="button" type="submit">Passwort ändern</button></div></form><div class="section-gap">${btn('Auf diesem Gerät abmelden', 'logout', 'logout')}</div></div></section>${appearanceSettingsPanel()}${parentSettings()}${updateSettings()}</div>`;
+  return `${pageHead('Euer Zuhause. Eure Einstellungen.', 'Familie, Kalender und Bilderquellen verwalten.')}<div class="settings-grid"><section class="panel"><div class="panel-head"><h2>Unsere Familie</h2>${iconBtn('Familienmitglied hinzufügen', 'new-member', 'plus', 'data-edit="members"')}</div><div class="panel-body"><form id="settings-family" class="stack"><label class="form-field">Name der Familie<input name="familyName" value="${E(S.settings.familyName)}" required maxlength="60"></label><label class="form-field">Zeitzone<input name="timezone" value="${E(S.settings.timezone)}" required placeholder="Europe/Berlin"></label><div><button class="button primary" type="submit">Speichern</button></div></form><div class="section-gap">${S.members.map(m => `<div class="member-edit">${avatar(m.id, 'large')}<div class="spacer"><strong class="small">${E(m.name)}</strong><div class="todo-detail">${m.role === 'child' ? 'Kind' : 'Erwachsen'}</div></div>${iconBtn('Familienmitglied bearbeiten', 'edit-member', 'edit', `data-edit="members" data-id="${m.id}"`)}</div>`).join('')}</div><p class="field-hint section-gap">Die Auswahl „Kind“ wird zur Anzeige verwendet. In Allgemeine Familiendaten können alle angemeldeten Geräte bearbeiten. Manuelle Punkte und Software-Updates benötigen das Elternpasswort.</p></div></section><section class="panel"><div class="panel-head"><h2>Google Kalender</h2>${btn('Synchronisieren', 'google-sync', 'refresh')}</div><div class="panel-body"><p class="small muted">Mehrere Google-Konten verbinden und für jeden Kalender ein Familienmitglied auswählen. Abgleich automatisch alle 5 Minuten.</p>${btn('Google-Konto verbinden', 'google-connect', 'plus', 'primary')}${!status.googleConfigured ? '<div class="info-box section-gap">Zuerst Google-Zugangsdaten und die Adresse dieser Familienzentrale auf dem Server einrichten. Die Schritte stehen in der Installationsanleitung.</div>' : ''}${S.google.map(a => `<section class="integration-card"><div class="integration-heading"><span class="google-logo">G</span><div class="spacer"><strong class="small">${E(a.email)}</strong><div class="todo-detail">${a.lastSync ? `Letzter Abgleich: ${new Date(a.lastSync).toLocaleString('de-DE')}` : 'Noch nicht synchronisiert'}</div></div>${iconBtn('Konto trennen', 'google-disconnect', 'close', `data-account="${a.id}"`)}</div><form data-calendar-form="${a.id}">${a.calendars.map(c => `<div class="calendar-setting"><label class="checkbox-field"><input type="checkbox" name="cal-${E(c.id)}" value="${E(c.id)}" ${c.selected ? 'checked' : ''}><span>${E(c.title)}${!['owner', 'writer'].includes(c.accessRole) ? '<span class="todo-detail" style="display:block">Nur lesen</span>' : ''}</span></label><select data-cal-member="${E(c.id)}" aria-label="Familienmitglied für ${E(c.title)}"><option value="">Alle</option>${S.members.map(m => `<option value="${m.id}" ${c.memberId === m.id ? 'selected' : ''}>${E(m.name)}</option>`).join('')}</select></div>`).join('')}<div class="form-actions"><button type="button" class="button" data-action="google-refresh" data-account="${a.id}">Kalender neu laden</button><button class="button primary" type="submit">Auswahl speichern</button></div></form>${a.error ? `<p class="integration-error">${E(a.error)}</p>` : ''}</section>`).join('')}${S.pendingSync.length ? `<div class="info-box section-gap">${S.pendingSync.length} Änderung(en) warten auf Google.${S.pendingSync.filter(p => p.error).map(p => `<div class="integration-error">${E(p.error)}</div>`).join('')}</div>` : ''}</div></section><section class="panel"><div class="panel-head"><h2>Bilderrahmen & Quellen</h2></div><div class="panel-body"><form id="settings-photos"><div class="form-grid">${field('Bildwechsel (Sekunden)', 'photoInterval', S.settings.photoInterval, 'number', 'min="3" max="300" required')}${selectField('Darstellung', 'photoFit', S.settings.photoFit, [['contain', 'Ganzes Bild'], ['cover', 'Bildschirm ausfüllen']])}${field('Netzwerk-Bilderliste (URL)', 'remoteManifestUrl', S.settings.remoteManifestUrl, 'url', 'placeholder="http://192.168.1.20:8090/photos.json"', true)}${field('Immich-Adresse', 'immichUrl', S.settings.immichUrl, 'url', 'placeholder="http://192.168.1.30:2283"', true)}${field('Immich-API-Schlüssel', 'immichKey', '', 'password', `autocomplete="off" placeholder="${S.immichConfigured ? 'Gespeichert · leer lassen zum Behalten' : 'Schlüssel eintragen'}"`, true)}<p class="field-hint" style="grid-column:1/-1;margin:0">Beim Ändern der Immich-Adresse den Schlüssel erneut eingeben. Die Netzwerkadresse muss eine JSON-Liste von Bildadressen liefern.</p></div><div class="form-actions"><button class="button primary" type="submit">Speichern</button></div></form></div></section><section class="panel"><div class="panel-head"><h2>Daten & Zugang</h2></div><div class="panel-body"><p class="small muted">Alle gemeinsamen Daten liegen auf eurem Server. Ein Export enthält eure Familiendaten, aber keine Passwörter oder API-Schlüssel.</p><a class="button" href="/api/export" download>${I('download')}Familiendaten exportieren</a><p class="field-hint section-gap">Für eine vollständig wiederherstellbare Sicherung den Datenordner mit Datenbank und Schlüssel sichern. Anleitung: docs/LXC.md.</p><form id="password-form" class="stack section-gap"><h3>Familienpasswort ändern</h3>${field('Bisheriges Passwort', 'currentPassword', '', 'password', 'required autocomplete="current-password"')}${field('Neues Passwort', 'newPassword', '', 'password', 'required minlength="12" maxlength="200" autocomplete="new-password"')}<div><button class="button" type="submit">Passwort ändern</button></div></form><div class="section-gap">${btn('Auf diesem Gerät abmelden', 'logout', 'logout')}</div></div></section>${appearanceSettingsPanel()}${deviceSettings()}${parentSettings()}${updateSettings()}</div>`;
 }
 
 function field(label, name, value = '', type = 'text', attrs = '', full = false) {
@@ -264,6 +275,7 @@ function dialog(title, body, footer = '') {
   if (!editor.open) editor.showModal();
 }
 function editRecord(kind, id = '', defaults = {}) {
+  clearEventPreview();
   const old = id ? S[kind]?.find(r => r.id === id) : null;
   if (id && !old) throw new Error('Dieser Eintrag ist nicht mehr vorhanden.');
   if (kind === 'events') { if (old) openEventEditor(old); else startEventWizard(null, defaults); return; }
@@ -275,7 +287,7 @@ function editRecord(kind, id = '', defaults = {}) {
   title = titles[kind] + (old ? ' bearbeiten' : ' hinzufügen');
   if (kind === 'birthdays') {
     fields = `${field('Name', 'name', record.name, 'text', 'required maxlength="100"', true)}${field('Tag', 'day', record.day || '', 'number', 'required min="1" max="31" step="1"')}${selectField('Monat', 'month', record.month || '', [['', 'Bitte auswählen'], ...Array.from({ length: 12 }, (_, i) => [String(i + 1), ds(`2000-${String(i + 1).padStart(2, '0')}-01`).toLocaleDateString('de-DE', { month: 'long' })])])}${field('Geburtsjahr (optional)', 'birthYear', record.birthYear || '', 'number', `min="1" max="${S.serverDate.slice(0, 4)}" step="1"`)}${selectField('Zuordnung (optional)', 'memberId', record.memberId || '', [['', 'Keine Zuordnung'], ...S.members.map(m => [m.id, m.name])])}${selectField('29. Februar in Nicht-Schaltjahren', 'leapDay', record.leapDay || 'mar1', [['mar1', 'Am 1. März anzeigen'], ['feb28', 'Am 28. Februar anzeigen']], true)}${textareaField('Notizen', 'notes', record.notes, 'rows="3" maxlength="2000"')}<p class="field-hint full">Erscheint automatisch jedes Jahr im Kalender. Mit Geburtsjahr wird auch das Alter angezeigt.</p>`;
-  } else if (kind === 'tasks') fields = `${taskImageField(record)}${field('Titel der Aufgabe', 'title', record.title, 'text', required, true)}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${selectField('Zuordnen', 'memberId', old ? record.memberId || '' : record.memberId || '', [['', 'Allgemein'], ...S.members.map(m => [m.id, m.name])])}${selectField('Wiederholung', 'repeat', record.repeat || 'none', [['none', 'Einmalig'], ['daily', 'Täglich'], ['weekdays', 'Montag bis Freitag'], ['weekly', 'Wöchentlich']])}${field('Fällig / erster Tag', 'startDate', record.startDate || S.serverDate, 'date')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}`;
+  } else if (kind === 'tasks') fields = `${taskImageField(record)}${emojiField(record.emoji)}${field('Titel der Aufgabe', 'title', record.title, 'text', required, true)}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${selectField('Zuordnen', 'memberId', old ? record.memberId || '' : record.memberId || '', [['', 'Allgemein'], ...S.members.map(m => [m.id, m.name])])}${selectField('Wiederholung', 'repeat', record.repeat || 'none', [['none', 'Einmalig'], ['daily', 'Täglich'], ['weekdays', 'Montag bis Freitag'], ['weekly', 'Wöchentlich']])}${field('Fällig / erster Tag', 'startDate', record.startDate || S.serverDate, 'date')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}`;
   else if (kind === 'recipes') fields = `${recipeImageField(record)}${field('Rezeptname', 'title', record.title, 'text', required, true)}${field('Portionen', 'servings', record.servings || 4, 'number', 'min="1" max="100" step="1" required')}${field('Zeit in Minuten', 'minutes', record.minutes ?? 30, 'number', 'min="0" max="1440" step="1" required')}${field('Kategorie', 'category', record.category || 'Hauptgericht', 'text', 'maxlength="60"', true)}${textareaField('Zutaten · eine pro Zeile', 'ingredientsText', (record.ingredients || []).map(i => `${i.quantity} | ${i.unit} | ${i.name} | ${i.category}`).join('\n'), 'rows="5" placeholder="500 | g | Nudeln | Vorrat"', 'Menge | Einheit | Zutat | Kategorie. Dezimalzahlen mit Punkt oder Komma sind möglich.')}${textareaField('Zubereitung', 'instructions', record.instructions, 'rows="5" maxlength="15000"')}${field('Link zur Quelle (optional)', 'sourceUrl', record.sourceUrl, 'url', '', true)}`;
   else if (kind === 'members') fields = `${memberImageField(record)}${field('Name', 'name', record.name, 'text', 'required maxlength="50"', true)}${field('Farbe', 'color', record.color || '#6366f1', 'color', 'required')}${selectField('Anzeige', 'role', record.role || 'adult', [['adult', 'Erwachsen'], ['child', 'Kind']])}`;
   else if (kind === 'lists') fields = field('Name der Liste', 'title', record.title, 'text', required, true);
@@ -366,7 +378,10 @@ function uid() { return Array.from(crypto.getRandomValues(new Uint8Array(16)), n
 
 document.addEventListener('click', async event => {
   if (suppressDragClick) { event.preventDefault(); return; }
+  if (Date.now() < suppressWakeClickUntil) { event.preventDefault(); return; }
   const target = event.target.closest('button,a,[data-slide]'); if (!target) return;
+  if (target.dataset.emoji !== undefined) { selectEmoji(target.dataset.emoji, target.closest('[data-emoji-picker]')); return; }
+  if (target.dataset.emojiCategory !== undefined) { const picker = target.closest('[data-emoji-picker]'); picker.dataset.category = target.dataset.emojiCategory; renderEmojiChoices(picker); return; }
   if (target.dataset.confirm) { const yes = target.dataset.confirm === 'yes'; confirmDialog.close(); resolveConfirmation?.(yes); resolveConfirmation = null; return; }
   if (target.dataset.removeLocal) { event.stopPropagation(); if (await ask('Lokales Foto entfernen?', 'Das Foto wird nur aus diesem Browser entfernt. Deine Originaldatei bleibt erhalten.', 'Entfernen', true)) { await localDbAction('delete', target.dataset.removeLocal); await loadPhotos(); } return; }
   if (target.dataset.slide !== undefined) { startSlides(Number(target.dataset.slide)); return; }
@@ -411,6 +426,13 @@ document.addEventListener('click', async event => {
     else if (action === 'wizard-back') { collectEventStep($('#event-wizard-form')); editing.index--; renderEventWizard(); }
     else if (action === 'award-points') openPointsAward();
     else if (action === 'software-update') openUpdateConfirm();
+    else if (action === 'show-changelog') await showChangelog(true);
+    else if (action === 'weather-open') go('weather');
+    else if (action === 'weather-select') { weatherActiveId = target.dataset.place; render(); }
+    else if (action === 'weather-add') await addWeatherPlace(target.dataset.place);
+    else if (action === 'weather-primary') await saveWeatherPlaces(S.weather.locations, weatherActiveId);
+    else if (action === 'weather-remove') await removeWeatherPlace(weatherActiveId);
+    else if (action === 'weather-refresh') { weatherCache.delete(weatherActiveId); void loadWeather(weatherActiveId); }
     else if (action === 'reload-app') location.reload();
     else if (action === 'reset-appearance') resetAppearanceForm();
     else if (action === 'generate-shopping') { const result = await api('/shopping/generate', 'POST', { week: monday(cursor) }); await refresh(false); render(); toast(`${result.count} Zutaten auf der Einkaufsliste aktualisiert.`); }
@@ -418,7 +440,7 @@ document.addEventListener('click', async event => {
     else if (action === 'google-sync') { toast('Kalender werden abgeglichen …'); const result = await api('/google/sync', 'POST', {}); await refresh(false); render(); toast(result.pending ? `${result.pending} Änderung(en) sind noch offen. Details stehen in den Einstellungen.` : 'Kalender abgeglichen.'); }
     else if (action === 'google-refresh') { await api(`/google/accounts/${target.dataset.account}/refresh`, 'POST', {}); await refresh(false); render(); toast('Kalenderliste aktualisiert.'); }
     else if (action === 'google-disconnect') { if (await ask('Google-Konto trennen?', 'Die angezeigten Termine bleiben als lokale Termine erhalten. Offene Google-Änderungen werden verworfen. Das Google-Konto selbst wird nicht verändert.', 'Trennen', true)) await mutate(`/google/accounts/${target.dataset.account}`, 'DELETE', {}, 'Google-Konto getrennt.'); }
-    else if (action === 'logout') { await api('/logout', 'POST', {}); stopSlides(); S = null; renderAuth(true); }
+    else if (action === 'logout') { await api('/logout', 'POST', {}); requireLogin(); }
     else if (action === 'reload-photos') await loadPhotos();
     else if (action === 'start-slides') startSlides();
     else if (action === 'close-slides') stopSlides();
@@ -440,6 +462,8 @@ document.addEventListener('submit', async event => {
     else if (form.id === 'event-wizard-form') await advanceEventWizard(form);
     else if (form.id === 'event-edit-form') await saveEventEditor(form);
     else if (form.id === 'settings-appearance') await saveAppearance(form, data);
+    else if (form.id === 'settings-device') saveDeviceSettings(data);
+    else if (form.id === 'weather-search-form') await searchWeather(data.query);
     else if (form.id === 'parent-password-form') await mutate('/parent-password', 'PUT', data, 'Elternpasswort gespeichert.');
     else if (form.id === 'points-award-form') { await api('/points/award', 'POST', { ...data, requestId: editing.requestId }); editor.close(); await refresh(false); render(); toast('Punkte vergeben.'); }
     else if (form.id === 'update-start-form') { updaterState = await api('/updates/start', 'POST', data); editor.close(); paintUpdateStatus(); toast('Update gestartet. Sicherung wird erstellt.'); }
@@ -470,6 +494,7 @@ document.addEventListener('change', async event => {
     taskPreviewUrl = input.files?.[0] ? URL.createObjectURL(input.files[0]) : '';
     const image = $('#task-image-preview'); if (image) { image.src = taskPreviewUrl; image.hidden = !taskPreviewUrl; }
   }
+  if (input.id === 'event-image-input' || input.name === 'removeEventImage') previewEventImage(input);
   if (input.id === 'member-image-input') previewMemberImage(input);
   if (input.id === 'recipe-image-input' || input.name === 'removeRecipeImage') previewRecipeImage(input);
   if (input.id === 'background-image-input') previewBackgroundImage(input);
@@ -487,7 +512,7 @@ document.addEventListener('change', async event => {
     } catch (error) { toast(error.message, true); }
   }
 });
-editor.addEventListener('close', () => { editing = null; for (const url of [taskPreviewUrl, memberPreviewUrl, recipePreviewUrl]) if (url) URL.revokeObjectURL(url); taskPreviewUrl = ''; memberPreviewUrl = ''; recipePreviewUrl = ''; if (S) render(); });
+editor.addEventListener('close', () => { acknowledgeChangelog(); editing = null; clearEventPreview(); for (const url of [taskPreviewUrl, memberPreviewUrl, recipePreviewUrl]) if (url) URL.revokeObjectURL(url); taskPreviewUrl = ''; memberPreviewUrl = ''; recipePreviewUrl = ''; if (S) render(); });
 confirmDialog.addEventListener('cancel', () => { resolveConfirmation?.(false); resolveConfirmation = null; });
 document.addEventListener('keydown', event => {
   if (slideActive) { if (event.key === 'Escape') stopSlides(); if (event.key === 'ArrowRight') { slideIndex = (slideIndex + 1) % photoItems.length; renderSlide(); } if (event.key === 'ArrowLeft') { slideIndex = (slideIndex - 1 + photoItems.length) % photoItems.length; renderSlide(); } }
@@ -537,6 +562,7 @@ async function loadPhotos() {
 function startSlides(index = 0) {
   if (!photoItems.length) return;
   slideIndex = index; slidePaused = false; slideActive = true;
+  void syncWakeLock();
   $('#slideshow').hidden = false; renderSlide();
   clearInterval(slideTimer);
   slideTimer = setInterval(() => { if (!slidePaused && slideActive && photoItems.length) { slideIndex = (slideIndex + 1) % photoItems.length; renderSlide(); } }, S.settings.photoInterval * 1000);
@@ -545,10 +571,11 @@ function renderSlide() {
   const p = photoItems[slideIndex]; if (!p) return stopSlides();
   $('#slideshow').innerHTML = `<img src="${E(p.url)}" alt="${E(p.name)}" style="object-fit:${S.settings.photoFit}"><div class="slide-overlay"></div><div class="slide-toolbar"><span class="small">${E(S.settings.familyName)}</span><div class="spacer"></div>${iconBtn('Vorheriges Bild', 'prev-slide', 'left')}${iconBtn(slidePaused ? 'Weiter abspielen' : 'Pausieren', 'pause-slides', slidePaused ? 'play' : 'pause')}${iconBtn('Nächstes Bild', 'next-slide', 'right')}${iconBtn('Bilderrahmen schließen', 'close-slides', 'close')}</div><div class="slide-footer"><div><div class="slide-clock">${clockText()}</div><div class="small">${ds(S.serverDate).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</div></div><span class="slide-count">${slideIndex + 1} / ${photoItems.length}</span></div>`;
 }
-function stopSlides() { clearInterval(slideTimer); slideActive = false; $('#slideshow').hidden = true; $('#slideshow').innerHTML = ''; }
+function stopSlides() { clearInterval(slideTimer); slideActive = false; $('#slideshow').hidden = true; $('#slideshow').innerHTML = ''; if (displayMode === 'photos') { displayMode = 'active'; lastActivity = Date.now(); } void syncWakeLock(); }
 async function boot() {
   try { status = await api('/status'); if (!status.configured) return renderAuth(); if (!status.authenticated) return renderAuth(true); await refresh(false); render();
     if (new URLSearchParams(location.search).get('google')) { const connected = new URLSearchParams(location.search).get('google') === 'connected'; toast(connected ? 'Google-Konto verbunden. Jetzt Kalender auswählen.' : 'Google-Verbindung fehlgeschlagen. Bitte erneut versuchen.', !connected); history.replaceState(null, '', location.pathname + location.hash); }
+    void syncWakeLock(); await showChangelog();
   } catch (error) { app.innerHTML = `<main class="boot"><h2>Familienzentrale nicht erreichbar</h2><p>${E(error.message)}</p>${btn('Erneut versuchen', 'retry', 'refresh', 'primary')}</main>`; $('[data-action=retry]').onclick = boot; }
 }
 setInterval(async () => {
@@ -650,7 +677,7 @@ function eventColorField(draft) {
   return `<div id="event-color-options" class="full event-color-options" ${draft.memberIds.length ? 'hidden' : ''}><label class="checkbox-field"><input type="checkbox" name="useDefaultColor" ${draft.color ? '' : 'checked'}>Standardfarbe für Alle verwenden</label>${field('Eigene Terminfarbe', 'eventColor', draft.color || appearanceFor(S.settings).allColor, 'color', draft.color && !draft.memberIds.length ? '' : 'disabled')}</div>`;
 }
 function eventTimeFields(draft, old, includeEndDate = true) {
-  return `<div class="full"><label class="checkbox-field"><input type="checkbox" name="wizardAllDay" ${draft.allDay ? 'checked' : ''}>Ganztägig</label><div id="event-time-options" ${draft.allDay ? 'hidden' : ''}><div class="time-mode-choice"><label><input type="radio" name="timeMode" value="span" ${draft.startOnly ? '' : 'checked'}>Zeitspanne</label><label><input type="radio" name="timeMode" value="point" ${draft.startOnly ? 'checked' : ''}>Feste Zeit ohne Ende</label></div><div class="form-grid">${field('Beginn', 'startTime', draft.startTime || '09:00', 'time', draft.allDay ? 'disabled' : 'required')}${field('Ende', 'endTime', draft.endTime || '10:00', 'time', draft.allDay || draft.startOnly ? 'disabled' : 'required')}</div><p class="field-hint" id="start-only-hint" ${draft.startOnly ? '' : 'hidden'}>Ohne feste Endzeit: Die Farbe blendet im Kalender über 15 Minuten aus.</p></div>${includeEndDate ? `<div id="event-end-date" class="section-gap" ${draft.startOnly && !draft.allDay ? 'hidden' : ''}>${field('Enddatum', 'endDate', draft.endDate || draft.startDate, 'date', draft.startOnly && !draft.allDay ? 'disabled' : 'required')}</div>` : ''}${old?.googleAccountId ? `<div class="info-box section-gap">${old.googleReadOnly ? 'Dieser Google-Kalender ist schreibgeschützt.' : 'Änderungen werden auch in Google gespeichert.'}</div>` : selectField('Kalender', 'googleTarget', draft.googleTarget || '', [['', 'Nur Familienkalender'], ...S.google.flatMap(a => a.calendars.filter(c => c.selected && ['owner', 'writer'].includes(c.accessRole)).map(c => [JSON.stringify([a.id, c.id]), `${c.title} · ${a.email}`]))], true)}</div>`;
+  return `<div class="full"><label class="checkbox-field"><input type="checkbox" name="wizardAllDay" ${draft.allDay ? 'checked' : ''}>Ganztägig</label><div id="event-time-options" ${draft.allDay ? 'hidden' : ''}><div class="time-mode-choice"><label><input type="radio" name="timeMode" value="span" ${draft.startOnly ? '' : 'checked'}>Zeitspanne</label><label><input type="radio" name="timeMode" value="point" ${draft.startOnly ? 'checked' : ''}>Feste Zeit ohne Ende</label></div><div class="form-grid">${field('Beginn', 'startTime', draft.startTime || '09:00', 'time', draft.allDay ? 'disabled' : 'required')}${field('Ende', 'endTime', draft.endTime || '10:00', 'time', draft.allDay || draft.startOnly ? 'disabled' : 'required')}</div><p class="field-hint" id="start-only-hint" ${draft.startOnly ? '' : 'hidden'}>Ohne feste Endzeit: 15 Minuten Anzeige. Bei einer Person blendet die Farbe aus; bei mehreren verläuft sie durch alle Personenfarben.</p></div>${includeEndDate ? `<div id="event-end-date" class="section-gap" ${draft.startOnly && !draft.allDay ? 'hidden' : ''}>${field('Enddatum', 'endDate', draft.endDate || draft.startDate, 'date', draft.startOnly && !draft.allDay ? 'disabled' : 'required')}</div>` : ''}${old?.googleAccountId ? `<div class="info-box section-gap">${old.googleReadOnly ? 'Dieser Google-Kalender ist schreibgeschützt.' : 'Änderungen werden auch in Google gespeichert.'}</div>` : selectField('Kalender', 'googleTarget', draft.googleTarget || '', [['', 'Nur Familienkalender'], ...S.google.flatMap(a => a.calendars.filter(c => c.selected && ['owner', 'writer'].includes(c.accessRole)).map(c => [JSON.stringify([a.id, c.id]), `${c.title} · ${a.email}`]))], true)}</div>`;
 }
 function updateEventColorControls() {
   const group = $('#event-color-options'); if (!group) return;
@@ -662,16 +689,18 @@ function updateEventColorControls() {
 }
 function eventColorFromForm(data, people) { return !people.length && data.get('useDefaultColor') !== 'on' ? data.get('eventColor') || appearanceFor(S.settings).allColor : ''; }
 function openEventEditor(old) {
-  const draft = { ...old, memberIds: eventMembers(old) }; editing = { kind: 'events', old, draft };
-  dialog(old.googleReadOnly ? 'Termin ansehen' : 'Termin bearbeiten', `<form id="event-edit-form"><div class="form-grid">${eventPeopleField(draft)}${field('Überschrift', 'title', draft.title, 'text', 'required maxlength="160"', true)}${textareaField('Beschreibung (optional)', 'description', draft.description, 'rows="3" maxlength="5000"')}${field('Adresse / Ort (optional)', 'location', draft.location, 'text', 'maxlength="300"', true)}${eventColorField(draft)}${field('Datum', 'startDate', draft.startDate, 'date', 'required')}<div id="event-end-date" ${draft.startOnly && !draft.allDay ? 'hidden' : ''}>${field('Enddatum', 'endDate', draft.endDate || draft.startDate, 'date', draft.startOnly && !draft.allDay ? 'disabled' : 'required')}</div>${eventTimeFields(draft, old, false)}</div><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${old.googleReadOnly ? '' : '<button class="button danger" type="button" data-action="delete-record">Löschen</button>'}<div class="spacer"></div><button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit" ${old.googleReadOnly ? 'disabled' : ''}>Speichern</button></div></form>`);
+  const draft = { ...old, memberIds: eventMembers(old) }; editing = { kind: 'events', old, draft, symbol: { imageFile: old.imageFile || '', file: null, removed: false } };
+  dialog(old.googleReadOnly ? 'Termin ansehen' : 'Termin bearbeiten', `<form id="event-edit-form"><div class="form-grid">${eventPeopleField(draft)}${eventImageField()}${emojiField(draft.emoji)}${field('Überschrift', 'title', draft.title, 'text', 'required maxlength="160"', true)}${textareaField('Beschreibung (optional)', 'description', draft.description, 'rows="3" maxlength="5000"')}${field('Adresse / Ort (optional)', 'location', draft.location, 'text', 'maxlength="300"', true)}${eventColorField(draft)}${field('Datum', 'startDate', draft.startDate, 'date', 'required')}<div id="event-end-date" ${draft.startOnly && !draft.allDay ? 'hidden' : ''}>${field('Enddatum', 'endDate', draft.endDate || draft.startDate, 'date', draft.startOnly && !draft.allDay ? 'disabled' : 'required')}</div>${eventTimeFields(draft, old, false)}</div><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${old.googleReadOnly ? '' : '<button class="button danger" type="button" data-action="delete-record">Löschen</button>'}<div class="spacer"></div><button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit" ${old.googleReadOnly ? 'disabled' : ''}>Speichern</button></div></form>`);
 }
 async function saveEventEditor(form) {
   const data = new FormData(form), selected = data.getAll('event-person');
   if (!selected.length) throw new Error('Bitte Alle oder mindestens eine Person auswählen.');
-  const people = selected.includes('all') ? [] : selected, { old } = editing;
+  const people = selected.includes('all') ? [] : selected, current = editing, { old } = current;
   const allDay = data.get('wizardAllDay') === 'on', startOnly = !allDay && data.get('timeMode') === 'point', startDate = data.get('startDate');
   const target = data.get('googleTarget') ? JSON.parse(data.get('googleTarget')) : [];
-  await api('/records/events/' + old.id, 'PUT', { ...old, title: data.get('title'), description: data.get('description') || '', location: data.get('location') || '', memberIds: people, memberId: people[0] || '', color: eventColorFromForm(data, people), startDate, endDate: startOnly ? startDate : data.get('endDate'), allDay, startOnly, startTime: allDay ? '' : data.get('startTime'), endTime: allDay || startOnly ? '' : data.get('endTime'), googleAccountId: old.googleAccountId || target[0] || '', calendarId: old.calendarId || target[1] || '', _rev: old._rev });
+  const imageFile = await eventImageForSave(current);
+  if (!editor.open || editing !== current || !S) return;
+  await api('/records/events/' + old.id, 'PUT', { ...old, emoji: data.get('emoji') || '', imageFile, title: data.get('title'), description: data.get('description') || '', location: data.get('location') || '', memberIds: people, memberId: people[0] || '', color: eventColorFromForm(data, people), startDate, endDate: startOnly ? startDate : data.get('endDate'), allDay, startOnly, startTime: allDay ? '' : data.get('startTime'), endTime: allDay || startOnly ? '' : data.get('endTime'), googleAccountId: old.googleAccountId || target[0] || '', calendarId: old.calendarId || target[1] || '', _rev: old._rev });
   editor.close(); await refresh(false); render(); toast('Termin gespeichert.');
 }
 
@@ -679,12 +708,13 @@ function startEventWizard(old, defaults = {}) {
   const startDate = old?.startDate || defaults.startDate || cursor;
   editing = { kind: 'events', old, index: 0, steps: defaults.fixedDate && !old ? ['people', 'details', 'time'] : ['people', 'details', 'date', 'time'], draft: { title: '', description: '', location: '', startDate, endDate: startDate, startTime: '09:00', endTime: '10:00', allDay: false, startOnly: false, memberIds: filter ? [filter] : [], ...old, ...defaults } };
   if (old) editing.draft.memberIds = eventMembers(old);
+  editing.symbol = { imageFile: old?.imageFile || '', file: null, removed: false };
   renderEventWizard();
 }
 function renderEventWizard() {
   const { draft: d, steps, index, old } = editing, step = steps[index]; let body;
   if (step === 'people') body = eventPeopleField(d);
-  else if (step === 'details') body = `<div class="form-grid">${field('Überschrift', 'title', d.title, 'text', 'required maxlength="160"', true)}${textareaField('Beschreibung (optional)', 'description', d.description, 'rows="3" maxlength="5000"')}${field('Adresse / Ort (optional)', 'location', d.location, 'text', 'maxlength="300"', true)}${eventColorField(d)}</div>`;
+  else if (step === 'details') body = `<div class="form-grid">${eventImageField()}${emojiField(d.emoji)}${field('Überschrift', 'title', d.title, 'text', 'required maxlength="160"', true)}${textareaField('Beschreibung (optional)', 'description', d.description, 'rows="3" maxlength="5000"')}${field('Adresse / Ort (optional)', 'location', d.location, 'text', 'maxlength="300"', true)}${eventColorField(d)}</div>`;
   else if (step === 'date') body = `<h3>An welchem Tag?</h3><div class="form-grid section-gap">${field('Datum', 'startDate', d.startDate, 'date', 'required', true)}</div>`;
   else body = `<div class="event-summary"><strong>${E(d.title)}</strong><span>${fullWeekday(d.startDate)}, ${fullDate(d.startDate)}</span><span>${E(d.memberIds.map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle')}</span></div><div class="section-gap">${eventTimeFields(d, old)}</div>`;
   dialog('Termin hinzufügen', `<form id="event-wizard-form"><div class="wizard-progress">Schritt ${index + 1} von ${steps.length}<div>${steps.map((_, i) => `<span class="${i <= index ? 'done' : ''}"></span>`).join('')}</div></div>${body}<p class="form-error" id="editor-error" role="alert"></p><div class="form-actions"><div class="spacer"></div>${index ? '<button class="button" type="button" data-action="wizard-back">Zurück</button>' : ''}<button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit">${index === steps.length - 1 ? 'Speichern' : 'Weiter'}</button></div></form>`);
@@ -692,7 +722,7 @@ function renderEventWizard() {
 function collectEventStep(form) {
   const data = new FormData(form), { draft: d, steps, index } = editing, step = steps[index];
   if (step === 'people') { const selected = data.getAll('event-person'); if (!selected.length) throw new Error('Bitte Alle oder mindestens eine Person auswählen.'); d.memberIds = selected.includes('all') ? [] : selected; }
-  if (step === 'details') { for (const key of ['title', 'description', 'location']) d[key] = data.get(key) || ''; d.color = eventColorFromForm(data, d.memberIds); }
+  if (step === 'details') { for (const key of ['title', 'description', 'location', 'emoji']) d[key] = data.get(key) || ''; d.color = eventColorFromForm(data, d.memberIds); }
   if (step === 'date') { const prior = d.startDate; d.startDate = data.get('startDate'); if (d.endDate === prior || d.endDate < d.startDate) d.endDate = d.startDate; }
   if (step === 'time') { d.allDay = data.get('wizardAllDay') === 'on'; d.startOnly = !d.allDay && data.get('timeMode') === 'point'; d.startTime = d.allDay ? '' : data.get('startTime'); d.endTime = d.allDay || d.startOnly ? '' : data.get('endTime'); d.endDate = d.startOnly ? d.startDate : data.get('endDate'); d.googleTarget = data.get('googleTarget') || ''; }
 }
@@ -705,7 +735,9 @@ function updateEventTimeControls() {
 async function advanceEventWizard(form) {
   collectEventStep(form);
   if (editing.index < editing.steps.length - 1) { editing.index++; renderEventWizard(); return; }
-  const { old, draft: d } = editing, target = d.googleTarget ? JSON.parse(d.googleTarget) : [];
+  const current = editing, { old, draft: d } = current, target = d.googleTarget ? JSON.parse(d.googleTarget) : [];
+  d.imageFile = await eventImageForSave(current);
+  if (!editor.open || editing !== current || !S) return;
   await api('/records/events' + (old ? '/' + old.id : ''), old ? 'PUT' : 'POST', { ...d, memberId: d.memberIds[0] || '', googleAccountId: old?.googleAccountId || target[0] || '', calendarId: old?.calendarId || target[1] || '', ...(old ? { _rev: old._rev } : {}) });
   editor.close(); await refresh(false); render(); toast('Termin gespeichert.');
 }
@@ -718,7 +750,7 @@ function openPointsAward() {
   dialog('Punkte manuell vergeben', `<form id="points-award-form" class="stack">${selectField('Für wen?', 'memberId', filter || S.members[0].id, S.members.map(m => [m.id, m.name]))}${field('Punkte', 'points', 5, 'number', 'required min="1" max="100000" step="1"')}${field('Wofür?', 'reason', '', 'text', 'required maxlength="160"')}${field('Elternpasswort', 'password', '', 'password', 'required autocomplete="off"')}<p class="form-error" id="editor-error" role="alert"></p><button class="button primary" type="submit">Punkte vergeben</button></form>`);
 }
 function updateSettings() {
-  return `<section class="panel settings-wide"><div class="panel-head"><h2>${I('refresh')}Software aktualisieren</h2></div><div class="panel-body"><p class="small muted">Installierte Version: <strong id="installed-version">${E(status?.version || '0.5.1')}</strong>. Vor dem Update werden eure Daten gesichert. Bei einem Fehler wird die vorherige Version wiederhergestellt.</p><div id="update-status" class="info-box" role="status" aria-live="polite">Updatedienst wird geprüft …</div><div class="form-actions"><button id="software-update-button" class="button primary" data-action="software-update" disabled>${I('refresh')}Update</button><button class="button" data-action="reload-app">Seite neu laden</button></div></div></section>`;
+  return `<section class="panel settings-wide"><div class="panel-head"><h2>${I('refresh')}Software aktualisieren</h2></div><div class="panel-body"><p class="small muted">Installierte Version: <strong id="installed-version">${E(status?.version || VERSION)}</strong>. Vor dem Update werden eure Daten gesichert. Bei einem Fehler wird die vorherige Version wiederhergestellt.</p><div id="update-status" class="info-box" role="status" aria-live="polite">Updatedienst wird geprüft …</div><div class="form-actions"><button id="software-update-button" class="button primary" data-action="software-update" disabled>${I('refresh')}Update</button><button class="button" data-action="show-changelog">Änderungen ansehen</button><button class="button" data-action="reload-app">Seite neu laden</button></div></div></section>`;
 }
 function paintUpdateStatus() {
   const area = $('#update-status'); if (!area || !updaterState) return;
@@ -788,4 +820,241 @@ document.addEventListener('pointerup', event => { if (!pointerDrag || pointerDra
 document.addEventListener('pointercancel', () => { pointerDrag?.target?.classList.remove('drag-over'); pointerDrag = null; suppressDragClick = false; });
 
 document.addEventListener('input', event => { if (event.target.matches?.('[data-appearance-color]')) previewAppearance(); });
-document.addEventListener('error', event => { if (event.target.matches?.('[data-profile-image],[data-recipe-image]')) event.target.hidden = true; }, true);
+document.addEventListener('error', event => { if (event.target.matches?.('[data-profile-image],[data-recipe-image],[data-record-image]')) event.target.hidden = true; }, true);
+
+function requireLogin(version) {
+  const reload = version && version !== VERSION;
+  S = null; changelogSeenId = ''; changelogRequest++; weatherSession++; weatherSearchSequence++;
+  weatherCache.clear(); weatherPending.clear(); weatherSearchResults = []; weatherSearchQuery = ''; weatherSearchError = ''; weatherSearchBusy = false; weatherActiveId = '';
+  photoLoadSequence++; photoItems = []; photoLoaded = false; photoLoading = false; albums = [];
+  for (const url of photoUrls.values()) URL.revokeObjectURL(url); photoUrls.clear();
+  returnToOrganizer(); editor.close(); editor.innerHTML = ''; confirmDialog.close(); confirmDialog.innerHTML = '';
+  resolveConfirmation?.(false); resolveConfirmation = null; editing = null; pointerDrag = null; nativeDrag = null; filter = ''; taskBoard = 'all';
+  for (const url of [taskPreviewUrl, memberPreviewUrl, recipePreviewUrl, backgroundPreviewUrl]) if (url) URL.revokeObjectURL(url);
+  taskPreviewUrl = memberPreviewUrl = recipePreviewUrl = backgroundPreviewUrl = ''; clearEventPreview();
+  updaterState = null; status = { ...status, configured: true, authenticated: false, version: version || status?.version || VERSION };
+  renderAuth(true);
+  if (reload) location.reload();
+}
+async function showChangelog(force = false) {
+  const sequence = ++changelogRequest;
+  try {
+    const data = await api('/changelog');
+    if (!S || sequence !== changelogRequest || editor.open || confirmDialog.open) return;
+    if (!force && localStorage.getItem('lastChangelog') === data.changeId) return;
+    const changes = force ? data.releases : data.releases.filter(release => release.version === data.version);
+    changelogSeenId = data.changeId; editing = { kind: 'changelog' };
+    dialog('Was ist neu?', `<div class="changelog"><p>Version ${E(data.version)} · Eure Daten und Einstellungen bleiben erhalten.</p>${changes.map(release => `<section><h3>${E(release.title)}</h3><p class="small muted">Version ${E(release.version)} · ${E(release.date)}</p><ul>${release.changes.map(change => `<li>${E(change)}</li>`).join('')}</ul></section>`).join('')}<div class="form-actions"><button class="button primary" data-action="close-editor">Verstanden</button></div></div>`);
+  } catch (error) { if (S) toast('Die Änderungsübersicht konnte nicht geladen werden: ' + error.message, true); }
+}
+function acknowledgeChangelog() {
+  if (changelogSeenId && S) { try { localStorage.setItem('lastChangelog', changelogSeenId); } catch {} }
+  changelogSeenId = '';
+}
+function recordSymbols(record, kind = 'events') {
+  const image = isImageFile(record.imageFile) ? `<img class="record-icon" src="${kind === 'tasks' ? '/api/tasks/image?file=' + encodeURIComponent(record.imageFile) : uiImageUrl(record.imageFile)}" alt="" loading="lazy" decoding="async" draggable="false" data-record-image>` : '';
+  const emoji = record.emoji && isEmoji(record.emoji) ? `<span class="record-emoji" aria-hidden="true">${E(record.emoji)}</span>` : '';
+  return image || emoji ? `<span class="record-symbols">${image}${emoji}</span>` : '';
+}
+function emojiChoices(search = '', category = '') {
+  const choices = findEmojis(search, category);
+  return choices.map(item => `<button type="button" class="emoji-choice" data-emoji="${E(item.emoji)}" title="${E(item.label)}" aria-label="${E(item.label)}">${E(item.emoji)}</button>`).join('') || '<p class="small muted">Kein passendes Emoji. Du kannst auch eines über deine Tastatur einfügen.</p>';
+}
+function emojiField(emoji = '') {
+  return `<div class="emoji-field full" data-emoji-picker data-category=""><label class="form-field">Emoji (optional)<div class="emoji-current"><span data-emoji-preview aria-hidden="true">${isEmoji(emoji) ? E(emoji) : ''}</span><input name="emoji" value="${isEmoji(emoji) ? E(emoji) : ''}" maxlength="64" placeholder="Emoji einfügen" aria-label="Ein einzelnes Emoji"><button class="button" type="button" data-emoji="">Entfernen</button></div></label><details class="emoji-picker"><summary class="button">😊 Emoji auswählen</summary><label class="form-field section-gap">Emoji suchen<input type="search" data-emoji-search placeholder="Zum Beispiel Geburtstag, Sport, Putzen" maxlength="100"></label><div class="emoji-categories" role="group" aria-label="Emoji-Kategorien"><button type="button" data-emoji-category="" aria-pressed="true">Alle</button>${emojiCategories.map(category => `<button type="button" data-emoji-category="${category.id}" aria-pressed="false">${E(category.title)}</button>`).join('')}</div><div class="emoji-grid" data-emoji-grid>${emojiChoices()}</div><p class="field-hint">Weitere Emojis kannst du mit deiner Geräte-Tastatur einfügen.</p></details></div>`;
+}
+function selectEmoji(value, picker) {
+  if (!picker || !isEmoji(value)) return;
+  $('[name=emoji]', picker).value = value; $('[data-emoji-preview]', picker).textContent = value;
+  const details = $('details', picker); if (details) details.open = false;
+}
+function renderEmojiChoices(picker) {
+  const category = picker.dataset.category || '', search = $('[data-emoji-search]', picker).value || '';
+  $('[data-emoji-grid]', picker).innerHTML = emojiChoices(search, category);
+  picker.querySelectorAll('[data-emoji-category]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.emojiCategory === category)));
+}
+document.addEventListener('input', event => {
+  if (event.target.matches?.('[data-emoji-search]')) renderEmojiChoices(event.target.closest('[data-emoji-picker]'));
+  if (event.target.name === 'emoji') { const picker = event.target.closest('[data-emoji-picker]'); if (picker) $('[data-emoji-preview]', picker).textContent = isEmoji(event.target.value) ? event.target.value : ''; }
+});
+function clearEventPreview() { if (eventPreviewUrl) URL.revokeObjectURL(eventPreviewUrl); eventPreviewUrl = ''; }
+function eventImageField() {
+  const symbol = editing.symbol, source = symbol.removed ? '' : eventPreviewUrl || (isImageFile(symbol.imageFile) ? uiImageUrl(symbol.imageFile) : '');
+  return `<div class="form-field full"><span>Bild als Terminsymbol (optional)</span><input id="event-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><img id="event-image-preview" class="task-image-preview" ${source ? `src="${E(source)}"` : 'hidden'} alt="Vorschau des Terminsymbols"><label class="checkbox-field"><input name="removeEventImage" type="checkbox" ${symbol.removed ? 'checked' : ''}>Bild entfernen</label>${symbol.file ? `<span class="field-hint">Ausgewählt: ${E(symbol.file.name || 'Bild')}</span>` : ''}<span class="field-hint">Bis 5 MB. Ohne Bild wird kein Platzhalter angezeigt.</span></div>`;
+}
+function previewEventImage(input) {
+  if (editing?.kind !== 'events' || !editing.symbol) return;
+  const symbol = editing.symbol;
+  if (input.id === 'event-image-input') {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast('Das Terminsymbol darf höchstens 5 MB groß sein.', true); input.value = ''; return; }
+    clearEventPreview(); symbol.file = file; symbol.removed = false; eventPreviewUrl = URL.createObjectURL(file);
+    $('[name=removeEventImage]', editor).checked = false;
+  } else symbol.removed = input.checked;
+  const source = symbol.removed ? '' : eventPreviewUrl || (symbol.imageFile ? uiImageUrl(symbol.imageFile) : '');
+  const preview = $('#event-image-preview'); if (preview) { preview.src = source; preview.hidden = !source; }
+}
+async function eventImageForSave(current) {
+  const symbol = current.symbol;
+  if (symbol.removed) return '';
+  if (symbol.file) {
+    const file = symbol.file, imageFile = await uploadUiImage(file);
+    if (current !== editing || !S) return '';
+    symbol.imageFile = imageFile; symbol.file = null;
+  }
+  return symbol.imageFile || '';
+}
+
+function weatherPlaces() { return S?.weather?.locations || []; }
+function currentWeatherPlace() {
+  const places = weatherPlaces();
+  if (!places.some(place => place.id === weatherActiveId)) weatherActiveId = S?.weather?.primaryId || places[0]?.id || '';
+  return places.find(place => place.id === weatherActiveId);
+}
+function weatherHeader() {
+  const place = weatherPlaces().find(item => item.id === S.weather?.primaryId) || weatherPlaces()[0];
+  const forecast = place && weatherCache.get(place.id)?.data, current = forecast?.current;
+  const condition = weatherCode(current?.weather_code, current?.is_day !== 0), outlook = rainOutlook(forecast);
+  const title = place ? [place.name, forecast ? condition.label : 'Wetter laden', forecast?.stale ? 'Zwischengespeicherte Daten' : '', outlook].filter(Boolean).join(' · ') : 'Wetterort auswählen';
+  return `<button id="header-weather" class="header-weather" data-action="weather-open" title="${E(title)}" aria-label="${E(title + '. 14-Tage-Vorhersage öffnen.')}" ${forecast?.stale ? 'data-stale="true"' : ''}><span class="weather-symbol" aria-hidden="true">${current ? condition.icon : '🌤️'}</span><span><strong>${current ? weatherValue(current.temperature_2m, ' °C') : place ? '…' : 'Wetter'}</strong><small>${E(place ? forecast ? outlook ? 'Bald Niederschlag' : condition.label : weatherCache.get(place.id)?.error ? 'Nicht erreichbar' : 'Wird geladen' : 'Einrichten')}</small></span></button>`;
+}
+function weatherSearchMarkup() {
+  return weatherSearchBusy ? '<p class="small muted" role="status">Orte werden gesucht …</p>' : weatherSearchError ? `<p class="form-error" role="alert">${E(weatherSearchError)}</p>` : weatherSearchResults.length ? `<div class="weather-search-results">${weatherSearchResults.map(place => {
+    const saved = weatherPlaces().some(item => item.id === place.id);
+    return `<button class="weather-result" data-action="weather-add" data-place="${place.id}" ${saved || weatherPlaces().length >= 8 ? 'disabled' : ''}><span><strong>${E(place.name)}</strong><small>${E([place.region, place.country].filter(Boolean).join(', '))}</small></span><span>${saved ? 'Gespeichert' : '+ Hinzufügen'}</span></button>`;
+  }).join('')}</div>` : weatherSearchQuery ? '<p class="small muted">Keine passenden Orte gefunden. Versuche einen Ortsnamen oder eine Postleitzahl.</p>' : '';
+}
+function weatherPage() {
+  const place = currentWeatherPlace();
+  return `${pageHead('Das Wetter für eure Pläne', '14 Tage im Blick. Die Vorhersage wird regelmäßig aktualisiert.', btn('Zur Übersicht', 'weather-home', 'home', '', 'data-nav="home"'))}<section class="panel section-gap"><div class="panel-body"><div class="weather-place-tabs" role="group" aria-label="Gespeicherte Wetterorte">${weatherPlaces().map(item => `<button class="button ${item.id === place?.id ? 'primary' : ''}" data-action="weather-select" data-place="${item.id}" aria-pressed="${item.id === place?.id}">${E(item.name)}${item.id === S.weather.primaryId ? ' · Kopfzeile' : ''}</button>`).join('')}</div><form id="weather-search-form" class="weather-search section-gap"><label class="form-field">Weiteren Ort suchen<input name="query" type="search" minlength="2" maxlength="100" required value="${E(weatherSearchQuery)}" placeholder="Ortsname oder Postleitzahl"></label><button class="button" type="submit" ${weatherSearchBusy ? 'disabled' : ''}>Ort suchen</button></form><div id="weather-search-results">${weatherSearchMarkup()}</div><p class="field-hint">Bis zu acht Orte. Eure Standortfreigabe wird dafür nicht benötigt.</p></div></section><div id="weather-content" class="section-gap">${weatherContent(place)}</div><p class="field-hint section-gap">Wettermodelle und Vorhersage: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> · Ortsdaten: <a href="https://www.geonames.org/" target="_blank" rel="noopener noreferrer">GeoNames</a>. Die aktuelle Temperatur stammt aus dem Wettermodell. Besonders die späteren Tage können sich noch deutlich ändern.</p>`;
+}
+function weatherMetric(label, value) { return `<div><dt>${E(label)}</dt><dd>${E(value)}</dd></div>`; }
+function weatherContent(place) {
+  if (!place) return empty('Euer Wetterort fehlt noch', 'Suche oben euren Ort und füge ihn hinzu. Die Temperatur erscheint dann auch neben der Uhr.', 'calendar');
+  const entry = weatherCache.get(place.id), forecast = entry?.data;
+  const controls = `<div class="head-actions">${place.id !== S.weather.primaryId ? btn('In Kopfzeile anzeigen', 'weather-primary', 'pin') : '<span class="tag">Ort in der Kopfzeile</span>'}${btn('Aktualisieren', 'weather-refresh', 'refresh')}${btn('Ort entfernen', 'weather-remove', 'trash', 'danger')}</div>`;
+  if (!forecast) return `<section class="panel"><div class="panel-head"><h2>${E(place.name)}</h2>${controls}</div><div class="panel-body"><p ${entry?.error ? 'class="form-error" role="alert"' : 'role="status"'}>${E(entry?.error || 'Wetterdaten werden geladen …')}</p></div></section>`;
+  const current = forecast.current, condition = weatherCode(current.weather_code, current.is_day !== 0), outlook = rainOutlook(forecast);
+  const hourNow = Math.floor(Date.now() / 3600000) * 3600;
+  const hourly = forecast.hourly.filter(hour => hour.time >= hourNow).slice(0, 24);
+  return `<section class="panel"><div class="panel-head"><h2>${E(place.name)}</h2>${controls}</div><div class="panel-body"><div class="weather-current"><span class="weather-current-icon" aria-hidden="true">${condition.icon}</span><div><strong>${weatherValue(current.temperature_2m, ' °C')}</strong><h3>${E(condition.label)}</h3><p class="small muted">Modellstand ${weatherTime(current.time, forecast.timezone)} Uhr · ${E([place.region, place.country].filter(Boolean).join(', '))}</p>${outlook ? `<p class="rain-outlook">${E(outlook)}</p>` : ''}</div></div><dl class="weather-metrics">${weatherMetric('Gefühlt', weatherValue(current.apparent_temperature, ' °C'))}${weatherMetric('Luftfeuchte', weatherValue(current.relative_humidity_2m, ' %'))}${weatherMetric('Wind', weatherValue(current.wind_speed_10m, ' km/h'))}${weatherMetric('Böen', weatherValue(current.wind_gusts_10m, ' km/h'))}${weatherMetric('Windrichtung', weatherValue(current.wind_direction_10m, '°'))}${weatherMetric('Luftdruck', weatherValue(current.pressure_msl, ' hPa'))}${weatherMetric('Bewölkung', weatherValue(current.cloud_cover, ' %'))}${weatherMetric('Niederschlag', weatherValue(current.precipitation, ' mm', 1))}</dl><p class="field-hint ${forecast.stale ? 'weather-stale' : ''}">${forecast.stale ? 'Wetterdienst nicht erreichbar. Zuletzt gespeicherte Daten vom ' : 'Abgerufen am '}${E(new Date(forecast.fetchedAt).toLocaleString('de-DE'))}${forecast.stale ? '. Die Anzeige kann veraltet sein.' : '.'}</p></div></section>${hourly.length ? `<section class="panel section-gap"><div class="panel-head"><h2>Die nächsten 24 Stunden</h2></div><div class="weather-hours">${hourly.map(hour => `<article><strong>${weatherTime(hour.time, forecast.timezone)}</strong><span aria-hidden="true">${weatherCode(hour.weather_code).icon}</span><b>${weatherValue(hour.temperature_2m, '°')}</b><small>${weatherValue(hour.precipitation_probability, ' %')} Niederschlag</small><small>${weatherValue(hour.precipitation, ' mm', 1)}</small></article>`).join('')}</div></section>` : ''}<div class="weather-forecast-head"><h2>14-Tage-Vorhersage</h2><p class="small muted">Zeiten vor Ort · ${E(forecast.timezone)}${forecast.daily.length < 14 ? ` · Aktuell nur ${forecast.daily.length} Tage verfügbar` : ''}</p></div><div class="weather-days">${forecast.daily.map((day, i) => {
+    const code = weatherCode(day.weather_code);
+    return `<article class="panel weather-day"><div class="weather-day-heading"><div><span class="small muted">${i === 0 ? 'Heute' : i === 1 ? 'Morgen' : 'In ' + i + ' Tagen'}</span><h3>${weatherTime(day.time, forecast.timezone, true)}</h3></div><span aria-hidden="true">${code.icon}</span></div><p>${E(code.label)}</p><div class="weather-temperatures"><strong>${weatherValue(day.temperature_2m_max, '°')}</strong><span>${weatherValue(day.temperature_2m_min, '°')}</span></div><dl class="weather-metrics">${weatherMetric('Niederschlag', weatherValue(day.precipitation_probability_max, ' %'))}${weatherMetric('Menge', weatherValue(day.precipitation_sum, ' mm', 1))}${weatherMetric('Wind', weatherValue(day.wind_speed_10m_max, ' km/h'))}${weatherMetric('Böen', weatherValue(day.wind_gusts_10m_max, ' km/h'))}</dl><details><summary>Weitere Wetterdaten</summary><dl class="weather-metrics">${weatherMetric('Gefühlt max./min.', weatherValue(day.apparent_temperature_max, '°') + ' / ' + weatherValue(day.apparent_temperature_min, '°'))}${weatherMetric('Regen', weatherValue(day.rain_sum, ' mm', 1))}${weatherMetric('Schnee', weatherValue(day.snowfall_sum, ' cm', 1))}${weatherMetric('Windrichtung', weatherValue(day.wind_direction_10m_dominant, '°'))}${weatherMetric('UV-Index', weatherValue(day.uv_index_max, '', 1))}${weatherMetric('Sonnenaufgang', weatherTime(day.sunrise, forecast.timezone))}${weatherMetric('Sonnenuntergang', weatherTime(day.sunset, forecast.timezone))}${weatherMetric('Sonnenstunden', weatherValue(day.sunshine_duration === null ? null : day.sunshine_duration / 3600, ' h', 1))}${weatherMetric('Tageslicht', weatherValue(day.daylight_duration === null ? null : day.daylight_duration / 3600, ' h', 1))}</dl></details></article>`;
+  }).join('')}</div>`;
+}
+function paintWeather() {
+  if (!S) return;
+  const header = $('#header-weather'); if (header) header.outerHTML = weatherHeader();
+  if (route === 'weather') { const content = $('#weather-content'); if (content) content.innerHTML = weatherContent(currentWeatherPlace()); }
+}
+function ensureWeather() {
+  if (!S) return;
+  const wanted = new Set([S.weather?.primaryId || weatherPlaces()[0]?.id, route === 'weather' ? currentWeatherPlace()?.id : ''].filter(Boolean));
+  for (const id of wanted) {
+    const entry = weatherCache.get(id);
+    if (!entry || Date.now() - entry.time > (entry.error || entry.data?.stale ? 60000 : 15 * 60000)) void loadWeather(id);
+  }
+}
+async function loadWeather(id) {
+  if (!id || weatherPending.has(id) || !weatherPlaces().some(place => place.id === id)) return;
+  const session = weatherSession; weatherPending.add(id);
+  try {
+    const data = await api('/weather/forecast?location=' + encodeURIComponent(id));
+    if (S && session === weatherSession && weatherPlaces().some(place => place.id === id)) weatherCache.set(id, { data, time: Date.now() });
+  } catch (error) { if (S && session === weatherSession) weatherCache.set(id, { time: Date.now(), error: error.message }); }
+  finally { if (session === weatherSession) { weatherPending.delete(id); paintWeather(); } }
+}
+function paintWeatherSearch() { const area = $('#weather-search-results'); if (S && route === 'weather' && area) { area.innerHTML = weatherSearchMarkup(); const button = $('#weather-search-form button[type=submit]'); if (button) button.disabled = weatherSearchBusy; } }
+async function searchWeather(query) {
+  const sequence = ++weatherSearchSequence; weatherSearchQuery = query.trim(); weatherSearchBusy = true; weatherSearchError = ''; weatherSearchResults = []; paintWeatherSearch();
+  try { const places = await api('/weather/search?q=' + encodeURIComponent(weatherSearchQuery)); if (S && sequence === weatherSearchSequence) weatherSearchResults = places; }
+  catch (error) { if (S && sequence === weatherSearchSequence) weatherSearchError = error.message; }
+  finally { if (sequence === weatherSearchSequence) { weatherSearchBusy = false; paintWeatherSearch(); } }
+}
+async function saveWeatherPlaces(locations, primaryId) {
+  await mutate('/weather/locations', 'PUT', { locations, primaryId, _revision: S.revision }, 'Wetterorte gespeichert.');
+}
+async function addWeatherPlace(id) {
+  const place = weatherSearchResults.find(item => item.id === id);
+  if (!place) return;
+  weatherActiveId = place.id;
+  await saveWeatherPlaces([...weatherPlaces(), place], S.weather?.primaryId || place.id);
+}
+async function removeWeatherPlace(id) {
+  const place = weatherPlaces().find(item => item.id === id); if (!place) return;
+  if (!await ask('Wetterort entfernen?', `„${place.name}“ aus den gespeicherten Wetterorten entfernen?`, 'Entfernen', true)) return;
+  const locations = weatherPlaces().filter(item => item.id !== id);
+  await saveWeatherPlaces(locations, S.weather.primaryId === id ? locations[0]?.id || '' : S.weather.primaryId);
+  weatherCache.delete(id);
+}
+
+function deviceSettings() {
+  const config = displayConfig;
+  return `<section class="panel"><div class="panel-head"><h2>${I('phone')}Dieses Gerät · Tabletmodus</h2></div><div class="panel-body"><form id="settings-device" class="stack"><label class="checkbox-field"><input type="checkbox" name="enabled" ${config.enabled ? 'checked' : ''}>Bei Inaktivität automatisch wechseln</label>${field('Inaktivität bis zum Wechsel (Sekunden)', 'timeout', config.timeout, 'number', 'min="30" max="3600" step="1" required')}${selectField('Bei Inaktivität', 'action', config.action, [['sleep', 'Dunkler Ruhebildschirm'], ['photos', 'Bilderrahmen als Bildschirmschoner']])}${selectField('Fotoquelle auf diesem Gerät', 'source', photoSource, [['local', 'Lokal in diesem Browser'], ['server', 'Bilder im Container'], ['remote', 'Netzwerk-Bilderliste'], ['immich', 'Immich-Album']])}<p class="field-hint">Das Album für Immich wählst du im Bilderrahmen. Ohne verfügbare Fotos erscheint der Ruhebildschirm. Berührung oder Tastendruck beendet den automatischen Modus.</p><label class="checkbox-field"><input name="keepAwake" type="checkbox" ${config.keepAwake ? 'checked' : ''}>Display während der Nutzung und im Bilderrahmen wach halten</label><p class="field-hint" id="device-wake-status">${E(wakeStatus || 'Display-Wachhalten benötigt einen unterstützten Browser und HTTPS.')}</p><div class="info-box">Der Ruhebildschirm ist dunkel. Dabei wird die Displaysperre freigegeben, sodass der Geräte-Standby greifen kann. Echtes Ausschalten und Aufwecken des Displays steuert das Tablet; ein Browser kann diese Hardwarefunktion nicht erzwingen. Der native App-Modus folgt später.</div><p class="field-hint">Diese Einstellungen gelten nur für diesen Browser. Offene Formulare und laufende Updates unterbrechen den Inaktivitätswechsel.</p><button class="button primary" type="submit">Geräteeinstellungen speichern</button></form></div></section>`;
+}
+function saveDeviceSettings(data) {
+  displayConfig = deviceConfig({ enabled: data.enabled === 'on', timeout: data.timeout, action: data.action, keepAwake: data.keepAwake === 'on' });
+  localStorage.setItem('deviceMode', JSON.stringify(displayConfig));
+  const source = ['local', 'server', 'remote', 'immich'].includes(data.source) ? data.source : 'local';
+  if (source !== photoSource) { photoSource = source; localStorage.setItem('photoSource', source); photoLoaded = false; photoItems = []; photoLoadSequence++; photoLoading = false; }
+  returnToOrganizer(); render(); toast('Einstellungen für dieses Gerät gespeichert.');
+}
+function displayBlocked() { return !!(busy || editor.open || confirmDialog.open || pointerDrag || nativeDrag || updaterState?.active || slideActive && displayMode !== 'photos' || document.activeElement?.closest('form')); }
+function wakeWanted() { return !!(S && displayConfig.enabled && displayConfig.keepAwake && !document.hidden && displayMode !== 'sleep'); }
+function paintWakeStatus() { const area = $('#device-wake-status'); if (area) area.textContent = wakeStatus || 'Display-Wachhalten benötigt einen unterstützten Browser und HTTPS.'; }
+async function syncWakeLock() {
+  if (!wakeWanted()) {
+    const previous = wakeLock; wakeLock = null;
+    if (previous) { try { await previous.release(); } catch {} }
+    wakeStatus = 'Displaysperre freigegeben. Der Geräte-Standby kann greifen.'; paintWakeStatus(); return;
+  }
+  if (wakeLock || wakePending) return;
+  if (typeof navigator === 'undefined' || !navigator.wakeLock || !globalThis.isSecureContext) { wakeStatus = 'Wachhalten wird hier nicht unterstützt. Dafür werden HTTPS und ein geeigneter Browser benötigt.'; paintWakeStatus(); return; }
+  wakePending = true;
+  try {
+    const sentinel = await navigator.wakeLock.request('screen');
+    if (!wakeWanted()) { await sentinel.release(); return; }
+    wakeLock = sentinel; wakeStatus = 'Display wird während der Nutzung und im Bilderrahmen wach gehalten.';
+    sentinel.addEventListener('release', () => { if (wakeLock === sentinel) { wakeLock = null; wakeStatus = 'Das Gerät hat die Displaysperre freigegeben.'; paintWakeStatus(); } });
+  } catch { wakeStatus = 'Das Gerät hat die Displaysperre nicht erlaubt. Prüfe Energieeinstellungen und Browserberechtigung.'; }
+  finally { wakePending = false; paintWakeStatus(); }
+}
+function returnToOrganizer() {
+  displaySequence++; displayLoading = false; displayMode = 'active'; lastActivity = Date.now();
+  stopSlides(); const rest = $('#display-rest'); if (rest) rest.hidden = true;
+  void syncWakeLock();
+}
+function enterDisplayRest() {
+  displayMode = 'sleep'; stopSlides(); const rest = $('#display-rest'); if (rest) rest.hidden = false;
+  void syncWakeLock();
+}
+async function checkDeviceIdle(now = Date.now()) {
+  const blocked = displayBlocked();
+  if (blocked) { lastActivity = now; return; }
+  const action = idleAction(displayConfig, { now, lastActivity, authenticated: !!S, hidden: !!document.hidden, blocked, mode: displayMode });
+  if (!action || displayLoading) return;
+  if (action === 'sleep') { enterDisplayRest(); return; }
+  const sequence = ++displaySequence; displayLoading = true;
+  try {
+    if (!photoLoaded) await loadPhotos();
+    if (!S || sequence !== displaySequence || displayBlocked() || !displayConfig.enabled || displayConfig.action !== 'photos' || document.hidden) return;
+    if (photoItems.length) { displayMode = 'photos'; startSlides(); }
+    else enterDisplayRest();
+  } finally { if (sequence === displaySequence) displayLoading = false; }
+}
+function deviceActivity(event) {
+  if (!S) return;
+  if (displayMode !== 'active' && ['pointerdown', 'keydown'].includes(event.type)) {
+    event.preventDefault(); event.stopImmediatePropagation(); suppressWakeClickUntil = Date.now() + 600; returnToOrganizer(); return;
+  }
+  if (displayMode === 'active') { lastActivity = Date.now(); displaySequence++; displayLoading = false; }
+}
+for (const name of ['pointerdown', 'keydown']) document.addEventListener(name, deviceActivity, true);
+for (const name of ['pointermove', 'wheel', 'scroll', 'input']) document.addEventListener(name, deviceActivity, { capture: true, passive: true });
+document.addEventListener('click', event => {
+  if (Date.now() < suppressWakeClickUntil) { event.preventDefault(); event.stopImmediatePropagation(); }
+}, true);
+document.addEventListener('visibilitychange', () => { lastActivity = Date.now(); displaySequence++; displayLoading = false; void syncWakeLock(); if (!document.hidden) ensureWeather(); });
+setInterval(() => { if (S) void checkDeviceIdle(); }, 1000);
+setInterval(() => { if (S && !document.hidden) { ensureWeather(); paintWeather(); } }, 60000);

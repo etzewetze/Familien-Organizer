@@ -2,9 +2,9 @@
 
 Eine eigenständige, deutschsprachige Familienzentrale zum Selbsthosten. Funktional an den beschriebenen Familienkalender angelehnt; eigener Quellcode, eigenes Design und keine Abhängigkeit von Dæly. Keine übernommenen Markenassets oder proprietären Programmteile.
 
-**Version 0.5.1 zeigt gemeinsame Termine als Verlauf durch alle ausgewählten Personenfarben.** Rezeptbilder, Bildkarten bei der Essensauswahl, 🎂 mit Name und optionalem Alter, Profilbilder sowie anpassbare Farben und Hintergründe bleiben enthalten. Sie ist für einen privaten Haushalt im eigenen Netz gedacht. Familiengeräte verwenden dasselbe Familienpasswort; manuelle Punkte und Software-Updates benötigen zusätzlich das Elternpasswort. Eine native App und Stundenpläne folgen später.
+**Version 0.6.0 ergänzt Wetter mit 14-Tage-Vorhersage, einen Geräte-Ruhemodus und Bild-/Emoji-Symbole für Termine und Aufgaben.** Nach Updates werden alle Geräte abgemeldet; nach dem Anmelden erscheint die Änderungsübersicht. Die Familienzentrale ist für einen privaten Haushalt gedacht. Familiengeräte verwenden dasselbe Familienpasswort; manuelle Punkte und Software-Updates benötigen zusätzlich das Elternpasswort. Eine native App und Stundenpläne folgen später.
 
-**Bereits laufender Container ab 0.3.0?** **Einstellungen → Update** verwenden und danach den Browser neu laden. Bei einem älteren Stand einmal den [vollständigen Update-Befehl](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) ausführen, um den Updatedienst einzurichten. Den Container-Ersteller nur für neue LXC verwenden. Bedienung: [PLANER.md](docs/PLANER.md).
+**Bereits laufender Container ab 0.3.0?** **Einstellungen → Update** verwenden. Beim ersten Wechsel auf 0.6.0 danach den Browser neu laden, mit dem Familienpasswort anmelden und die Änderungsübersicht lesen. Bei einem älteren Stand einmal den [vollständigen Update-Befehl](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) ausführen, um den Updatedienst einzurichten. Den Container-Ersteller nur für neue LXC verwenden. Bedienung: [PLANER.md](docs/PLANER.md).
 
 ## Neuen Proxmox-LXC automatisch anlegen
 
@@ -98,24 +98,29 @@ Im Browser `http://localhost:8080` öffnen, Familiennamen, Mitglieder und ein Pa
 
 ## Enthaltene Funktionen
 
-| Bereich | Stand in 0.4 |
+| Bereich | Stand in 0.6 |
 |---|---|
-| Kalender | 24-Stunden-Raster mit wählbarer Verdichtung leerer Stunden und Tage; ausgeschriebene Tage und vollständige Daten; Termine nach Dauer, Überlappungen nebeneinander; Personenwahl mit Farbverlauf bei Mehrfachauswahl, Assistent für neue Termine und gemeinsames Bearbeitungsformular; Standard- und eigene Farben für Alle; ganztägig, Zeitspanne oder feste Startzeit mit 15-Minuten-Ausblendung |
+| Kalender | 24-Stunden-Raster mit wählbarer Verdichtung leerer Stunden und Tage; ausgeschriebene Tage und vollständige Daten; Termine nach Dauer, Überlappungen nebeneinander; Personenwahl mit Farbverlauf bei Mehrfachauswahl, Assistent für neue Termine und gemeinsames Bearbeitungsformular; optionale Bild-/Emoji-Symbole; Standard- und eigene Farben für Alle; ganztägig, Zeitspanne oder feste Startzeit mit 15-Minuten-Ausblendung |
 | Geburtstage | Eigener Reiter; Name, Tag und Monat; optional Geburtsjahr und Person; jährliche Anzeige im Kalender als 🎂 Name mit optionalem Alter; Ersatzdatum für den 29. Februar wählbar |
 | Google Kalender | Mehrere Konten über OAuth; Kalenderauswahl und Personenzuordnung; importieren und Änderungen zurückschreiben; Wiederholungsversuche bei Verbindungsfehlern |
-| Aufgaben und Routinen | Allgemein und Bereiche für alle Personen; gemeinsamer Personenfilter im Header mit Punkten unter dem Namen; Drag-and-drop auf Spalten und Headerprofile, Touch-Griff und Zuordnungsdialog; optionales Aufgabenbild; einmalig, täglich, werktags oder wöchentlich |
+| Aufgaben und Routinen | Allgemein und Bereiche für alle Personen; gemeinsamer Personenfilter im Header mit Punkten unter dem Namen; Drag-and-drop auf Spalten und Headerprofile, Touch-Griff und Zuordnungsdialog; optionales Aufgabenbild und Emoji-Auswahl; einmalig, täglich, werktags oder wöchentlich |
 | Punkte und Belohnungen | Eigener Belohnungsreiter; Einlösen und Historie; manuelle Punkte mit Begründung und Elternpasswort; einmalige Gutschrift pro Erledigung |
 | Essen und Rezepte | Umschaltbare waagerechte/senkrechte Woche; Frühstück, Mittag und Abendbrot für jeden Tag; Rezepte per Drag-and-drop oder Bildkarten auswählen; Vorschaubilder aus Upload oder Import; Portionen, Zutaten, Zubereitung und Rezeptlink-Import |
 | Einkauf | Zutaten skalieren und zusammenführen; erneut übernehmen ohne Verdopplung; manuelle Ergänzungen und Abhaken |
 | Listen und Notizen | Eigene Checklisten, Kategorien, Mengen und angeheftete Notizen |
 | Fotos | Nur auf dem Gerät gespeicherte Bilder; Container-Ordner und Upload; Netzwerk-Bilderliste; Immich-Alben; Diashow mit Uhr |
 | Profile und Darstellung | Mittige Profile mit Initialen oder eigenen Bildern; größere Uhr; Hintergrundbild, sieben anpassbare Farben und Kalenderdichte; gemeinsame Einstellungen und gesicherte Bilder |
-| Geräte | Responsive Weboberfläche für Handy, Tablet, PC und Wandbildschirm; manueller Vollbildmodus |
-| Betrieb | SQLite, systemd für LXC, optional Docker; Update-Knopf im LXC mit vorheriger Sicherung, Rücksetzen und Ergebnisanzeige; Sicherungsskript und Datenexport |
+| Wetter | Anzeige neben der Uhr; verborgene Wetteransicht mit aktueller Lage, nächsten Stunden und 14 Tagen; bis zu acht gespeicherte Orte und auswählbarer Headerort |
+| Geräte | Responsive Weboberfläche; manueller Vollbildmodus; pro Browser einstellbarer Inaktivitätswechsel zum dunklen Ruhebildschirm oder Bilderrahmen, Berührung zum Zurückkehren; Wake Lock auf unterstützten HTTPS-Geräten |
+| Betrieb | SQLite, systemd für LXC, optional Docker; Update-Knopf im LXC mit vorheriger Sicherung, Rücksetzen und Ergebnisanzeige; automatische Abmeldung und Änderungsübersicht nach Updates; Sicherungsskript und Datenexport |
 
 Unter **Essen & Rezepte → Rezeptlink importieren** einen direkten Rezeptlink einfügen, die Vorschau prüfen und speichern. Der Import liest öffentlich angebotene Rezeptdaten, etwa von Seiten wie Chefkoch, sofern die betreffende Seite diese Daten ausliefert und den Serverabruf zulässt. Quellenlink, Zutaten, Zubereitung und ein verfügbares Rezeptbild werden lokal gespeichert. Eigene Rezeptbilder lassen sich beim Anlegen oder Bearbeiten hochladen. Bei **Auswählen** und **Ändern** erscheinen Rezepte als Bildkarten. Nicht jede Webseite lässt sich automatisch auslesen; eine manuelle Eingabe bleibt möglich. Details in [INTEGRATIONS.md](docs/INTEGRATIONS.md#rezepte-aus-dem-internet).
 
 **Wichtig zum Entwicklungsstand:** Google- und Immich-Anbindungen sind implementiert, aber noch nicht gegen deine Konten bzw. deine Instanz getestet. Google wird alle fünf Minuten abgeglichen; neue Änderungen werden zusätzlich sofort zum Versand angestoßen. Dies ist kein Echtzeit-Push. Der Google-Abruf umfasst 90 Tage Vergangenheit und 366 Tage Zukunft. Wiederkehrende Google-Termine werden in diesem Zeitraum als einzelne Vorkommen angezeigt und einzeln bearbeitet. Geburtstage wiederholen sich lokal jedes Jahr; allgemeine lokale Terminserien sind noch nicht enthalten. Wiederkehrende Aufgaben sind enthalten.
+
+**Wetter einrichten:** Neben der Uhr auf „Wetter“ tippen, Ort suchen und hinzufügen. Weitere Orte lassen sich dort auswählen und für die Kopfzeile festlegen. Der optionale Abruf verwendet Open-Meteo und benötigt Internet; der übrige Organizer bleibt ohne Wetterdienst nutzbar.
+
+**Tabletmodus:** Unter **Einstellungen → Dieses Gerät · Tabletmodus** Wartezeit, Ruhebildschirm oder Bilderrahmen und Fotoquelle einstellen. Ein Browser kann das Display nicht selbst ausschalten oder Hardware-Aufwecken erzwingen; im Ruhemodus wird die Displaysperre freigegeben. Das Wachhalten benötigt HTTPS und Browserunterstützung. Details: [Bedienung](docs/PLANER.md#wetter-und-weitere-orte), [Integrationen](docs/INTEGRATIONS.md#wetter).
 
 ## Installation auf Proxmox LXC
 
@@ -126,7 +131,7 @@ Die vollständige Anleitung steht in [docs/LXC.md](docs/LXC.md). Ein unprivilegi
 3. `bash scripts/install-lxc.sh` ausführen; Debian-Pakete, Node.js 24 und der systemd-Dienst werden automatisch eingerichtet.
 4. `http://CONTAINER-IP:8080` öffnen und Familie einrichten.
 
-Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Anwendung und Update-Dienst starten nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf Proxmox gemeldet; 0.5.1 ist auf dem Zielsystem noch zu prüfen. Der [Update-Befehl vom Proxmox-Host](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) lädt den vollständigen neuen Stand in denselben Container.
+Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Anwendung und Update-Dienst starten nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf Proxmox gemeldet; 0.6.0 ist auf dem Zielsystem noch zu prüfen. Der [Update-Befehl vom Proxmox-Host](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) lädt den vollständigen neuen Stand in denselben Container.
 
 Anschließend unter **Einstellungen → Elternpasswort** ein eigenes Passwort anlegen. **Update** startet Sicherung, Download und Installation im Hintergrund; bei Erfolg oder Fehler erscheint der Status dort. Der separate lokale Dienst arbeitet während des Anwendungsneustarts weiter. Details und Diagnose: [Updates über die Oberfläche](docs/LXC.md#updates-über-die-oberfläche).
 

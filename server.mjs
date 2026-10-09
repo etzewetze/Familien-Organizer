@@ -10,11 +10,12 @@ import { Photos } from './src/photos.mjs';
 import { importRecipe } from './src/recipe-import.mjs';
 import { UpdaterClient } from './src/updater-client.mjs';
 import { seed } from './src/seed.mjs';
+import { Weather, weatherLocations } from './src/weather.mjs';
+import { VERSION, releases } from './public/releases.js';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
 const hash = value => createHash('sha256').update(value).digest('hex');
-const VERSION = '0.5.1';
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
 function passwordHash(password, salt = randomBytes(16).toString('hex')) {
   return { salt, hash: scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString('hex') };
@@ -23,12 +24,41 @@ function validPassword(value) { check(typeof value === 'string' && value.length 
 
 export function createApp(env = process.env, services = {}) {
   const store = new Store(env.DATA_DIR || join(ROOT, 'data'));
+  const version = services.version || VERSION;
+  const previousVersion = store.meta('appVersion', '');
+  if (previousVersion !== version) store.transaction(() => {
+    store.db.prepare('DELETE FROM sessions').run();
+    store.db.prepare('DELETE FROM oauth_states').run();
+    store.setMeta('previousAppVersion', previousVersion);
+    store.setMeta('appVersion', version);
+  });
   const model = new Model(store), google = new GoogleSync(store, model, env);
   const photos = new Photos(store, env.PHOTO_DIR || join(store.directory, 'photos'));
   const taskPhotos = new Photos(store, join(store.directory, 'task-images'));
   const uiPhotos = new Photos(store, join(store.directory, 'ui-images'));
   const updater = services.updater || new UpdaterClient(env.UPDATER_SOCKET);
   const loadRecipe = services.importRecipe || importRecipe;
+  const weather = services.weather || new Weather();
+  const now = services.now || Date.now;
+  let updateCheck, updateCheckedAt = -Infinity, lastUpdateStatus;
+  async function completedUpdate(force = false) {
+    if (updateCheck) return updateCheck;
+    if (!force && now() - updateCheckedAt < 3000) return lastUpdateStatus;
+    updateCheck = (async () => {
+      try {
+        const value = await updater.status(); lastUpdateStatus = value;
+        if (value.phase === 'success' && value.installedVersion === version && typeof value.finishedAt === 'string' && !Number.isNaN(Date.parse(value.finishedAt)) && store.meta('lastSuccessfulUpdate') !== value.finishedAt) {
+          store.transaction(() => {
+            store.db.prepare('DELETE FROM sessions').run(); store.db.prepare('DELETE FROM oauth_states').run();
+            store.setMeta('lastSuccessfulUpdate', value.finishedAt);
+          });
+        }
+        return value;
+      } catch { return { supported: false, phase: 'unavailable', message: 'Der Updatedienst ist gerade nicht erreichbar.' }; }
+      finally { updateCheckedAt = now(); updateCheck = null; }
+    })();
+    return updateCheck;
+  }
   let activeRecipeImports = 0;
   const failures = new Map();
   const parentFailures = new Map();
@@ -92,9 +122,9 @@ export function createApp(env = process.env, services = {}) {
     try {
       const url = new URL(req.url, 'http://localhost');
       const path = url.pathname;
-      if (path === '/api/health' && req.method === 'GET') return json(res, { ok: true, version: VERSION });
-      if (path === '/api/status' && req.method === 'GET') return json(res, { configured: !!store.meta('password'), authenticated: !!session(req), version: VERSION, googleConfigured: google.configured });
-      if (path.startsWith('/api/')) protectWrite(req);
+      if (path === '/api/health' && req.method === 'GET') return json(res, { ok: true, version });
+      if (path.startsWith('/api/')) { protectWrite(req); await completedUpdate(path === '/api/login'); }
+      if (path === '/api/status' && req.method === 'GET') return json(res, { configured: !!store.meta('password'), authenticated: !!session(req), version, googleConfigured: google.configured });
       if (path === '/api/setup' && req.method === 'POST') {
         check(!store.meta('password'), 'Diese Familienzentrale ist bereits eingerichtet.', 409);
         const data = await body(req);
@@ -127,16 +157,33 @@ export function createApp(env = process.env, services = {}) {
       }
       if (path.startsWith('/api/')) {
         const sessionHash = session(req);
-        check(sessionHash, 'Bitte anmelden.', 401);
+        if (!sessionHash) {
+          res.setHeader('Set-Cookie', 'family_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+          return json(res, { error: 'Bitte erneut anmelden. Nach einem Update werden alle Geräte abgemeldet.', code: 'SESSION_EXPIRED', version }, 401);
+        }
         if (path === '/api/logout' && req.method === 'POST') {
           store.db.prepare('DELETE FROM sessions WHERE hash=?').run(sessionHash);
           res.setHeader('Set-Cookie', 'family_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
           return json(res, { ok: true });
         }
-        if (path === '/api/state' && req.method === 'GET') return json(res, store.state());
+        if (path === '/api/state' && req.method === 'GET') return json(res, { ...store.state(), version });
+        if (path === '/api/changelog' && req.method === 'GET') return json(res, { version, previousVersion: store.meta('previousAppVersion', ''), changeId: version + ':' + store.meta('lastSuccessfulUpdate', ''), releases });
+        if (path === '/api/weather/search' && req.method === 'GET') return json(res, await weather.search(url.searchParams.get('q')));
+        if (path === '/api/weather/locations' && req.method === 'PUT') {
+          const data = await body(req);
+          check(data._revision === store.meta('revision'), 'Die Einstellungen wurden zwischenzeitlich geändert. Bitte neu laden.', 409);
+          const places = weatherLocations(data);
+          store.transaction(() => { store.setMeta('weather', places); store.bump(); });
+          return json(res, places);
+        }
+        if (path === '/api/weather/forecast' && req.method === 'GET') {
+          const place = store.meta('weather', { locations: [] }).locations.find(item => item.id === url.searchParams.get('location'));
+          check(place, 'Wetterort nicht gefunden. Bitte zuerst einen Ort hinzufügen.', 404);
+          return json(res, await weather.forecast(place));
+        }
         if (path === '/api/export' && req.method === 'GET') {
           res.setHeader('Content-Disposition', `attachment; filename="familien-daten-${today()}.json"`);
-          return json(res, { format: 'familien-organisierer-export', version: VERSION, exportedAt: new Date().toISOString(), ...store.state() });
+          return json(res, { format: 'familien-organisierer-export', version, exportedAt: new Date().toISOString(), ...store.state() });
         }
         if (path === '/api/password' && req.method === 'POST') {
           const data = await body(req), old = store.meta('password');
@@ -158,7 +205,11 @@ export function createApp(env = process.env, services = {}) {
           const data = await body(req); verifyParent(req, data.password);
           return json(res, model.awardPoints(data), 201);
         }
-        if (path === '/api/updates/status' && req.method === 'GET') return json(res, { ...await updater.status(), currentVersion: VERSION });
+        if (path === '/api/updates/status' && req.method === 'GET') {
+          const value = await completedUpdate(true);
+          if (!session(req)) return json(res, { error: 'Update abgeschlossen. Bitte erneut anmelden.', code: 'SESSION_EXPIRED', version }, 401);
+          return json(res, { ...value, currentVersion: version });
+        }
         if (path === '/api/updates/start' && req.method === 'POST') {
           const data = await body(req); verifyParent(req, data.password);
           return json(res, await updater.start(), 202);

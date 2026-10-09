@@ -1,5 +1,15 @@
 # Kalender, Bilder und Rezeptquellen
 
+## Wetter
+
+Das Wetter ist eine optionale externe Integration über [Open-Meteo](https://open-meteo.com/en/docs). Der private, nicht kommerzielle Familienbetrieb verwendet die öffentliche API ohne Schlüssel. Nutzungsbedingungen und Grenzen: [Open-Meteo Pricing](https://open-meteo.com/en/pricing). Ohne gespeicherten Ort werden keine Wetterdaten abgefragt; der Organizer funktioniert weiterhin ohne Wetterdienst.
+
+Die Ortssuche verwendet ausschließlich `https://geocoding-api.open-meteo.com/v1/search`, die Vorhersage ausschließlich `https://api.open-meteo.com/v1/forecast`. Der Container benötigt DNS und ausgehendes HTTPS zu diesen Hosts. Kalender, Namen der Familienmitglieder, Bilder, Passwörter und Browser-Cookies werden dafür nicht weitergereicht. Zur Ortssuche wird der eingegebene Suchtext, zum Wetterabruf werden die gewählten Koordinaten an den Anbieter gesendet. Keine automatische Standortfreigabe.
+
+Gemeinsame Ortsauswahl in der SQLite-Datenbank, maximal acht Orte. Forecast mit 14 Tagen, Celsius, km/h, mm und Unixzeiten; Zeitzone automatisch nach Koordinaten. Tagesdaten enthalten unter anderem Temperaturen, Niederschlag, Wind, UV-Index und Sonnenzeiten. Die aktuelle Lage stammt aus dem Wettermodell, nicht aus einem eigenen Außensensor. Ortssuche 30 Minuten und Vorhersage 15 Minuten zwischenspeichern; gleichzeitige Anfragen mehrerer Geräte bündeln. Bei Ausfällen letzter Stand maximal sechs Stunden mit Warnhinweis, dann Fehleranzeige. Antworten sind zeitlich und auf 2 MiB begrenzt; Weiterleitungen werden nicht verfolgt.
+
+Die Oberfläche nennt Open-Meteo als Wetterquelle und [GeoNames](https://www.geonames.org/) als Quelle der [Ortsdaten](https://open-meteo.com/en/docs/geocoding-api). Wettercode-Bezeichnungen, Rundung und Darstellung werden im Organizer verarbeitet. Die spätere native App kann dieselbe geschützte Server-API verwenden.
+
 ## Google Kalender
 
 Die Anwendung verwendet die offizielle Google Calendar API. Ohne diese Verbindung bleiben Kalender, Aufgaben, Fotos, Essen und Listen auf eurem eigenen Server nutzbar. Aktivierte Google-Kalender tauschen ihre Termine mit Google aus; die Google-Dienste bleiben dafür eine externe Abhängigkeit.
