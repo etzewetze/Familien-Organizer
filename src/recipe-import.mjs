@@ -1,5 +1,5 @@
 import { check } from './model.mjs';
-import { fetchPublicRecipePage } from './public-web.mjs';
+import { fetchPublicRecipePage, fetchPublicRecipeImage } from './public-web.mjs';
 
 const ENTITIES = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ', auml: 'ä', ouml: 'ö', uuml: 'ü', Auml: 'Ä', Ouml: 'Ö', Uuml: 'Ü', szlig: 'ß', frac12: '½', frac14: '¼', frac34: '¾', ndash: '–', mdash: '—' };
 function plain(value) {
@@ -15,6 +15,18 @@ function plain(value) {
 const oneLine = value => plain(value).replace(/\s+/g, ' ');
 const list = value => Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
 const isType = (value, type) => list(value?.['@type']).some(t => typeof t === 'string' && (t === type || /^https?:\/\/schema\.org\//.test(t) && t.split('/').pop() === type));
+
+function imageUrl(value, sourceUrl) {
+  for (const image of list(value).slice(0, 16)) {
+    const address = typeof image === 'string' ? image : image?.contentUrl || image?.url;
+    if (typeof address !== 'string' || !address.trim() || address.length > 2048) continue;
+    try {
+      const url = new URL(address.trim(), sourceUrl);
+      if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && url.toString().length <= 2048) return url.toString();
+    } catch {}
+  }
+  return '';
+}
 
 function recipeNodes(html) {
   const documents = [];
@@ -124,11 +136,16 @@ export function parseRecipePage(html, sourceUrl) {
       title: title.slice(0, 160), servings, minutes: Math.min(minutes, 1440),
       category: oneLine(list(recipe.recipeCategory)[0] || 'Hauptgericht').slice(0, 60) || 'Hauptgericht',
       ingredients: parsed.map(p => p.ingredient), instructions: steps.slice(0, 15000), sourceUrl,
-    }, warnings,
+    }, warnings, imageUrl: imageUrl(recipe.image, sourceUrl),
   };
 }
 
 export async function importRecipe(url, options) {
   const page = await fetchPublicRecipePage(url, options);
-  return parseRecipePage(page.html, page.sourceUrl);
+  const result = parseRecipePage(page.html, page.sourceUrl);
+  if (result.imageUrl) {
+    try { result.image = (await fetchPublicRecipeImage(result.imageUrl, options)).bytes; }
+    catch { result.warnings.push('Das Rezeptbild konnte nicht geladen werden. Du kannst ein eigenes Bild hinzufügen.'); }
+  }
+  return result;
 }

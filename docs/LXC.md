@@ -64,7 +64,7 @@ Nach erfolgreicher Installation im eigenen Netz `http://CONTAINER-IP:8080` öffn
 | `/var/lib/familien-organisierer` | Datenbank, Entschlüsselungsschlüssel und Standard-Fotoordner |
 | `/var/backups/familien-organisierer` | Private Updatesicherungen und vorheriger Quellcode |
 | `/var/lib/familien-organisierer/task-images` | Gemeinsame Aufgabenbilder |
-| `/var/lib/familien-organisierer/ui-images` | Profil- und Hintergrundbilder |
+| `/var/lib/familien-organisierer/ui-images` | Profil-, Hintergrund- und Rezeptbilder |
 | `/opt/familien-organisierer-updater` | Separater, root gehörender Update-Dienst |
 | `/etc/familien-organisierer-updater.json` | Private Konfiguration des Update-Dienstes |
 | `/var/lib/familien-organisierer-updater` | Letzter Update-Status und privates Protokoll |
@@ -128,7 +128,7 @@ Schlägt der Start fehl, stoppt das Skript die neue Version und stellt vorherige
 
 Kann der neue Dienst nicht sicher gestoppt werden oder schlägt eine Wiederherstellung fehl, kopiert das Skript keine Datenbank über einen laufenden Dienst. Es meldet den Fehler und behält Arbeitsordner und Sicherungen für die manuelle Wiederherstellung. Bei vollem oder defektem Speicher ist eine automatische Wiederherstellung nicht garantiert.
 
-Updatesicherungen, alte Laufzeiten und alte Quellcodekopien werden **nicht automatisch gelöscht**. Speicherplatz regelmäßig kontrollieren und nach geprüften Updates nicht mehr benötigte Stände entfernen. Bei künftigen Schemaänderungen gehören Datenbankmigrationen zur jeweiligen Version; 0.4.0 verwendet weiterhin Schema 1. Geburtstage und manuelle Punkte nutzen zusätzliche Datensatzarten; bestehende Mahlzeiten ohne Slot bleiben als Abendbrot lesbar. Vorhandene Tabellen und Daten bleiben bestehen.
+Updatesicherungen, alte Laufzeiten und alte Quellcodekopien werden **nicht automatisch gelöscht**. Speicherplatz regelmäßig kontrollieren und nach geprüften Updates nicht mehr benötigte Stände entfernen. Bei künftigen Schemaänderungen gehören Datenbankmigrationen zur jeweiligen Version; 0.5.0 verwendet weiterhin Schema 1. Geburtstage und manuelle Punkte nutzen zusätzliche Datensatzarten; bestehende Mahlzeiten ohne Slot bleiben als Abendbrot lesbar. Vorhandene Tabellen und Daten bleiben bestehen.
 
 ### Updates über die Oberfläche
 
@@ -136,7 +136,7 @@ Updatesicherungen, alte Laufzeiten und alte Quellcodekopien werden **nicht autom
 
 **Für weitere Updates:** In den Einstellungen **Update** drücken, das Elternpasswort eingeben und „Update starten“ wählen. Der Auftrag läuft im Hintergrund; Status und Ergebnis bleiben nach einem Seitenneuladen erhalten. Es wird der aktuelle öffentliche Stand von `etzewetze/Familien-Organizer` auf `main` geladen. Keine GitHub-Anmeldung, kein Token und kein Container-Neuaufbau.
 
-Vor dem Download entsteht eine Sicherung mit SQLite, Originalschlüssel, privater `.env`, Fotos, Aufgaben-, Profil- und Hintergrundbildern. Vor dem eigentlichen Wechsel legt der Installer zusätzlich seinen konsistenten Stand bei gestopptem Anwendungsdienst an. Beide Sicherungen bleiben unter `/var/backups/familien-organisierer` erhalten. Deshalb braucht der Container genügend Platz für die Sicherungen; wenn die Sicherung scheitert, wird keine neue Version installiert.
+Vor dem Download entsteht eine Sicherung mit SQLite, Originalschlüssel, privater `.env`, Fotos, Aufgaben-, Profil-, Hintergrund- und Rezeptbildern. Vor dem eigentlichen Wechsel legt der Installer zusätzlich seinen konsistenten Stand bei gestopptem Anwendungsdienst an. Beide Sicherungen bleiben unter `/var/backups/familien-organisierer` erhalten. Deshalb braucht der Container genügend Platz für die Sicherungen; wenn die Sicherung scheitert, wird keine neue Version installiert.
 
 Bei erfolgreichem Start erscheint die neue Version mit Erfolgsnachricht. Die Seite anschließend neu laden. Bei einem Installations- oder Startfehler wird der vorherige Stand wiederhergestellt; der Status enthält den Fehlergrund. Code, Konfiguration, Laufzeit und SQLite inklusive Schlüssel werden zurückgesetzt, vorhandene Bilddateien bleiben erhalten. Falls der innere Installer die Wiederherstellung nicht abschließen konnte, übernimmt der separate Update-Dienst eine zweite Wiederherstellung aus seinem privaten vorherigen Stand. Er überschreibt niemals eine Datenbank, wenn sich der Anwendungsdienst nicht sicher stoppen lässt.
 
@@ -163,7 +163,7 @@ cd /opt/familien-organisierer
 /opt/familien-organisierer-node/bin/node scripts/backup.mjs /var/backups/familien-organisierer/manual
 ```
 
-Die Sicherung enthält `family.sqlite`, `master.key`, Fotos, Aufgaben-, Profil- und Hintergrundbilder, `.env` und `backup.json`. Die SQLite-Backup-API erstellt auch bei laufender Anwendung einen konsistenten Datenbankstand. Bilder werden anschließend kopiert; für einen vollständig ruhenden Stand den Dienst vorher stoppen und danach wieder starten. Es ist kein täglicher Sicherungsjob eingerichtet. Proxmox-Backups des Containers zusätzlich nutzen; externe Bind-Mounts separat berücksichtigen.
+Die Sicherung enthält `family.sqlite`, `master.key`, Fotos, Aufgaben-, Profil-, Hintergrund- und Rezeptbilder, `.env` und `backup.json`. Die SQLite-Backup-API erstellt auch bei laufender Anwendung einen konsistenten Datenbankstand. Bilder werden anschließend kopiert; für einen vollständig ruhenden Stand den Dienst vorher stoppen und danach wieder starten. Es ist kein täglicher Sicherungsjob eingerichtet. Proxmox-Backups des Containers zusätzlich nutzen; externe Bind-Mounts separat berücksichtigen.
 
 **Datenbank und Original-`master.key` gehören zusammen.** Ohne diesen Schlüssel können gespeicherte Google-/Immich-Geheimnisse nicht entschlüsselt werden. Sicherungen enthalten Zugangsdaten und gehören auf privaten Speicher, nicht in GitHub.
 
@@ -206,7 +206,7 @@ Das Repository speichert Quellcode, Tests und `PROJECT_STATE.md`. `.env`, Laufze
 
 Der Quellcode liegt im öffentlichen Repository [etzewetze/Familien-Organizer](https://github.com/etzewetze/Familien-Organizer). Der Host-Installer kopiert ausschließlich Quellcode in den neuen LXC; GitHub-Anmeldedaten und Git-Metadaten werden nicht mitgegeben. Ein so übertragener Quellcodeordner ist kein Git-Checkout. Für spätere Updates einen neuen Stand in den bestehenden LXC übertragen oder dort selbst einen Git-Checkout außerhalb von `/opt/familien-organisierer` anlegen und `scripts/install-lxc.sh` ausführen. Den Host-Ersteller dafür nicht erneut aufrufen: Er erstellt einen neuen Container.
 
-Die Installer-Tests verwenden einen isolierten Dateibaum und nachgebildete Paket-, Konto- und systemd-Befehle. SHA-256-Prüfung, Kopiervorgänge und SQLite-Sicherung/Wiederherstellung werden tatsächlich ausgeführt. Der Update-Runner testet zusätzlich echte Sicherungen und Rückkopien bei nachgebildeten Git-/Dienstantworten. Das HTTP-Protokoll wird über Loopback geprüft; AF_UNIX-Listen ist im Executor gesperrt. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 gemeldet. Die Prüfung von 0.4.0 inklusive Socket-Dienst und Touch-Bedienung auf dem echten Proxmox steht aus.
+Die Installer-Tests verwenden einen isolierten Dateibaum und nachgebildete Paket-, Konto- und systemd-Befehle. SHA-256-Prüfung, Kopiervorgänge und SQLite-Sicherung/Wiederherstellung werden tatsächlich ausgeführt. Der Update-Runner testet zusätzlich echte Sicherungen und Rückkopien bei nachgebildeten Git-/Dienstantworten. Das HTTP-Protokoll wird über Loopback geprüft; AF_UNIX-Listen ist im Executor gesperrt. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 gemeldet. Die Prüfung von 0.5.0 inklusive Socket-Dienst und Touch-Bedienung auf dem echten Proxmox steht aus.
 
 Technische Referenzen: [Offizielle Node.js-Downloads](https://nodejs.org/en/download), [Node.js-Release-Verifikation](https://github.com/nodejs/node#verifying-binaries), [systemd-LXC-Erkennung](https://github.com/systemd/systemd/blob/main/man/systemd-detect-virt.xml).
 

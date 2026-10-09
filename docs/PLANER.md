@@ -20,6 +20,8 @@ Die Wochenansicht zeigt alle sieben Tage mit ausgeschriebenem Wochentag, Tag, Mo
 
 Termine stehen an ihrer Startzeit und sind entsprechend ihrer Dauer hoch: 07:00–09:00 erhält doppelt so viel Platz wie 07:00–08:00. Sich überschneidende Termine werden nebeneinander dargestellt. Ganztägige Termine und Geburtstage stehen in einer kompakten Zeile oberhalb des Zeitrasters. Die Zeile entfällt, wenn keine solchen Einträge vorhanden sind. Mehrtägige Zeitspannen werden pro Tag auf dessen sichtbare Stunden begrenzt.
 
+Geburtstage zeigen einen Kuchen und den Namen, etwa **🎂 Anna · 36 Jahre**. Ohne Geburtsjahr steht **🎂 Anna**. Das Alter wird für das angezeigte Kalenderjahr berechnet; auch Übersicht, Monats- und Listenansicht verwenden diese Anzeige.
+
 **Neuen Termin hinzufügen:**
 
 1. „Termin“ oben oder das Plus am gewünschten Tag drücken.
@@ -57,6 +59,10 @@ Es schützt manuelle Punkte und Software-Updates. Alle angemeldeten Familienger�
 Die Woche steht standardmäßig **waagerecht** mit sieben Tagen nebeneinander. Jeder Tag besitzt Frühstück, Mittag und Abendbrot untereinander. Auf schmalen Geräten die Woche seitlich scrollen. Mit **Senkrecht** auf Tage untereinander und die drei Mahlzeiten nebeneinander wechseln. Der Umschalter steht neben der Wochennavigation; die Auswahl wird für diesen Browser gespeichert und beim nächsten Öffnen verwendet.
 
 Eine Rezeptkarte in die passende Mahlzeit ziehen. Mit Touch den Griff verwenden, alternativ **Auswählen** bzw. **Ändern** drücken. Beim Ablegen in einem belegten Feld wird das bisherige Rezept ersetzt; dessen Portionszahl bleibt erhalten. Über **Ändern** lassen sich Rezept und Portionszahl prüfen oder die Mahlzeit entfernen. Beide Ausrichtungen verwenden dieselben Plandaten und Drag-Ziele.
+
+**Rezeptbilder:** Beim Anlegen oder Bearbeiten ein JPEG-, PNG-, WebP- oder GIF-Bild bis 5 MB auswählen. Die Vorschau erscheint sofort; **Speichern** übernimmt das Bild für alle Familiengeräte. Mit **Rezeptbild entfernen** die Bildzuordnung entfernen. Beim Linkimport wird ein verfügbares Rezeptbild mitgeladen; vor dem Speichern kann es ersetzt oder entfernt werden.
+
+**Auswahl mit Bildern:** **Auswählen** und **Ändern** öffnen Bildkarten mit Rezeptname, Dauer und Portionen. Die gewählte Karte erhält einen Farbrand und ein Häkchen. Mit Tippen, Klicken oder den Pfeiltasten zwischen den Rezepten wählen, Portionen anpassen und speichern. Beim Bearbeiten ist die bisherige Mahlzeit vorausgewählt. Rezeptbibliothek, geplante Mahlzeiten und die Rezeptansicht zeigen ebenfalls das Bild. Ohne verfügbares Bild bleibt ein Platzhalter sichtbar.
 
 Vorhandene Pläne aus älteren Versionen werden als Abendbrot angezeigt. Sie werden beim Update nicht gelöscht. Jede Mahlzeit wird unabhängig gespeichert; die Einkaufsliste berücksichtigt die Zutaten aller drei Mahlzeiten und skaliert nach Portionen. Wiederholtes Übernehmen derselben Woche verdoppelt die Zutaten nicht.
 

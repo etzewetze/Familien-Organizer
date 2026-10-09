@@ -45,7 +45,7 @@ Noch ausstehend: Live-Abnahme mit euren Konten, großen wiederkehrenden Serien, 
 
 ## Geburtstage
 
-Im Reiter **Geburtstage** Namen, Tag und Monat eintragen. Das Geburtsjahr ist optional; mit Jahr zeigt der Kalender zusätzlich das erreichte Alter an. Ein Geburtstag kann einem Familienmitglied zugeordnet werden, muss aber nicht. Hinweise lassen sich als Notiz speichern.
+Im Reiter **Geburtstage** Namen, Tag und Monat eintragen. Im Kalender erscheint **🎂 Name**. Das Geburtsjahr ist optional; mit Jahr steht zusätzlich das erreichte Alter daneben, beispielsweise **🎂 Anna · 36 Jahre**. Ein Geburtstag kann einem Familienmitglied zugeordnet werden, muss aber nicht. Hinweise lassen sich als Notiz speichern.
 
 Die Geburtstage erscheinen automatisch jedes Jahr in der Wochen-, Monats- und Listenansicht des Familienkalenders, auch in weit entfernten Jahren. Es werden keine jährlichen Kopien als Termine angelegt. Bearbeiten oder Löschen eines Geburtstags wirkt deshalb auf alle Kalenderjahre. Mit „Im Kalender ansehen“ zum nächsten Vorkommen springen.
 
@@ -57,16 +57,18 @@ Diese Wiederholung gehört zum lokalen Familienkalender. Geburtstage werden in d
 
 1. Unter **Essen & Rezepte** „Rezeptlink importieren“ öffnen.
 2. Die direkte Adresse eines öffentlich zugänglichen Rezepts einfügen und „Vorschau laden“ wählen.
-3. Titel, Portionen, Dauer, Zutatenmengen und Anleitung prüfen und bei Bedarf korrigieren.
+3. Titel, Portionen, Dauer, Zutatenmengen, Anleitung und ein mitgeladenes Rezeptbild prüfen und bei Bedarf korrigieren.
 4. Erst mit **Speichern** das Rezept übernehmen. Danach wie andere Rezepte dem Wochenplan zuordnen und Zutaten in die Einkaufsliste übernehmen.
 
 Der Import liest strukturierte Rezeptdaten im verbreiteten **JSON-LD-/schema.org-Recipe-Format**. Das kann auch bei Chefkoch und anderen Rezeptseiten funktionieren, sofern die konkrete Seite diese Daten bereitstellt und den Abruf durch euren Server zulässt. Es gibt keine Garantie für jeden Anbieter oder jede Seite. Eine Live-Abnahme mit Chefkoch auf dem Nutzer-LXC steht noch aus.
 
 Es wird die Quelladresse gespeichert; die Vorschau ist noch kein gespeichertes Rezept. Nicht erkannte Mengen, etwa „2–3 Tomaten“ oder „Salz nach Geschmack“, bleiben als Zutatentext erhalten und werden zur Prüfung markiert. Mengen mit Null werden beim Zusammenführen nicht als bekannte Einkaufsmenge behandelt. Vor dem Speichern die erkannten Portionen und Einheiten prüfen, damit die Skalierung im Essensplan stimmt.
 
+Wenn die strukturierten Daten ein Bild als URL, Liste oder `ImageObject` enthalten, lädt der Server ein unterstütztes Bild lokal in den Container. Relative Bildadressen und öffentliche Bild-CDNs sind möglich. Die Oberfläche verwendet danach die geschützte lokale Kopie. Ein fehlendes, gesperrtes oder ungeeignetes Bild verhindert den Rezeptimport nicht; die Vorschau zeigt gegebenenfalls einen Hinweis. Ein eigenes JPEG-, PNG-, WebP- oder GIF-Bild bis 5 MB kann ergänzt werden. Alte Rezepte ohne Bild lassen sich über **Bearbeiten** ergänzen.
+
 Wenn die Seite keine passenden Daten enthält, den Abruf sperrt oder erst im Browser nachlädt, die manuelle Eingabe verwenden. Der Quelllink kann dabei erhalten bleiben. Anmeldung, Paywalls und Zugriffssperren werden nicht umgangen.
 
-Der Abruf erfolgt vom LXC, ohne externe Importdienste. Unterstützt werden öffentliche HTTP-/HTTPS-Adressen auf den Standardports 80/443. Lokale IP-Adressen, private Netze, Zugangsdaten in URLs und Weiterleitungen dorthin werden abgewiesen. Browser-Cookies werden nicht weitergegeben; Antwortgröße und Abrufzeit sind begrenzt. Diese Beschränkung betrifft Rezeptimporte; eure privaten Bildquellen bleiben über die dafür vorgesehenen Einstellungen nutzbar.
+Der Abruf erfolgt vom LXC, ohne externe Importdienste. Unterstützt werden öffentliche HTTP-/HTTPS-Adressen auf den Standardports 80/443. Lokale IP-Adressen, private Netze, Zugangsdaten in URLs und Weiterleitungen dorthin werden abgewiesen. Alle DNS-Adressen werden vor jeder Verbindung geprüft und die Verbindung verwendet die geprüfte IP. Browser-Cookies werden nicht weitergegeben. Rezeptseiten sind auf 2 MB und 18 Sekunden, importierte Bilder auf 5 MB und 8 Sekunden begrenzt; auch entpackte Antworten bleiben begrenzt. SVG und andere nicht unterstützte Bildformate werden abgewiesen. Diese Beschränkung betrifft Rezeptimporte; eure privaten Bildquellen bleiben über die dafür vorgesehenen Einstellungen nutzbar.
 
 ## Fotos nur auf dem Gerät
 

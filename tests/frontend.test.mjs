@@ -60,9 +60,13 @@ test('Geburtstage erscheinen in allen Kalenderansichten und öffnen den Geburtst
   run("S.serverDate='2026-10-07';cursor=S.serverDate;S.birthdays=[{id:'birthday-one',_rev:1,name:'Anna <b>Test</b>',month:10,day:7,birthYear:1990,memberId:'',leapDay:'mar1',notes:'Kuchen'}]");
   for (const mode of ['week', 'month', 'agenda']) {
     const html = run(`calendarMode='${mode}';calendarPage()`);
-    assert.ok(html.includes('Anna &lt;b&gt;Test&lt;/b&gt;')); assert.ok(html.includes('36 Jahre'));
+    assert.ok(html.includes('🎂 Anna &lt;b&gt;Test&lt;/b&gt;')); assert.ok(html.includes('36 Jahre'));
     assert.ok(html.includes('data-edit="birthdays" data-id="birthday-one"')); assert.ok(!html.includes('data-id="birthday-birthday-one-2026"'));
   }
+  assert.ok(run('homePage()').includes('🎂 Anna &lt;b&gt;Test&lt;/b&gt; · 36 Jahre'));
+  run('S.birthdays[0].birthYear=null');
+  for (const mode of ['week', 'month', 'agenda']) { const html = run(`calendarMode='${mode}';calendarPage()`); assert.ok(html.includes('🎂 Anna &lt;b&gt;Test&lt;/b&gt;')); assert.ok(!html.includes('36 Jahre')); }
+  run('S.birthdays[0].birthYear=1990');
   assert.ok(run('birthdaysPage()').includes('Heute!'));
   run("cursor='2030-10-07';calendarMode='week'"); assert.ok(run('calendarPage()').includes('40 Jahre'));
   run("editRecord('birthdays','birthday-one')"); assert.ok(elements.get('#editor').innerHTML.includes('value="1990"')); assert.ok(elements.get('#editor').innerHTML.includes('name="leapDay"'));
@@ -76,7 +80,7 @@ test('Rezeptimport öffnet eine maskierte editierbare Vorschau und überschreibt
   run('openRecipeImport()'); assert.ok(elements.get('#editor').innerHTML.includes('recipe-import-form'));
   await run("loadRecipeImport('https://rezepte.example/pasta')");
   const html = elements.get('#editor').innerHTML;
-  assert.ok(html.includes('record-form')); assert.ok(html.includes('200 | g | Nudeln | Vorrat')); assert.ok(html.includes('Rezeptimport · Vorschau')); assert.ok(html.includes('&lt;script&gt;Test&lt;/script&gt;')); assert.ok(!html.includes('<img'));
+  assert.ok(html.includes('record-form')); assert.ok(html.includes('200 | g | Nudeln | Vorrat')); assert.ok(html.includes('Rezeptimport · Vorschau')); assert.ok(html.includes('&lt;script&gt;Test&lt;/script&gt;')); assert.ok(!html.includes('<img src=x onerror=alert(1)>')); assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
   assert.equal(requests.length, 1); assert.equal(requests[0].url, '/api/recipes/import');
   assert.equal(run('S.recipes.length'), 3);
   let release;
@@ -183,4 +187,63 @@ test('Darstellung speichern lädt das Hintergrundbild zuerst und erhält die Ein
   const writes = calls.filter(call => call.options.method !== 'GET');
   assert.equal(writes[0].url,'/api/images/ui'); assert.equal(writes[1].url,'/api/settings');
   const sent = JSON.parse(writes[1].options.body); assert.equal(sent.backgroundImage,image); assert.equal(sent.headerColor,'#224466'); assert.equal(sent._revision,revision); assert.equal(sent.calendarHourSize,52); assert.equal(sent.calendarAutoWidth,true);
+});
+
+test('Rezeptauswahl zeigt sichere Bildkarten und wählt beim Bearbeiten das geplante Rezept vor', async t => {
+  const { run, elements, context, listeners } = fixture(t), calls = [];
+  context.fetch = async (url, options) => { calls.push({ url, options }); return { ok:true,json:async()=>url==='/api/state'?context.initialState:{} }; };
+  run("S.recipes[1].imageFile='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png';S.recipes[1].title='Pasta <script>Test</script>';S.meals=[{id:'planned',_rev:9,date:S.serverDate,slot:'lunch',recipeId:S.recipes[1].id,servings:3}];openMeal(S.serverDate,'lunch')");
+  const html = elements.get('#editor').innerHTML, id = run('S.recipes[1].id');
+  assert.ok(html.includes('recipe-picker')); assert.ok(html.includes('type="radio"')); assert.ok(!html.includes('<select'));
+  assert.ok(html.includes(`value="${id}" checked`)); assert.equal((html.match(/ checked/g)||[]).length,1);
+  assert.ok(html.includes('/api/images/ui?file=aaaaaaaa')); assert.ok(html.includes('Pasta &lt;script&gt;Test&lt;/script&gt;')); assert.ok(!html.includes('<script>')); assert.ok(html.includes('Kein Bild'));
+  for(const view of ['mealsPage()','viewRecipe(S.recipes[1].id);editor.innerHTML']) assert.ok(run(view).includes('/api/images/ui?file=aaaaaaaa'));
+  run("openMeal(S.serverDate,'lunch')");
+  await listeners.get('submit')[0]({target:{id:'meal-form',fields:{recipeId:id,servings:'5'},querySelector:()=>({disabled:false})},preventDefault(){}});
+  const sent=JSON.parse(calls.find(c=>c.url==='/api/records/meals/planned').options.body);
+  assert.equal(sent.recipeId,id); assert.equal(sent.servings,'5'); assert.equal(sent.slot,'lunch'); assert.equal(sent._rev,9); assert.equal(sent.date,run('S.serverDate'));
+  run("S.recipes[0].imageFile='https://fremd.example/bild.jpg'"); assert.ok(!run('recipePicture(S.recipes[0])').includes('<img'));
+});
+
+test('Rezeptbilder bleiben aus der Importvorschau erhalten; Upload und Entfernen speichern die passende Referenz', async t => {
+  const { run, elements, context } = fixture(t), calls = [], imageFile = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png';
+  context.fetch = async (url, options) => { calls.push({url,options});return {ok:true,json:async()=>url==='/api/state'?context.initialState:{imageFile}}; };
+  const fields = { title:'Pasta',servings:'4',minutes:'20',category:'Hauptgericht',ingredientsText:'400 | g | Nudeln | Vorrat',instructions:'Kochen',sourceUrl:'' };
+  context.recipeFields=fields;
+  run(`editRecord('recipes','',{imageFile:'${imageFile}',_imported:true})`);
+  assert.ok(elements.get('#editor').innerHTML.includes('/api/images/ui?file=aaaaaaaa'));
+  await run('saveEditor({fields:recipeFields})');
+  assert.equal(calls[0].url,'/api/records/recipes'); assert.equal(JSON.parse(calls[0].options.body).imageFile,imageFile);
+  calls.length=0;
+  run("editRecord('recipes',S.recipes[0].id)"); const revision=run('editing.old._rev');
+  elements.set('#recipe-image-input',{files:[{size:20,type:'image/png'}]});
+  await run('saveEditor({fields:recipeFields})');
+  assert.equal(calls[0].url,'/api/images/ui'); assert.equal(calls[0].options.headers['X-Family-Request'],'1'); assert.ok(calls[1].url.startsWith('/api/records/recipes/'));
+  assert.equal(JSON.parse(calls[1].options.body).imageFile,imageFile); assert.equal(JSON.parse(calls[1].options.body)._rev,revision);
+  calls.length=0;
+  run("editRecord('recipes',S.recipes[0].id)");
+  await run("saveEditor({fields:{...recipeFields,removeRecipeImage:'on'}})");
+  assert.ok(calls[0].url.startsWith('/api/records/recipes/')); assert.equal(JSON.parse(calls[0].options.body).imageFile,'');
+});
+
+test('Rezeptbild-Vorschau lässt sich entfernen und fehlende Bilder zeigen den Platzhalter', async t => {
+  const { run, context, elements, listeners }=fixture(t);
+  context.imageFile=new Blob(['Eigenes Testbild'],{type:'image/png'});
+  run("editRecord('recipes','',{imageFile:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png'})");
+  run("previewRecipeImage({id:'recipe-image-input',files:[imageFile]})");
+  assert.ok(elements.get('#recipe-image-preview').src.startsWith('blob:')); assert.equal(elements.get('#recipe-image-preview').hidden,false);
+  elements.get('[name=removeRecipeImage]').checked=true;run("previewRecipeImage({name:'removeRecipeImage'})");assert.equal(elements.get('#recipe-image-preview').hidden,true);
+  run("editRecord('notes')");assert.equal(run('recipePreviewUrl'),'');
+  const image={hidden:false,matches:selector=>selector.includes('[data-recipe-image]')};
+  listeners.get('error')[0]({target:image});assert.equal(image.hidden,true);
+});
+
+test('Ein abgeschlossener Rezeptbild-Upload überschreibt keinen inzwischen gewechselten Dialog', async t => {
+  const { context, run, elements }=fixture(t), calls=[];let release;
+  context.fetch=(url,options)=>{calls.push({url,options});return new Promise(resolve=>{release=resolve;});};
+  run("editRecord('recipes')");elements.set('#recipe-image-input',{files:[{size:20,type:'image/png'}]});
+  const saving=run("saveEditor({fields:{title:'Pasta',servings:'4',minutes:'20',ingredientsText:'400 | g | Nudeln'}})");
+  run("editRecord('notes')");const nextDialog=elements.get('#editor').innerHTML;
+  release({ok:true,json:async()=>({imageFile:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png'})});await saving;
+  assert.equal(calls.length,1);assert.equal(calls[0].url,'/api/images/ui');assert.equal(elements.get('#editor').innerHTML,nextDialog);
 });

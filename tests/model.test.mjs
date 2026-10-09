@@ -87,3 +87,18 @@ test('Fehlerhafte Eingaben und fremde Referenzen werden abgelehnt', t => {
   assert.throws(() => model.save('rewards', '', { title: 'Falsch', cost: 0 }), /Zahl/);
   assert.throws(() => model.save('recipes', '', { title: 'Falsch', ingredients: [], sourceUrl: 'javascript:alert(1)' }), /HTTP/);
 });
+
+test('Rezeptbilder bleiben bei älteren Formularen erhalten, sind entfernbar und akzeptieren keine fremden Pfade', t => {
+  const { model, store } = fixture(t), imageFile = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.png';
+  const recipe = model.save('recipes', '', { title: 'Pasta', servings: 4, minutes: 0, ingredients: [], imageFile });
+  assert.equal(recipe.imageFile, imageFile); assert.equal(recipe.minutes, 0);
+  const { imageFile: omitted, ...oldForm } = recipe;
+  const updated = model.save('recipes', recipe.id, { ...oldForm, title: 'Pasta mit Bild' });
+  assert.equal(updated.imageFile, imageFile); assert.equal(store.state().recipes[0].imageFile, imageFile);
+  assert.throws(() => model.save('recipes', recipe.id, { ...recipe, imageFile: '' }), { status: 409 });
+  for (const imageFile of ['../master.key', 'https://fremd.example/bild.jpg', 'bild.svg', 'data:image/png;base64,test']) {
+    assert.throws(() => model.save('recipes', recipe.id, { ...updated, imageFile }), /Rezeptbild/);
+  }
+  assert.equal(model.save('recipes', recipe.id, { ...updated, imageFile: '' }).imageFile, '');
+  assert.equal(model.save('recipes', '', { title: 'Altes Rezept', ingredients: [] }).imageFile, '');
+});

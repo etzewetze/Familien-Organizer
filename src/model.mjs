@@ -112,7 +112,9 @@ export class Model {
       case 'recipes': {
         check(Array.isArray(data.ingredients) && data.ingredients.length <= 100, 'Maximal 100 Zutaten je Rezept.');
         const ingredients = data.ingredients.map(i => ({ name: text(i.name, 100, true), quantity: number(i.quantity, 0, 100000), unit: text(i.unit, 30), category: text(i.category || 'Sonstiges', 50) }));
-        return { title: title(), servings: number(data.servings || 4, 1, 100, true), minutes: number(data.minutes || 30, 0, 1440, true), category: text(data.category || 'Hauptgericht', 60), ingredients, instructions: text(data.instructions, 15000), sourceUrl: networkUrl(data.sourceUrl) };
+        const imageFile = text(data.imageFile ?? old?.imageFile, 100);
+        check(!imageFile || isImageFile(imageFile), 'Ungültiges Rezeptbild.');
+        return { title: title(), servings: number(data.servings || 4, 1, 100, true), minutes: number(data.minutes ?? 30, 0, 1440, true), category: text(data.category || 'Hauptgericht', 60), ingredients, instructions: text(data.instructions, 15000), sourceUrl: networkUrl(data.sourceUrl), imageFile };
       }
       case 'meals': {
         check(this.store.get('recipes', data.recipeId), 'Rezept nicht gefunden.');

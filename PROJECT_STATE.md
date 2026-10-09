@@ -1,7 +1,7 @@
 # Projektstand und Fortsetzung
 
 **Projekt:** Familien Organisierer  
-**Stand:** 2026-10-08, Version 0.4.0, Datenbankschema 1
+**Stand:** 2026-10-09, Version 0.5.0, Datenbankschema 1
 **Repository:** https://github.com/etzewetze/Familien-Organizer, öffentlich, Branch `main`
 
 ## Ziel und verbindliche Vorgaben
@@ -12,7 +12,9 @@ Der Nutzer hat das Repository und das Hochladen ausdrücklich autorisiert. Keine
 
 **Container 100 läuft laut Nutzer inzwischen. Diesen erhalten und aktualisieren.** Kein Neuaufbau und keine Löschung. Es besteht kein direkter Zugang zum Proxmox des Nutzers; er führt die dokumentierten Host-Befehle aus. Root-Zugang vom Host mit `pct enter 100`; ein eigenes Root-Passwort ist optional mit `pct exec 100 -- passwd root` einstellbar. Kein voreingestelltes Root-Passwort und keine Verbindung zum Familienpasswort.
 
-## Geliefert in 0.4.0
+## Geliefert in 0.5.0
+
+Neu gegenüber 0.4.0: Rezeptbilder in Bibliothek, Rezeptansicht und Essensplan; antippbare Bildkarten statt Textauswahl bei Auswählen/Ändern; eigene Bilder hochladen/entfernen und verfügbare Bilder aus JSON-LD lokal importieren. Geburtstage erscheinen in allen Kalenderansichten und der Übersicht als 🎂 Name mit Alter, sofern ein Geburtsjahr vorhanden ist. Der restliche Funktionsumfang bleibt erhalten.
 
 Node.js-Server mit SQLite-WAL, deutscher Weboberfläche und API, ohne externe npm-Laufzeitabhängigkeiten oder Build-Schritt. Node >=22.13, Node 24 empfohlen und vom Installer separat eingerichtet. Familienname, Mitglieder und Familienpasswort werden beim ersten Start angelegt. Gemeinsame Daten werden auf geöffneten Geräten alle 15 Sekunden nachgeladen. Zehn Ansichten: Heute, Kalender, Geburtstage, Aufgaben, Belohnungen, Essen & Rezepte, Listen, Notizen, Bilderrahmen und Einstellungen.
 
@@ -27,7 +29,7 @@ Node.js-Server mit SQLite-WAL, deutscher Weboberfläche und API, ohne externe np
 - Mittige Headerprofile mit Initialen oder privaten Profilbildern und persönlichem Farbring; größere Uhr rechts, auch auf schmalen Geräten. Profilbilder beim Bearbeiten der Person hochladen/entfernen. Ein gemeinsamer Personenfilter für Übersicht, Kalender, Geburtstage und Aufgaben; doppelte Filterleisten entfernt. Alte Einzelzuordnungen bleiben lesbar.
 - Bestehende Termine öffnen ein vollständiges Bearbeitungsformular, neue Termine weiterhin den Assistenten. Standardfarbe für Alle gemeinsam konfigurierbar; eine eigene Terminfarbe kann sie überschreiben.
 - Darstellungseinstellungen: Hintergrund, Header, Karten/Formulare, Menü, Akzente, Text und Standardfarbe für Alle; optionales Hintergrundbild. Vorschau während der Auswahl, Speichern für alle Geräte, Standardwerte wiederherstellbar. Profil-/Hintergrundbilder bis 5 MB in `DATA_DIR/ui-images`, geschützter HTTP-Zugang und Sicherung.
-- Monats- und Listenansicht sowie jährliche Geburtstage aus 0.2.0 bleiben erhalten. Geburtsjahr optional, Alter und wählbare Schalttagsregel; keine gespeicherten jährlichen Terminkopien.
+- Monats- und Listenansicht sowie jährliche Geburtstage aus 0.2.0 bleiben erhalten. Anzeige 🎂 Name mit Alter des angezeigten Kalenderjahres, wenn ein Geburtsjahr vorhanden ist; ohne Jahr nur Kuchen und Name. Ein Jahr erscheint als „1 Jahr“. Wählbare Schalttagsregel; keine gespeicherten jährlichen Terminkopien.
 
 Google: mehrere Konten, Kalenderauswahl, Personenzuordnung, Abgleich alle fünf Minuten und persistente Versandwarteschlange. Mehrfachzuordnungen, Starttermine und eigene Farben für Alle werden über private Google-Metadaten erhalten. Beliebige Hex-Farben ändern nicht die Google-Farbpalette. Weil Google ein Ende verlangt, erhält ein Starttermin dort eine 15-Minuten-Spanne; lokal bleibt die Darstellung ohne Ende. Ein Vergleich von Array-Inhalten verhindert unnötige Revisionsänderungen beim Nachladen. Lesegeschützte Google-Termine sind auch serverseitig gegen Bearbeitung geschützt.
 
@@ -48,26 +50,28 @@ Die Essenswoche steht standardmäßig waagerecht, mit einem Umschalter zur senkr
 
 Rezeptimport aus öffentlicher URL mit editierbarer JSON-LD-Vorschau aus 0.2.0 bleibt erhalten. Abruf mit geprüften und fest gebundenen DNS-Adressen, Weiterleitungsprüfung und Größen-/Zeitlimits. Keine Browser-Cookies oder Zugangsdaten weiterreichen. Chefkoch und andere Seiten müssen abrufbare strukturierte Daten bereitstellen; echter Chefkoch-Import auf dem Nutzer-LXC ist noch nicht abgenommen.
 
+Rezeptbilder aus Upload oder JSON-LD (`image` als URL/Array/ImageObject, auch relative Adresse oder öffentliches CDN) werden in `DATA_DIR/ui-images` gespeichert und über die bestehende geschützte Bild-API ausgeliefert. Kein externes Bild im Browser. JPEG, PNG, WebP, GIF; bis 5 MB. Importbilder nutzen dieselbe öffentliche DNS-/Redirect-Prüfung wie Rezeptseiten, maximal 8 Sekunden und begrenzte Entpackung. Bildfehler ergeben einen Hinweis und erhalten die Rezeptvorschau. Die Rezeptdaten werden erst beim Speichern übernommen; das Vorschau-/Uploadbild kann bereits als Datei vorhanden sein. Keine automatische Löschung unreferenzierter Bilddateien. Ältere Rezepte bleiben bildlos lesbar und können nachträglich ergänzt werden; ausgelassene Bildfelder in alten Bearbeitungsanfragen erhalten die vorhandene Referenz. Bibliothek und Auswahldialog zeigen Platzhalter bei fehlenden Bildern. Native Radiofelder in Bildkarten ermöglichen Touch/Klick/Tastatur; bestehendes Rezept ist vorausgewählt, Mahlzeit/Slot/Portionen/Revision bleiben erhalten. Ein veralteter Upload darf keinen neuen Dialog überschreiben.
+
 Listen, Notizen, lokale Gerätefotos in IndexedDB, Container-Fotouploads, Netzwerk-Bilderlisten und Immich-Alben bleiben vorhanden. Native App und Stundenpläne sind spätere Aufgaben.
 
 ## Updates, Installation und Sicherungen
 
 Der öffentliche vollständige Checkout kann ohne GitHub-Passwort im bestehenden LXC geklont bzw. aktualisiert werden. Der innere Installer erhält Daten, Konfiguration, Fotos und Schlüssel; separate Node-24-Laufzeit, Dienstbenutzer, systemd, Versions-/HTTP-Startprüfung und automatische Rücksetzung bei fehlgeschlagenem Start bleiben enthalten.
 
-**Ab laufendem 0.3.0 mit Updatedienst genügt Einstellungen → Update für 0.4.0. Bei einem älteren Stand muss der vollständige Checkout einmal mit `scripts/install-lxc.sh` installiert werden.** Alleiniges Kopieren des Installers reicht wegen der neuen Module nicht. Der genaue Befehl für Container 100 steht in `docs/LXC.md` unter „Update des öffentlichen Projekts vom Proxmox-Host“. Danach Browser neu laden und unter Einstellungen ein Elternpasswort anlegen. Künftige Updates werden mit **Update** in der Oberfläche gestartet.
+**Ab laufendem 0.3.0 mit Updatedienst genügt Einstellungen → Update für 0.5.0. Bei einem älteren Stand muss der vollständige Checkout einmal mit `scripts/install-lxc.sh` installiert werden.** Alleiniges Kopieren des Installers reicht wegen der neuen Module nicht. Der genaue Befehl für Container 100 steht in `docs/LXC.md` unter „Update des öffentlichen Projekts vom Proxmox-Host“. Danach Browser neu laden und unter Einstellungen ein Elternpasswort anlegen. Künftige Updates werden mit **Update** in der Oberfläche gestartet.
 
 Der Web-Update-Dienst besitzt fest konfigurierte Pfade und ein festes Repository; die Oberfläche darf keine Shellbefehle oder Downloadadressen übergeben. Ein privater Unix-Socket erlaubt nur Status und einen leeren Startauftrag. API-Zugang verlangt Familienanmeldung, CSRF-Prüfung und zum Start das Elternpasswort.
 
 Wichtige Pfade:
 
 - Anwendung `/opt/familien-organisierer`, Laufzeit-Link `/opt/familien-organisierer-node`.
-- Daten `/var/lib/familien-organisierer`, Fotos standardmäßig darunter `photos`, Aufgabenbilder darunter `task-images`, Profil-/Hintergrundbilder darunter `ui-images`.
+- Daten `/var/lib/familien-organisierer`, Fotos standardmäßig darunter `photos`, Aufgabenbilder darunter `task-images`, Profil-/Hintergrund-/Rezeptbilder darunter `ui-images`.
 - Sicherungen `/var/backups/familien-organisierer` einschließlich `web-updates` und `updates`; keine automatische Löschung alter Sicherungen.
 - Unabhängiger root-eigener Helfercode `/opt/familien-organisierer-updater`.
 - Root-Konfiguration `/etc/familien-organisierer-updater.json`, Status/Protokoll `/var/lib/familien-organisierer-updater`, privat mit 0700/0600.
 - Dienst `familien-organisierer-updater.service`, Socket `/run/familien-organisierer-update/control.sock`, Gruppe `family-organizer`, Socketmodus 0660.
 
-Der Helfer erstellt vor dem Download eine echte SQLite-Sicherung einschließlich Originalschlüssel, `.env`, Fotos, Aufgaben-, Profil- und Hintergrundbildern. Der Installer erstellt zusätzlich nach Stoppen des Anwendungsdienstes eine ruhende Sicherung sowie Code-/Laufzeit-/Dienstsicherung. Dafür ausreichend freien Speicher vorhalten. Bei Fehlern stellt der Installer den vorherigen Stand wieder her; ein zusätzlicher Helfer-Rückfall stellt Code, Datenbank, Schlüssel, Laufzeit und Dienst wieder her, wenn nötig. Bilderordner werden bei der Installation nicht ersetzt. Eine Datenbank wird niemals über einen nicht sicher gestoppten Dienst zurückkopiert.
+Der Helfer erstellt vor dem Download eine echte SQLite-Sicherung einschließlich Originalschlüssel, `.env`, Fotos, Aufgaben-, Profil-, Hintergrund- und Rezeptbildern. Der Installer erstellt zusätzlich nach Stoppen des Anwendungsdienstes eine ruhende Sicherung sowie Code-/Laufzeit-/Dienstsicherung. Dafür ausreichend freien Speicher vorhalten. Bei Fehlern stellt der Installer den vorherigen Stand wieder her; ein zusätzlicher Helfer-Rückfall stellt Code, Datenbank, Schlüssel, Laufzeit und Dienst wieder her, wenn nötig. Bilderordner werden bei der Installation nicht ersetzt. Eine Datenbank wird niemals über einen nicht sicher gestoppten Dienst zurückkopiert.
 
 Statusmeldungen zeigen Sicherung, Download, Installation, Rücksetzung, Erfolg oder Fehlergrund. Fehlgeschlagene Rücksetzung erhält Arbeitskopien und Sicherungen. Nach Prozessunterbrechung wird kein Erfolg behauptet und kein Update blind wiederholt. Der Anwendungsdienst darf während des Updates kurz nicht erreichbar sein; die Oberfläche lädt den Status danach erneut und meldet bei längerer Unterbrechung, dass kein Ergebnis abrufbar ist.
 
@@ -77,25 +81,27 @@ Der Host-Ersteller bleibt für **neue** Container verfügbar: Proxmox >=8 x86_64
 
 ## Prüfstand und Grenzen
 
-**Vollständiger Lauf von `npm test` für den aktuellen 0.4.0-Code: 92 Tests bestanden, keine Fehler oder übersprungenen Tests.** Darunter 64 Anwendungstests, sechs Update-Protokoll-/Sicherungs-/Rücksetztests, zwölf Installer-/Konfigurationstests und zehn Proxmox-Hosttests.
+**Vollständiger Lauf von `npm test` für den aktuellen 0.5.0-Code: 101 Tests bestanden, keine Fehler oder übersprungenen Tests.** Darunter 73 Anwendungstests, sechs Update-Protokoll-/Sicherungs-/Rücksetztests, zwölf Installer-/Konfigurationstests und zehn Proxmox-Hosttests.
+
+Ein erster Gesamtlauf meldete einen nicht reproduzierten Fehler im bestehenden Installer-Rücksetztest. Der Einzeltest und der vollständige Wiederholungslauf bestanden; der Installercode wurde für diese Version nicht geändert.
 
 Syntaxprüfung für 33 JavaScript-Dateien einschließlich 19 Laufzeit-/Skriptmodulen, beide Bash-Installer und 36 Bash-Blöcke der Anleitungen bestanden; `git diff --check` ohne Fehler.
 
-Prüfungen umfassen Bild- und Farbvalidierung, Profilbilder und Hintergrundbilder über zwei Sitzungen, CSRF und Pfad-/Symlinkschutz, Upload vor Referenzspeicherung, gemeinsames Bearbeitungsformular und Layoutumschalter, variable Stundenachse und deren Umrechnung beim Scrollen, Zeitraster und Überlappungen, 15-Minuten-Ausblenden, Terminassistent, Mehrfachpersonen, ursprüngliche Drag-Revisionen, drei unabhängige Mahlzeiten und Altdaten, geschützte manuelle Punkte und Updates, Bilderzugriff, Google-Metadaten und stabile Revisionen. Tatsächliche Dateioperationen, WAL-Sicherung und Rücksetzung von SQLite, Originalschlüssel und Code werden ausgeführt. Paket-/systemd-/Git-Downloadbefehle verwenden isolierte Testersatzprogramme. Der Protokolltest verwendet einen echten HTTP-Server über Loopback mit injiziertem Clienttransport; die konfigurierte Socketadresse wird geprüft.
+Prüfungen umfassen Rezeptbildformen aus JSON-LD, CDN-Import und Rückfall bei Bildfehlern, DNS-/Redirect-/Format-/Größen-/Entpackungs-/Zeitlimits einschließlich echtem begrenztem HTTP-Bildstream, private Rezeptbilder über zwei Sitzungen, Bildkarten und Mahlzeitvorauswahl, Upload/Importreferenz/Entfernen und veraltete Uploadantworten. Geburtstag mit Kuchen/Name/Alter oder ohne Geburtsjahr in Übersicht, Woche, Monat und Liste. Weiterhin Bild- und Farbvalidierung, Profilbilder und Hintergrundbilder über zwei Sitzungen, CSRF und Pfad-/Symlinkschutz, Upload vor Referenzspeicherung, gemeinsames Bearbeitungsformular und Layoutumschalter, variable Stundenachse und deren Umrechnung beim Scrollen, Zeitraster und Überlappungen, 15-Minuten-Ausblenden, Terminassistent, Mehrfachpersonen, ursprüngliche Drag-Revisionen, drei unabhängige Mahlzeiten und Altdaten, geschützte manuelle Punkte und Updates, Bilderzugriff, Google-Metadaten und stabile Revisionen. Tatsächliche Dateioperationen, WAL-Sicherung und Rücksetzung von SQLite, Originalschlüssel und Code werden ausgeführt. Paket-/systemd-/Git-Downloadbefehle verwenden isolierte Testersatzprogramme. Der Protokolltest verwendet einen echten HTTP-Server über Loopback mit injiziertem Clienttransport; die konfigurierte Socketadresse wird geprüft.
 
 **Keine echte visuelle Browser- oder Touch-Abnahme.** In der Umgebung ist kein Browser ausführbar. Ansichts- und Dialoglogik werden ohne Browser getestet; responsive CSS und Touch-Pointer-Logik sind implementiert, aber noch nicht auf realen Geräten abgenommen. Keine geprüften Screenshots.
 
-**Keine Live-Abnahme von 0.4.0 auf Proxmox/systemd/Unix-Socket.** Unix-Sockets lassen sich in dieser Entwicklungsumgebung nicht binden. Die Prüfungen ersetzen weder die realen Socketrechte noch LXC-UID-Zuordnung, AppArmor und systemd. Google und Immich werden mit kontrollierten Ersatzantworten getestet, keine realen Nutzerkonten. Docker wurde nicht auf einer Zielmaschine geprüft; der neue Web-Updatedienst ist für LXC vorgesehen.
+**Keine Live-Abnahme von 0.5.0 auf Proxmox/systemd/Unix-Socket.** Unix-Sockets lassen sich in dieser Entwicklungsumgebung nicht binden. Die Prüfungen ersetzen weder die realen Socketrechte noch LXC-UID-Zuordnung, AppArmor und systemd. Google und Immich werden mit kontrollierten Ersatzantworten getestet, keine realen Nutzerkonten. Docker wurde nicht auf einer Zielmaschine geprüft; der neue Web-Updatedienst ist für LXC vorgesehen.
 
 Weitere Grenzen: gemeinsamer Familienzugang; Google-Polling statt Push (90 Tage zurück/366 voraus), keine allgemeine lokale Terminserie oder vollständige Google-Konfliktoberfläche. Keine Offlinebearbeitung gemeinsamer Daten, keine Push-Erinnerungen. Gerätefotos bleiben lokal. Netzwerkfotos benötigen ein JSON-Manifest, keine allgemeine SMB-/WebDAV-Verzeichnis-Erkennung. Vollständige Wiederherstellung erfolgt mit SQLite und Originalschlüssel, keine Restore-Oberfläche. Große langfristige Datenmengen sind noch nicht unter Last geprüft.
 
 ## Nächste Schritte auf dem Zielsystem
 
-1. Bestehenden Container 100 über den eingerichteten Update-Knopf auf 0.4.0 bringen; falls noch ein Stand vor 0.3.0 läuft, einmal den vollständigen Checkout per Installer übertragen. Browser neu laden; Daten und Elternpasswort erhalten.
+1. Bestehenden Container 100 über den eingerichteten Update-Knopf auf 0.5.0 bringen; falls noch ein Stand vor 0.3.0 läuft, einmal den vollständigen Checkout per Installer übertragen. Browser neu laden; Daten und Elternpasswort erhalten.
 2. Browser-Abnahme bei 390×844, 768×1024 und 1440×900 sowie auf dem Wanddisplay. Hoch-/Querformat, lange Namen, 200 % Schrift und Touch prüfen.
 3. Mittige Profile und eigene Profilbilder, Standard-/eigene Farben für Alle, Theme und Hintergrundbild, beide Essensausrichtungen prüfen. Im Kalender variable und gleichmäßige Stunden, leere Tagesbreiten, vollständiges Bearbeitungsformular, 07:00–08:00 und 07:00–09:00, Überlappungen, feste Zeit ohne Ende, ganztägig/mehrtägig, Tages-Plus und mehrere Personen prüfen. Aufgabenbild, Checkbox, Ziehen Allgemein → Person und alle drei Mahlzeiten testen.
 4. Web-Updatedienst: Start nach Containerneustart, echte Socketrechte, Sicherungen, Statusanzeige und kontrollierte Fehler-/Rücksetzprobe auf einer Testkopie prüfen. Keine künstlichen Updatefehler auf der einzigen Familieninstallation provozieren.
-5. Google-OAuth für die eigene Domain und Konten, gemeinsame Kalender, Leserechte, Ausfall/Wiederverbindung und DST; Immich-Version und reale Album-/Bild-Endpunkte prüfen. Echten öffentlichen Rezeptlink testen.
+5. Google-OAuth für die eigene Domain und Konten, gemeinsame Kalender, Leserechte, Ausfall/Wiederverbindung und DST; Immich-Version und reale Album-/Bild-Endpunkte prüfen. Echten öffentlichen Rezeptlink mit Bildimport testen. Rezeptbild hochladen/entfernen, Bildauswahl für alle Mahlzeiten und Geburtstag mit/ohne Jahr in jeder Kalenderansicht prüfen.
 6. Danach die Webversion weiter festigen; Stundenpläne nach konkreten Anforderungen, native App erst nach ausreichend fertiger Webversion.
 
 ## Dateien zum Einstieg
@@ -112,6 +118,6 @@ Weitere Grenzen: gemeinsamer Familienzugang; Google-Polling statt Push (90 Tage 
 
 ## GitHub, Kontingent und Wiederaufnahme
 
-0.4.0 wird als zusammenhängender Commit auf `main` veröffentlicht, aufbauend auf dem vorhandenen 0.3.0-Stand (GitHub `4b51c098b9e5f87ef5c3b2b140cf43ba219ac9f8`, Tree `3a3dde5f75007f53ccacbb29324e19adb71bcff1`). Branch-Aktualisierung gegen den erwarteten Kopf prüfen und bei Konflikten niemals blind erzwingen. Lokale und über die GitHub-Verbindung erzeugte Commitkennungen können bei identischem Dateibaum abweichen; den Tree und Inhalte vergleichen. Die Veröffentlichung ist kein Nachweis der Installation auf dem Nutzer-LXC.
+Die Veröffentlichung von 0.5.0 auf `main` baut auf dem vorhandenen 0.4.0-Stand auf (GitHub `b30e220fc007faab90ba0517b0926c03d2f31b9f`, Tree `78423ab6da49038d2ba4d430d23f4b2ae4850a35`). Branch-Aktualisierung gegen den erwarteten Kopf prüfen und bei Konflikten niemals blind erzwingen. Lokale und über die GitHub-Verbindung erzeugte Commitkennungen können bei identischem Dateibaum abweichen; den Tree und Inhalte vergleichen. Die Veröffentlichung ist kein Nachweis der Installation auf dem Nutzer-LXC.
 
 Verbleibendes ChatGPT-Nutzungsvolumen kann hier nicht verlässlich ausgelesen werden; keine automatische Wiederaufnahme eingerichtet. Bei Unterbrechung GitHub und diese Datei für die nächste Sitzung verwenden. Fortsetzung: „Setze Familien Organisierer anhand von PROJECT_STATE.md fort.“ Nicht neu beginnen, vorhandene Daten und Einstellungen bewahren, relevante Prüfungen nach Änderungen ausführen und diesen Stand aktualisieren.

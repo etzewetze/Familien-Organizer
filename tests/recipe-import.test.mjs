@@ -44,3 +44,27 @@ test('URL-Import verwendet die endgültige geprüfte Quelle und speichert keinen
   const result = await importRecipe(source, { lookup: async () => [{ address: '8.8.8.8', family: 4 }], load: async () => ({ status: 200, headers: { 'content-type': 'text/html' }, bytes: Buffer.from(html(recipe)) }) });
   assert.equal(result.recipe.sourceUrl, source); assert.equal(result.recipe.ingredients.length, 4);
 });
+
+test('Rezeptbilder werden aus URL, Array und ImageObject mit relativer Adresse gelesen', () => {
+  for (const image of ['/bilder/pasta.jpg', [null, 'javascript:alert(1)', '/bilder/pasta.jpg'], { '@type': 'ImageObject', url: '/bilder/pasta.jpg' }, [{ '@type': 'ImageObject', contentUrl: '/bilder/pasta.jpg' }]]) {
+    assert.equal(parseRecipePage(html({ ...recipe, image }), source).imageUrl, 'https://rezepte.example/bilder/pasta.jpg');
+  }
+  for (const image of [undefined, 'javascript:alert(1)', 'data:image/png;base64,test', 'https://user:secret@rezepte.example/bild.jpg', { '@type': 'ImageObject' }]) assert.equal(parseRecipePage(html({ ...recipe, image }), source).imageUrl, '');
+});
+
+test('Rezeptimport lädt ein geprüftes CDN-Bild und erhält das Rezept bei blockierter oder defekter Bildquelle', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yG90AAAAASUVORK5CYII=', 'base64');
+  const seen = [], lookup = async () => [{ address: '8.8.8.8', family: 4 }];
+  const load = async (url, address, options) => { seen.push({url:url.toString(),address,options}); return url.hostname === 'cdn.example' ? { status:200,headers:{'content-type':'image/png'},bytes:png } : { status:200,headers:{'content-type':'text/html'},bytes:Buffer.from(html({...recipe,image:'https://cdn.example/pasta.png'})) }; };
+  const result = await importRecipe(source, { lookup, load });
+  assert.deepEqual(result.image, png); assert.equal(result.recipe.title, 'Familien-Pasta'); assert.equal(seen.length, 2); assert.equal(seen[1].address.address, '8.8.8.8'); assert.equal(seen[1].options.maxBytes, 5 * 1024 * 1024);
+  for (const image of ['http://192.168.178.1/bild.png', 'https://cdn.example/defekt.png']) {
+    let imageRequests = 0;
+    const result = await importRecipe(source, { lookup, load: async url => {
+      if (url.toString() === source) return { status:200,headers:{'content-type':'text/html'},bytes:Buffer.from(html({...recipe,image})) };
+      imageRequests++; return {status:403,headers:{}};
+    } });
+    assert.equal(result.recipe.title, 'Familien-Pasta'); assert.equal(result.image, undefined); assert.ok(result.warnings.some(w=>w.includes('Rezeptbild')));
+    assert.equal(imageRequests, image.startsWith('http://192.') ? 0 : 1);
+  }
+});

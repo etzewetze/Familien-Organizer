@@ -192,3 +192,35 @@ dialog.wide .person-choice-grid{grid-template-columns:repeat(auto-fit,minmax(150
 .hour-row{position:absolute;left:0;right:0;border-bottom:1px solid var(--line);pointer-events:none}
 .time-event.start-only{padding:0 4px}
 .time-event.start-only strong{line-height:1.1}
+/* Private Rezeptbilder und antippbare Auswahlkarten. */
+.recipe-picture{position:relative;display:block;width:100%;aspect-ratio:16/10;overflow:hidden;border-radius:10px;background:var(--soft);color:var(--muted)}
+.recipe-picture-fallback{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:var(--soft)}
+.recipe-picture-fallback svg{width:32px;height:32px;color:var(--primary);opacity:.7}
+.recipe-picture-fallback small{font-size:.72rem}
+.recipe-picture img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;background:var(--surface)}
+.recipe-picture img[hidden]{display:none}
+.recipe-image-button{display:block;width:100%;padding:0;margin-bottom:16px;border-radius:10px;text-align:left}
+.recipe-image-button:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+.recipe-detail-picture{margin-bottom:18px;max-height:320px;aspect-ratio:16/9}
+.recipe-image-preview{width:min(100%,350px);height:190px;object-fit:cover;border-radius:10px;margin:10px 0}
+.meal-title{width:100%;overflow-wrap:anywhere}
+.meal-picture{height:68px;aspect-ratio:auto;margin-bottom:7px;border-radius:7px}
+.meal-picture .recipe-picture-fallback small{display:none}
+.meal-picture .recipe-picture-fallback svg{width:22px;height:22px}
+.recipe-picker{border:0;padding:0;margin:0 0 20px;min-width:0}
+.recipe-picker legend{font-weight:650;margin-bottom:12px}
+.recipe-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;max-height:52vh;max-height:52dvh;overflow-y:auto;overscroll-behavior:contain;padding:4px}
+.recipe-option{position:relative;display:block;min-width:0;cursor:pointer}
+.recipe-option input{position:absolute;width:1px;height:1px;opacity:0}
+.recipe-choice{position:relative;display:flex;height:100%;flex-direction:column;background:var(--surface);border:2px solid var(--line);border-radius:12px;overflow:hidden}
+.recipe-choice .recipe-picture{border-radius:9px 9px 0 0}
+.recipe-choice-body{display:flex;flex-direction:column;gap:6px;padding:12px;min-width:0}
+.recipe-choice-body strong{font-size:.9rem;line-height:1.4;overflow-wrap:anywhere}
+.recipe-choice-body>span{font-size:.72rem;color:var(--muted)}
+.recipe-option input:checked+.recipe-choice{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.recipe-option input:focus-visible+.recipe-choice{outline:3px solid var(--primary);outline-offset:2px}
+.recipe-check{position:absolute;right:8px;top:8px;display:none;place-items:center;width:27px;height:27px;border-radius:50%;background:var(--primary);color:var(--primary-ink);box-shadow:0 1px 5px #0003}
+.recipe-check svg{width:18px;height:18px}
+.recipe-option input:checked+.recipe-choice .recipe-check{display:grid}
+@media(max-width:760px){.recipe-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.recipe-choice-body{padding:10px}.recipe-choice-body strong{font-size:.82rem}.recipe-card{padding:16px}.recipe-image-preview{height:160px}}
+@media(max-width:360px){.recipe-options{grid-template-columns:1fr}}

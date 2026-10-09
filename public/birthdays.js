@@ -12,7 +12,7 @@ export function birthdayOccurrence(birthday, year) {
   const age = birthday.birthYear ? year - birthday.birthYear : null;
   return {
     id: `birthday-${birthday.id}-${year}`, birthdayId: birthday.id,
-    title: `Geburtstag: ${birthday.name}${age > 0 ? ` · ${age} Jahre` : ''}`,
+    title: `🎂 ${birthday.name}${age !== null ? ` · ${age} ${age === 1 ? 'Jahr' : 'Jahre'}` : ''}`,
     startDate: date, endDate: date, startTime: '', endTime: '', allDay: true,
     memberId: birthday.memberId || '', location: '', description: birthday.notes || '', age,
   };

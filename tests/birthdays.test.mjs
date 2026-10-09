@@ -14,11 +14,15 @@ test('Geburtstage erscheinen jährlich mit Alter und ohne begrenzten Zeitraum', 
     assert.equal(event.startDate, `${year}-10-07`); assert.equal(event.endDate, event.startDate);
     assert.equal(event.age, year - 1990); assert.equal(event.allDay, true); assert.equal(event.memberId, 'member');
     assert.equal(event.birthdayId, birthday.id); assert.match(event.title, new RegExp(String(year - 1990)));
+    assert.equal(event.title, `🎂 Anna · ${year - 1990} Jahre`);
     assert.equal(birthdaysOnDate([birthday], event.startDate).length, 1);
     assert.equal(birthdaysOnDate([birthday], `${year}-10-08`).length, 0);
   }
   assert.equal(birthdayOccurrence(birthday, 1989), null);
   assert.equal(birthdayOccurrence({ ...birthday, birthYear: null }, 2026).age, null);
+  assert.equal(birthdayOccurrence({ ...birthday, birthYear: null }, 2026).title, '🎂 Anna');
+  assert.equal(birthdayOccurrence(birthday, 1990).title, '🎂 Anna · 0 Jahre');
+  assert.equal(birthdayOccurrence(birthday, 1991).title, '🎂 Anna · 1 Jahr');
 });
 test('29. Februar berücksichtigt Schaltjahre und wählbare Ersatztermine', () => {
   const leap = { ...birthday, month: 2, day: 29, birthYear: null };

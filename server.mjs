@@ -14,7 +14,7 @@ import { seed } from './src/seed.mjs';
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
 const hash = value => createHash('sha256').update(value).digest('hex');
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
 function passwordHash(password, salt = randomBytes(16).toString('hex')) {
   return { salt, hash: scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString('hex') };
@@ -182,7 +182,14 @@ export function createApp(env = process.env, services = {}) {
           activeRecipeImports++;
           try {
             const result = await loadRecipe(text(data.url, 2048, true));
-            return json(res, { recipe: model.validate('recipes', result.recipe), warnings: result.warnings });
+            const recipe = model.validate('recipes', result.recipe), warnings = [...result.warnings];
+            if (result.image) {
+              try {
+                check(Buffer.isBuffer(result.image) && result.image.length <= 5 * 1024 * 1024, 'Das Rezeptbild ist zu groß.');
+                recipe.imageFile = uiPhotos.upload(result.image).name;
+              } catch { warnings.push('Das Rezeptbild konnte nicht gespeichert werden. Du kannst ein eigenes Bild hinzufügen.'); }
+            }
+            return json(res, { recipe, warnings });
           } finally { activeRecipeImports--; }
         }
         const recordRoute = path.match(/^\/api\/records\/([a-z]+)(?:\/([a-zA-Z0-9-]{1,100}))?$/);

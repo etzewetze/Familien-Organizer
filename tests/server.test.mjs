@@ -78,10 +78,12 @@ test('HTTP: Anmeldung, Gerätesynchronisierung, Konflikte, CSRF und private Bild
 
 test('HTTP: Geburtstage sind synchronisiert; Rezeptimport bleibt bis zum Speichern eine geschützte Vorschau', async t => {
   const directory = mkdtempSync(join(tmpdir(), 'family-features-'));
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yG90AAAAASUVORK5CYII=', 'base64');
   let imports = 0;
   const app = createApp({ DATA_DIR: directory }, { importRecipe: async url => {
     imports++;
-    return parseRecipePage(JSON.stringify({ '@type': 'Recipe', name: 'Eigene Testpasta', recipeYield: '4 Portionen', totalTime: 'PT20M', recipeIngredient: ['400 g Nudeln'], recipeInstructions: 'Nudeln kochen.' }), url);
+    const result = parseRecipePage(JSON.stringify({ '@type': 'Recipe', name: 'Eigene Testpasta', recipeYield: '4 Portionen', totalTime: 'PT20M', recipeIngredient: ['400 g Nudeln'], recipeInstructions: 'Nudeln kochen.' }), url);
+    return {...result,image:url.endsWith('/defekt')?Buffer.from('kein Bild'):png};
   } });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${app.server.address().port}`;
@@ -96,13 +98,24 @@ test('HTTP: Geburtstage sind synchronisiert; Rezeptimport bleibt bis zum Speiche
   assert.equal(birthdayResponse.status, 201); const birthday = await birthdayResponse.json();
   const login = await request('/api/login', 'POST', { password: 'test-password-2026' }), secondCookie = login.headers.get('set-cookie').split(';')[0];
   const second = await (await request('/api/state', 'GET', undefined, { Cookie: secondCookie })).json(); assert.equal(second.birthdays[0].id, birthday.id); assert.equal(second.events.length, 0);
-  const exported = await (await request('/api/export')).json(); assert.equal(exported.birthdays[0].birthYear, 1990); assert.equal(exported.version, '0.4.0');
+  const exported = await (await request('/api/export')).json(); assert.equal(exported.birthdays[0].birthYear, 1990); assert.equal(exported.version, '0.5.0');
   assert.equal((await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }, { Origin: 'https://foreign.example' })).status, 403); assert.equal(imports, 0);
   const previewResponse = await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }); assert.equal(previewResponse.status, 200);
   const preview = await previewResponse.json(); assert.equal(preview.recipe.sourceUrl, 'https://rezepte.example/pasta'); assert.equal(preview.recipe.ingredients[0].quantity, 400);
+  assert.match(preview.recipe.imageFile,/\.png$/); assert.equal(preview.image,undefined); assert.equal(preview.imageUrl,undefined);
+  const imagePath='/api/images/ui?file='+preview.recipe.imageFile;
+  assert.equal((await fetch(base+imagePath)).status,401);
+  const otherImage=await request(imagePath,'GET',undefined,{Cookie:secondCookie});
+  assert.equal(otherImage.headers.get('content-type'),'image/png');assert.deepEqual(Buffer.from(await otherImage.arrayBuffer()),png);
   assert.equal(app.store.all('recipes').length, 0); assert.equal(imports, 1);
   const savedResponse = await request('/api/records/recipes', 'POST', preview.recipe); assert.equal(savedResponse.status, 201);
   const saved = await savedResponse.json();
+  assert.equal(saved.imageFile,preview.recipe.imageFile);
+  assert.equal((await (await request('/api/state','GET',undefined,{Cookie:secondCookie})).json()).recipes[0].imageFile,saved.imageFile);
+  const failedImagePreview=await (await request('/api/recipes/import','POST',{url:'https://rezepte.example/defekt'})).json();
+  assert.equal(failedImagePreview.recipe.title,'Eigene Testpasta');assert.equal(failedImagePreview.recipe.imageFile,'');assert.ok(failedImagePreview.warnings.some(w=>w.includes('Rezeptbild')));
+  assert.equal(app.store.all('recipes').length,1);
+  assert.equal((await request('/api/records/recipes/'+saved.id,'PUT',{...saved,imageFile:'../master.key'})).status,400);
   assert.equal((await request('/api/records/meals', 'POST', { date: '2026-10-05', recipeId: saved.id, servings: 2 })).status, 201);
   assert.equal((await request('/api/shopping/generate', 'POST', { week: '2026-10-05' })).status, 200);
   assert.equal(app.store.all('items')[0].quantity, 200); assert.equal(app.store.all('items')[0].title, 'Nudeln');

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { gzipSync } from 'node:zlib';
-import { isPublicAddress, fetchPublicRecipePage, requestPinnedPage } from '../src/public-web.mjs';
+import { isPublicAddress, fetchPublicRecipePage, fetchPublicRecipeImage, requestPinnedPage } from '../src/public-web.mjs';
 
 const page = '<html><title>Eigenes Testrezept</title></html>';
 const ok = { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' }, bytes: Buffer.from(page) };
@@ -63,4 +63,33 @@ test('HTTP-Transport bricht übergroße angekündigte Seiten vor dem Lesen ab', 
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   await assert.rejects(requestPinnedPage(new URL(`http://recipe.test:${server.address().port}/`), { address: '127.0.0.1', family: 4 }), { status: 413 });
+});
+
+test('Rezeptbilder prüfen jedes Redirect und alle DNS-Adressen und begrenzen Format, Größe und Wartezeit', async () => {
+  const image = {status:200,headers:{'content-type':'image/png'},bytes:Buffer.from([137,80,78,71,13,10,26,10])};
+  let connected = 0;
+  const load = async () => { connected++; return image; };
+  await assert.rejects(fetchPublicRecipeImage('http://127.0.0.1/bild.png', {lookup:publicDns,load}));
+  await assert.rejects(fetchPublicRecipeImage('https://cdn.example/bild.png', {lookup:async()=>[{address:'8.8.8.8',family:4},{address:'192.168.178.1',family:4}],load}));
+  assert.equal(connected,0);
+  await assert.rejects(fetchPublicRecipeImage('https://cdn.example/bild.png',{lookup:publicDns,load:async()=>({status:302,headers:{location:'https://127.0.0.1/bild.png'}})}));
+  await assert.rejects(fetchPublicRecipeImage('https://cdn.example/bild.png',{lookup:publicDns,load:async()=>({...image,headers:{'content-type':'image/svg+xml'}})}),{status:415});
+  await assert.rejects(fetchPublicRecipeImage('https://cdn.example/bild.png',{lookup:publicDns,load:async()=>({...image,bytes:Buffer.alloc(5*1024*1024+1)})}),{status:413});
+  await assert.rejects(fetchPublicRecipeImage('https://cdn.example/bild.png',{lookup:publicDns,load:async()=>({...image,headers:{'content-type':'image/png','content-encoding':'gzip'},bytes:gzipSync(Buffer.alloc(5*1024*1024+1))})}),{status:413});
+  await assert.rejects(fetchPublicRecipeImage('https://cdn.example/bild.png',{lookup:async()=>{await new Promise(r=>setTimeout(r,40));return publicDns();},load,timeout:5}),{status:504});
+  const result=await fetchPublicRecipeImage('https://cdn.example/bild.png',{lookup:publicDns,load});
+  assert.deepEqual(result.bytes,image.bytes);assert.equal(result.sourceUrl,'https://cdn.example/bild.png');
+});
+
+test('Bildtransport hält die 5-MB-Grenze bei angekündigten und gestreamten Antworten ein', async t => {
+  const server=createServer((req,res)=>{
+    res.writeHead(200,{'content-type':'image/png',...(req.url==='/announced'?{'content-length':6*1024*1024}:{})});
+    if(req.url==='/announced')res.end('too big');
+    else res.end(Buffer.alloc(5*1024*1024+(req.url==='/large'?1:0)));
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(()=>new Promise(resolve=>server.close(resolve)));
+  const options={maxBytes:5*1024*1024,accept:'image/png'},address={address:'127.0.0.1',family:4};
+  for(const path of ['/announced','/large'])await assert.rejects(requestPinnedPage(new URL(`http://image.test:${server.address().port}${path}`),address,options),{status:413});
+  assert.equal((await requestPinnedPage(new URL(`http://image.test:${server.address().port}/ok`),address,options)).bytes.length,5*1024*1024);
 });

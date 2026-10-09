@@ -45,7 +45,7 @@ let calendarMode = 'week', taskMode = 'all', activeList = 'shopping';
 let mealLayout = localStorage.getItem('mealLayout') === 'vertical' ? 'vertical' : 'horizontal';
 let photoSource = localStorage.getItem('photoSource') || 'local', photoItems = [], photoLoaded = false, photoLoading = false, photoAlbum = localStorage.getItem('photoAlbum') || '', albums = [], photoUrls = new Map();
 let taskBoard = 'all', updaterState = null, updateUnavailableSince = 0, updatePollBusy = false, taskPreviewUrl = '', pointerDrag = null, nativeDrag = null, suppressDragClick = false;
-let memberPreviewUrl = '', backgroundPreviewUrl = '';
+let memberPreviewUrl = '', backgroundPreviewUrl = '', recipePreviewUrl = '';
 const calendarScrollPositions = new Map();
 let slideTimer, slideIndex = 0, slidePaused = false, slideActive = false;
 const ds = date => new Date(date + 'T12:00:00');
@@ -61,6 +61,9 @@ const colorStyle = color => `--person:${E(color)};--person-bg:${E(color)}24`;
 const personStyle = id => colorStyle(member(id)?.color || appearanceFor(S?.settings).allColor);
 const eventStyle = event => colorStyle(eventColor(event, S.members, S.settings));
 const uiImageUrl = file => '/api/images/ui?file=' + encodeURIComponent(file);
+function recipePicture(recipe, css = '') {
+  return `<span class="recipe-picture ${css}"><span class="recipe-picture-fallback" aria-hidden="true">${I('food')}<small>Kein Bild</small></span>${isImageFile(recipe.imageFile) ? `<img src="${uiImageUrl(recipe.imageFile)}" alt="${E('Bild zu ' + recipe.title)}" loading="lazy" decoding="async" draggable="false" data-recipe-image>` : ''}</span>`;
+}
 const avatar = (id, size = '') => { const m = member(id); return `<span class="avatar ${size}" style="${personStyle(id)}"><span>${E((m?.name || 'Alle').slice(0, 1).toUpperCase())}</span>${isImageFile(m?.avatarImage) ? `<img src="${uiImageUrl(m.avatarImage)}" alt="" data-profile-image>` : ''}</span>`; };
 const btn = (label, action, icon = '', css = '', attrs = '') => `<button class="button ${css}" data-action="${action}" ${attrs}>${icon ? I(icon) : ''}${E(label)}</button>`;
 const iconBtn = (label, action, icon, attrs = '') => `<button class="icon-button" title="${E(label)}" aria-label="${E(label)}" data-action="${action}" ${attrs}>${I(icon)}</button>`;
@@ -105,7 +108,7 @@ function go(next) { if (!nav.some(n => n[0] === next) && next !== 'settings') ne
 function renderAuth(login = false) {
   applyAppearance(appearanceDefaults);
   const art = `<aside class="auth-art"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong></div></div><h1>Ein Ort für<br>euren Alltag.</h1><p>Gemeinsam planen, Aufgaben teilen und mehr Zeit füreinander haben.</p><div class="auth-feature">${I('calendar')}Eure Termine auf einen Blick</div><div class="auth-feature">${I('tasks')}Kleine Aufgaben. Gemeinsame Erfolge.</div><div class="auth-feature">${I('shield')}Bei euch zu Hause gespeichert</div></aside>`;
-  app.innerHTML = `<div class="auth-page">${art}<main class="auth-form-wrap"><form class="auth-form" id="auth-form"><h2>${login ? 'Willkommen zurück' : 'Hallo, liebe Familie.'}</h2><p>${login ? 'Melde dich mit eurem Familienpasswort an.' : 'Richtet eure eigene Familienzentrale ein. Namen und Farben könnt ihr später jederzeit ändern.'}</p>${login ? '' : `<label class="form-field">Name eurer Familie<input name="familyName" value="Unsere Familie" required maxlength="60" autocomplete="organization"></label><label class="form-field">Familienmitglieder<textarea name="names" rows="3" placeholder="Ein Name pro Zeile" required></textarea><span class="field-hint">Ein bis zwanzig Personen, jeweils in einer eigenen Zeile.</span></label>`}<label class="form-field">Familienpasswort<input type="password" name="password" required ${login ? '' : 'minlength="12"'} maxlength="200" autocomplete="${login ? 'current-password' : 'new-password'}">${login ? '' : '<span class="field-hint">Mindestens 12 Zeichen. Dieses Passwort gilt für eure Geräte.</span>'}</label>${login ? '' : '<label class="checkbox-field"><input type="checkbox" name="demo">Beispiele zum Ausprobieren hinzufügen</label>'}<p class="form-error" id="auth-error" role="alert"></p><button class="button primary" type="submit">${login ? 'Anmelden' : 'Familienzentrale einrichten'}</button><p class="auth-version">Familien Organisierer · Version ${E(status?.version || '0.4.0')} · Selbst gehostet</p></form></main></div>`;
+  app.innerHTML = `<div class="auth-page">${art}<main class="auth-form-wrap"><form class="auth-form" id="auth-form"><h2>${login ? 'Willkommen zurück' : 'Hallo, liebe Familie.'}</h2><p>${login ? 'Melde dich mit eurem Familienpasswort an.' : 'Richtet eure eigene Familienzentrale ein. Namen und Farben könnt ihr später jederzeit ändern.'}</p>${login ? '' : `<label class="form-field">Name eurer Familie<input name="familyName" value="Unsere Familie" required maxlength="60" autocomplete="organization"></label><label class="form-field">Familienmitglieder<textarea name="names" rows="3" placeholder="Ein Name pro Zeile" required></textarea><span class="field-hint">Ein bis zwanzig Personen, jeweils in einer eigenen Zeile.</span></label>`}<label class="form-field">Familienpasswort<input type="password" name="password" required ${login ? '' : 'minlength="12"'} maxlength="200" autocomplete="${login ? 'current-password' : 'new-password'}">${login ? '' : '<span class="field-hint">Mindestens 12 Zeichen. Dieses Passwort gilt für eure Geräte.</span>'}</label>${login ? '' : '<label class="checkbox-field"><input type="checkbox" name="demo">Beispiele zum Ausprobieren hinzufügen</label>'}<p class="form-error" id="auth-error" role="alert"></p><button class="button primary" type="submit">${login ? 'Anmelden' : 'Familienzentrale einrichten'}</button><p class="auth-version">Familien Organisierer · Version ${E(status?.version || '0.5.0')} · Selbst gehostet</p></form></main></div>`;
   $('#auth-form').addEventListener('submit', async event => {
     event.preventDefault(); const form = event.currentTarget, data = Object.fromEntries(new FormData(form));
     const button = $('button[type=submit]', form); button.disabled = true;
@@ -118,7 +121,7 @@ function pageHead(title, subtitle, action = '') {
   return `<div class="page-head"><div><h1>${E(title)}</h1>${subtitle ? `<p>${E(subtitle)}</p>` : ''}</div><div class="head-actions">${action}</div></div>`;
 }
 function navigation() {
-  return `<aside class="rail" id="rail"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong><small>Unser Alltag. Zusammen.</small></div></div><div><div class="rail-label">Familienzentrale</div><nav class="nav-list" aria-label="Hauptnavigation">${nav.map(([id, label, icon]) => `<button class="nav-item ${route === id ? 'active' : ''}" data-nav="${id}" ${route === id ? 'aria-current="page"' : ''}>${I(icon)}${label}</button>`).join('')}<button class="nav-item" disabled>${I('book')}Stundenpläne<span class="badge">Später</span></button></nav></div><div class="nav-bottom"><button class="nav-item ${route === 'settings' ? 'active' : ''}" data-nav="settings">${I('settings')}Einstellungen</button></div><div class="self-hosted"><strong>${I('shield')}Euer eigener Server</strong>Familien Organisierer · ${E(status?.version || '0.4.0')}</div></aside>`;
+  return `<aside class="rail" id="rail"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong><small>Unser Alltag. Zusammen.</small></div></div><div><div class="rail-label">Familienzentrale</div><nav class="nav-list" aria-label="Hauptnavigation">${nav.map(([id, label, icon]) => `<button class="nav-item ${route === id ? 'active' : ''}" data-nav="${id}" ${route === id ? 'aria-current="page"' : ''}>${I(icon)}${label}</button>`).join('')}<button class="nav-item" disabled>${I('book')}Stundenpläne<span class="badge">Später</span></button></nav></div><div class="nav-bottom"><button class="nav-item ${route === 'settings' ? 'active' : ''}" data-nav="settings">${I('settings')}Einstellungen</button></div><div class="self-hosted"><strong>${I('shield')}Euer eigener Server</strong>Familien Organisierer · ${E(status?.version || '0.5.0')}</div></aside>`;
 }
 function render() {
   if (!S) return;
@@ -224,9 +227,9 @@ function mealsPage() {
     const date = addDays(monday(cursor), i);
     return `<section class="panel meal-plan-day ${date === S.serverDate ? 'today' : ''}"><div class="meal-date"><strong>${fullWeekday(date)}</strong><span>${fullDate(date)}</span></div><div class="meal-slots">${mealSlots.map(([slot, label]) => {
       const planned = meal(date, slot), recipe = S.recipes.find(r => r.id === planned?.recipeId);
-      return `<div class="meal-slot ${slot}" data-meal-date="${date}" data-meal-slot="${slot}"><h3>${I(slot === 'breakfast' ? 'clock' : slot === 'lunch' ? 'food' : 'home')}${label}</h3>${recipe ? `<button class="meal-title" data-recipe="${recipe.id}">${E(recipe.title)}</button><span class="small muted">${planned.servings} Portionen</span>` : '<p class="meal-empty">Rezept hierher ziehen</p>'}<button class="panel-link" data-action="plan-meal" data-date="${date}" data-slot="${slot}">${I(recipe ? 'edit' : 'plus')}${recipe ? 'Ändern' : 'Auswählen'}</button></div>`;
+      return `<div class="meal-slot ${slot}" data-meal-date="${date}" data-meal-slot="${slot}"><h3>${I(slot === 'breakfast' ? 'clock' : slot === 'lunch' ? 'food' : 'home')}${label}</h3>${recipe ? `<button class="meal-title" data-recipe="${recipe.id}">${isImageFile(recipe.imageFile) ? recipePicture(recipe, 'meal-picture') : ''}${E(recipe.title)}</button><span class="small muted">${planned.servings} Portionen</span>` : '<p class="meal-empty">Rezept hierher ziehen</p>'}<button class="panel-link" data-action="plan-meal" data-date="${date}" data-slot="${slot}">${I(recipe ? 'edit' : 'plus')}${recipe ? 'Ändern' : 'Auswählen'}</button></div>`;
     }).join('')}</div></section>`;
-  }).join('')}</div></div><div class="flex between section-gap"><h2>Eure Rezepte</h2><span class="small muted">In eine Mahlzeit ziehen oder Auswählen verwenden.</span></div><div class="recipe-grid section-gap">${S.recipes.map(r => `<article class="panel recipe-card" draggable="true" data-drag-kind="recipe" data-drag-id="${r.id}" data-drag-rev="${r._rev}"><div class="flex between" style="width:100%"><span class="tag green">${E(r.category)}</span><button class="drag-handle" data-drag-handle aria-label="${E(r.title)} in den Essensplan ziehen">${I('menu')}</button></div><h3>${E(r.title)}</h3><div class="recipe-meta"><span>${I('clock')}${r.minutes} Min.</span><span>${I('people')}${r.servings} Portionen</span></div><div class="recipe-bottom flex between"><button class="panel-link" data-recipe="${r.id}">Zum Rezept</button>${iconBtn('Rezept bearbeiten', 'edit-recipe', 'edit', `data-edit="recipes" data-id="${r.id}"`)}</div></article>`).join('') || '<div class="panel">Noch keine Rezepte. Legt eines an oder importiert einen Link.</div>'}</div>`;
+  }).join('')}</div></div><div class="flex between section-gap"><h2>Eure Rezepte</h2><span class="small muted">In eine Mahlzeit ziehen oder Auswählen verwenden.</span></div><div class="recipe-grid section-gap">${S.recipes.map(r => `<article class="panel recipe-card" draggable="true" data-drag-kind="recipe" data-drag-id="${r.id}" data-drag-rev="${r._rev}"><button class="recipe-image-button" data-recipe="${r.id}" aria-label="${E(r.title)} · Rezept öffnen">${recipePicture(r)}</button><div class="flex between" style="width:100%"><span class="tag green">${E(r.category)}</span><button class="drag-handle" data-drag-handle aria-label="${E(r.title)} in den Essensplan ziehen">${I('menu')}</button></div><h3>${E(r.title)}</h3><div class="recipe-meta"><span>${I('clock')}${r.minutes} Min.</span><span>${I('people')}${r.servings} Portionen</span></div><div class="recipe-bottom flex between"><button class="panel-link" data-recipe="${r.id}">Zum Rezept</button>${iconBtn('Rezept bearbeiten', 'edit-recipe', 'edit', `data-edit="recipes" data-id="${r.id}"`)}</div></article>`).join('') || '<div class="panel">Noch keine Rezepte. Legt eines an oder importiert einen Link.</div>'}</div>`;
 }
 function listsPage() {
   const list = S.lists.find(l => l.id === activeList) || S.lists[0]; activeList = list.id;
@@ -255,7 +258,8 @@ function textareaField(label, name, value, attrs = '', hint = '') {
 }
 function memberOptions() { return [['', 'Für alle'], ...S.members.map(m => [m.id, m.name])]; }
 function dialog(title, body, footer = '') {
-  editor.classList.toggle('wide', body.includes('event-edit-form'));
+  if (recipePreviewUrl) { URL.revokeObjectURL(recipePreviewUrl); recipePreviewUrl = ''; }
+  editor.classList.toggle('wide', body.includes('event-edit-form') || body.includes('meal-form'));
   editor.innerHTML = `<div class="dialog-header"><h2 id="editor-title">${E(title)}</h2>${iconBtn('Schließen', 'close-editor', 'close')}</div><div class="dialog-body">${body}${footer}</div>`;
   if (!editor.open) editor.showModal();
 }
@@ -264,7 +268,7 @@ function editRecord(kind, id = '', defaults = {}) {
   if (id && !old) throw new Error('Dieser Eintrag ist nicht mehr vorhanden.');
   if (kind === 'events') { if (old) openEventEditor(old); else startEventWizard(null, defaults); return; }
   const record = old || { ...defaults };
-  editing = { kind, old };
+  editing = { kind, old, ...(kind === 'recipes' ? { imageFile: record.imageFile || '' } : {}) };
   const required = 'required maxlength="160"';
   let fields = '', title;
   const titles = { events: 'Termin', birthdays: 'Geburtstag', tasks: 'Aufgabe', recipes: 'Rezept', lists: 'Liste', items: 'Listeneintrag', notes: 'Notiz', rewards: 'Belohnung', members: 'Familienmitglied' };
@@ -272,7 +276,7 @@ function editRecord(kind, id = '', defaults = {}) {
   if (kind === 'birthdays') {
     fields = `${field('Name', 'name', record.name, 'text', 'required maxlength="100"', true)}${field('Tag', 'day', record.day || '', 'number', 'required min="1" max="31" step="1"')}${selectField('Monat', 'month', record.month || '', [['', 'Bitte auswählen'], ...Array.from({ length: 12 }, (_, i) => [String(i + 1), ds(`2000-${String(i + 1).padStart(2, '0')}-01`).toLocaleDateString('de-DE', { month: 'long' })])])}${field('Geburtsjahr (optional)', 'birthYear', record.birthYear || '', 'number', `min="1" max="${S.serverDate.slice(0, 4)}" step="1"`)}${selectField('Zuordnung (optional)', 'memberId', record.memberId || '', [['', 'Keine Zuordnung'], ...S.members.map(m => [m.id, m.name])])}${selectField('29. Februar in Nicht-Schaltjahren', 'leapDay', record.leapDay || 'mar1', [['mar1', 'Am 1. März anzeigen'], ['feb28', 'Am 28. Februar anzeigen']], true)}${textareaField('Notizen', 'notes', record.notes, 'rows="3" maxlength="2000"')}<p class="field-hint full">Erscheint automatisch jedes Jahr im Kalender. Mit Geburtsjahr wird auch das Alter angezeigt.</p>`;
   } else if (kind === 'tasks') fields = `${taskImageField(record)}${field('Titel der Aufgabe', 'title', record.title, 'text', required, true)}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${selectField('Zuordnen', 'memberId', old ? record.memberId || '' : record.memberId || '', [['', 'Allgemein'], ...S.members.map(m => [m.id, m.name])])}${selectField('Wiederholung', 'repeat', record.repeat || 'none', [['none', 'Einmalig'], ['daily', 'Täglich'], ['weekdays', 'Montag bis Freitag'], ['weekly', 'Wöchentlich']])}${field('Fällig / erster Tag', 'startDate', record.startDate || S.serverDate, 'date')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}`;
-  else if (kind === 'recipes') fields = `${field('Rezeptname', 'title', record.title, 'text', required, true)}${field('Portionen', 'servings', record.servings || 4, 'number', 'min="1" max="100" step="1" required')}${field('Zeit in Minuten', 'minutes', record.minutes ?? 30, 'number', 'min="0" max="1440" step="1" required')}${field('Kategorie', 'category', record.category || 'Hauptgericht', 'text', 'maxlength="60"', true)}${textareaField('Zutaten · eine pro Zeile', 'ingredientsText', (record.ingredients || []).map(i => `${i.quantity} | ${i.unit} | ${i.name} | ${i.category}`).join('\n'), 'rows="5" placeholder="500 | g | Nudeln | Vorrat"', 'Menge | Einheit | Zutat | Kategorie. Dezimalzahlen mit Punkt oder Komma sind möglich.')}${textareaField('Zubereitung', 'instructions', record.instructions, 'rows="5" maxlength="15000"')}${field('Link zur Quelle (optional)', 'sourceUrl', record.sourceUrl, 'url', '', true)}`;
+  else if (kind === 'recipes') fields = `${recipeImageField(record)}${field('Rezeptname', 'title', record.title, 'text', required, true)}${field('Portionen', 'servings', record.servings || 4, 'number', 'min="1" max="100" step="1" required')}${field('Zeit in Minuten', 'minutes', record.minutes ?? 30, 'number', 'min="0" max="1440" step="1" required')}${field('Kategorie', 'category', record.category || 'Hauptgericht', 'text', 'maxlength="60"', true)}${textareaField('Zutaten · eine pro Zeile', 'ingredientsText', (record.ingredients || []).map(i => `${i.quantity} | ${i.unit} | ${i.name} | ${i.category}`).join('\n'), 'rows="5" placeholder="500 | g | Nudeln | Vorrat"', 'Menge | Einheit | Zutat | Kategorie. Dezimalzahlen mit Punkt oder Komma sind möglich.')}${textareaField('Zubereitung', 'instructions', record.instructions, 'rows="5" maxlength="15000"')}${field('Link zur Quelle (optional)', 'sourceUrl', record.sourceUrl, 'url', '', true)}`;
   else if (kind === 'members') fields = `${memberImageField(record)}${field('Name', 'name', record.name, 'text', 'required maxlength="50"', true)}${field('Farbe', 'color', record.color || '#6366f1', 'color', 'required')}${selectField('Anzeige', 'role', record.role || 'adult', [['adult', 'Erwachsen'], ['child', 'Kind']])}`;
   else if (kind === 'lists') fields = field('Name der Liste', 'title', record.title, 'text', required, true);
   else if (kind === 'items') fields = `${field('Eintrag', 'title', record.title, 'text', required, true)}${field('Menge (optional)', 'quantity', record.quantity || '', 'number', 'min="0" max="100000" step="any"')}${field('Einheit', 'unit', record.unit, 'text', 'maxlength="30"')}${field('Kategorie', 'category', record.category || 'Sonstiges', 'text', 'maxlength="50"', true)}`;
@@ -305,6 +309,13 @@ async function saveEditor(form) {
       if (!Number.isFinite(quantity)) throw new Error(`Zutat ${i + 1}: Die Menge ist keine Zahl.`);
       return { quantity, unit: parts[1], name: parts[2], category: parts[3] || 'Sonstiges' };
     });
+    const current = editing, file = $('#recipe-image-input')?.files?.[0];
+    data.imageFile = data.removeRecipeImage ? '' : current.imageFile;
+    if (file && !data.removeRecipeImage) {
+      data.imageFile = await uploadUiImage(file);
+      if (!editor.open || editing !== current) return;
+      current.imageFile = data.imageFile;
+    }
   }
   await api(`/records/${kind}${old ? '/' + old.id : ''}`, old ? 'PUT' : 'POST', data);
   editor.close(); await refresh(false); render(); toast('Gespeichert.');
@@ -322,12 +333,14 @@ async function loadRecipeImport(url) {
 function openMeal(date, slot = 'dinner') {
   if (!S.recipes.length) { toast('Legt zuerst ein Rezept an.'); editRecord('recipes'); return; }
   const old = meal(date, slot); editing = { kind: 'meals', old, date, slot };
-  dialog(`${mealSlots.find(s => s[0] === slot)[1]} · ${fullDate(date)}`, `<form id="meal-form">${selectField('Rezept', 'recipeId', old?.recipeId || S.recipes[0].id, S.recipes.map(r => [r.id, r.title]), true)}${field('Portionen', 'servings', old?.servings || S.members.length || 4, 'number', 'required min="1" max="100" step="1"')}<p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${old ? '<button class="button danger" type="button" data-action="delete-record">Entfernen</button>' : ''}<button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit">Speichern</button></div></form>`);
+  const selected = S.recipes.some(r => r.id === old?.recipeId) ? old.recipeId : S.recipes[0].id;
+  const choices = `<fieldset class="recipe-picker"><legend>Rezept auswählen</legend><div class="recipe-options">${S.recipes.map(r => `<label class="recipe-option"><input type="radio" name="recipeId" value="${E(r.id)}" ${r.id === selected ? 'checked' : ''} required><span class="recipe-choice">${recipePicture(r)}<span class="recipe-check" aria-hidden="true">${I('check')}</span><span class="recipe-choice-body"><strong>${E(r.title)}</strong><span>${r.minutes} Min. · ${r.servings} Portionen</span></span></span></label>`).join('')}</div></fieldset>`;
+  dialog(`${mealSlots.find(s => s[0] === slot)[1]} · ${fullDate(date)}`, `<form id="meal-form">${choices}${field('Portionen', 'servings', old?.servings || S.members.length || 4, 'number', 'required min="1" max="100" step="1"')}<p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${old ? '<button class="button danger" type="button" data-action="delete-record">Entfernen</button>' : ''}<button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit">Speichern</button></div></form>`);
 }
 function viewRecipe(id) {
   const r = S.recipes.find(r => r.id === id); if (!r) return;
   editing = null;
-  dialog(r.title, `<div class="flex wrap"><span class="tag">${E(r.category)}</span><span class="small muted">${r.minutes} Minuten · ${r.servings} Portionen</span></div><h3 class="section-gap">Zutaten</h3>${r.ingredients.map(i => `<div class="ingredient-row"><span>${quantity(i.quantity)} ${E(i.unit)}</span><span>${E(i.name)}</span></div>`).join('')}<h3 class="section-gap">Zubereitung</h3><div class="recipe-instructions">${E(r.instructions || 'Noch keine Zubereitung gespeichert.')}</div>${r.sourceUrl ? `<p class="section-gap"><a href="${E(r.sourceUrl)}" target="_blank" rel="noopener noreferrer">Rezeptquelle öffnen</a></p>` : ''}<div class="form-actions"><button class="button" data-edit="recipes" data-id="${r.id}">Bearbeiten</button><button class="button primary" data-action="close-editor">Schließen</button></div>`);
+  dialog(r.title, `${isImageFile(r.imageFile) ? recipePicture(r, 'recipe-detail-picture') : ''}<div class="flex wrap"><span class="tag">${E(r.category)}</span><span class="small muted">${r.minutes} Minuten · ${r.servings} Portionen</span></div><h3 class="section-gap">Zutaten</h3>${r.ingredients.map(i => `<div class="ingredient-row"><span>${quantity(i.quantity)} ${E(i.unit)}</span><span>${E(i.name)}</span></div>`).join('')}<h3 class="section-gap">Zubereitung</h3><div class="recipe-instructions">${E(r.instructions || 'Noch keine Zubereitung gespeichert.')}</div>${r.sourceUrl ? `<p class="section-gap"><a href="${E(r.sourceUrl)}" target="_blank" rel="noopener noreferrer">Rezeptquelle öffnen</a></p>` : ''}<div class="form-actions"><button class="button" data-edit="recipes" data-id="${r.id}">Bearbeiten</button><button class="button primary" data-action="close-editor">Schließen</button></div>`);
 }
 let resolveConfirmation;
 function ask(title, message, label = 'Bestätigen', destructive = false) {
@@ -458,6 +471,7 @@ document.addEventListener('change', async event => {
     const image = $('#task-image-preview'); if (image) { image.src = taskPreviewUrl; image.hidden = !taskPreviewUrl; }
   }
   if (input.id === 'member-image-input') previewMemberImage(input);
+  if (input.id === 'recipe-image-input' || input.name === 'removeRecipeImage') previewRecipeImage(input);
   if (input.id === 'background-image-input') previewBackgroundImage(input);
   if (input.closest?.('#settings-appearance')) previewAppearance();
   if (input.name === 'startDate' && editor.contains(input)) { const end = $('[name=endDate]', editor); if (end && end.value < input.value) end.value = input.value; }
@@ -473,7 +487,7 @@ document.addEventListener('change', async event => {
     } catch (error) { toast(error.message, true); }
   }
 });
-editor.addEventListener('close', () => { editing = null; for (const url of [taskPreviewUrl, memberPreviewUrl]) if (url) URL.revokeObjectURL(url); taskPreviewUrl = ''; memberPreviewUrl = ''; if (S) render(); });
+editor.addEventListener('close', () => { editing = null; for (const url of [taskPreviewUrl, memberPreviewUrl, recipePreviewUrl]) if (url) URL.revokeObjectURL(url); taskPreviewUrl = ''; memberPreviewUrl = ''; recipePreviewUrl = ''; if (S) render(); });
 confirmDialog.addEventListener('cancel', () => { resolveConfirmation?.(false); resolveConfirmation = null; });
 document.addEventListener('keydown', event => {
   if (slideActive) { if (event.key === 'Escape') stopSlides(); if (event.key === 'ArrowRight') { slideIndex = (slideIndex + 1) % photoItems.length; renderSlide(); } if (event.key === 'ArrowLeft') { slideIndex = (slideIndex - 1 + photoItems.length) % photoItems.length; renderSlide(); } }
@@ -566,6 +580,19 @@ function setMealLayout(value) {
 }
 function memberImageField(record) {
   return `<div class="form-field full"><span>Profilbild (optional)</span><input id="member-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><img id="member-image-preview" class="profile-image-preview" ${isImageFile(record.avatarImage) ? `src="${uiImageUrl(record.avatarImage)}"` : 'hidden'} alt="Vorschau des Profilbildes">${record.avatarImage ? '<label class="checkbox-field"><input type="checkbox" name="removeMemberImage">Profilbild entfernen und Initialen anzeigen</label>' : ''}<span class="field-hint">Bis 5 MB. Das Bild wird für alle Geräte im Container gespeichert.</span></div>`;
+}
+function recipeImageField(record) {
+  return `<div class="form-field full"><span>Rezeptbild (optional)</span><input id="recipe-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><img id="recipe-image-preview" class="recipe-image-preview" ${isImageFile(record.imageFile) ? `src="${uiImageUrl(record.imageFile)}"` : 'hidden'} alt="Vorschau des Rezeptbildes"><label class="checkbox-field"><input type="checkbox" name="removeRecipeImage">Rezeptbild entfernen</label><span class="field-hint">JPEG, PNG, WebP oder GIF bis 5 MB. Das Bild wird für alle Geräte im Container gespeichert.</span></div>`;
+}
+function previewRecipeImage(input) {
+  if (editing?.kind !== 'recipes') return;
+  if (input.id === 'recipe-image-input') {
+    if (recipePreviewUrl) URL.revokeObjectURL(recipePreviewUrl);
+    recipePreviewUrl = input.files?.[0] ? URL.createObjectURL(input.files[0]) : '';
+    if (recipePreviewUrl) $('[name=removeRecipeImage]').checked = false;
+  }
+  const image = $('#recipe-image-preview'), removed = $('[name=removeRecipeImage]')?.checked;
+  if (image) { const source = removed ? '' : recipePreviewUrl || (isImageFile(editing.imageFile) ? uiImageUrl(editing.imageFile) : ''); image.src = source; image.hidden = !source; }
 }
 async function uploadUiImage(file) {
   if (file.size > 5 * 1024 * 1024) throw new Error('Das Bild darf höchstens 5 MB groß sein.');
@@ -691,7 +718,7 @@ function openPointsAward() {
   dialog('Punkte manuell vergeben', `<form id="points-award-form" class="stack">${selectField('Für wen?', 'memberId', filter || S.members[0].id, S.members.map(m => [m.id, m.name]))}${field('Punkte', 'points', 5, 'number', 'required min="1" max="100000" step="1"')}${field('Wofür?', 'reason', '', 'text', 'required maxlength="160"')}${field('Elternpasswort', 'password', '', 'password', 'required autocomplete="off"')}<p class="form-error" id="editor-error" role="alert"></p><button class="button primary" type="submit">Punkte vergeben</button></form>`);
 }
 function updateSettings() {
-  return `<section class="panel settings-wide"><div class="panel-head"><h2>${I('refresh')}Software aktualisieren</h2></div><div class="panel-body"><p class="small muted">Installierte Version: <strong id="installed-version">${E(status?.version || '0.4.0')}</strong>. Vor dem Update werden eure Daten gesichert. Bei einem Fehler wird die vorherige Version wiederhergestellt.</p><div id="update-status" class="info-box" role="status" aria-live="polite">Updatedienst wird geprüft …</div><div class="form-actions"><button id="software-update-button" class="button primary" data-action="software-update" disabled>${I('refresh')}Update</button><button class="button" data-action="reload-app">Seite neu laden</button></div></div></section>`;
+  return `<section class="panel settings-wide"><div class="panel-head"><h2>${I('refresh')}Software aktualisieren</h2></div><div class="panel-body"><p class="small muted">Installierte Version: <strong id="installed-version">${E(status?.version || '0.5.0')}</strong>. Vor dem Update werden eure Daten gesichert. Bei einem Fehler wird die vorherige Version wiederhergestellt.</p><div id="update-status" class="info-box" role="status" aria-live="polite">Updatedienst wird geprüft …</div><div class="form-actions"><button id="software-update-button" class="button primary" data-action="software-update" disabled>${I('refresh')}Update</button><button class="button" data-action="reload-app">Seite neu laden</button></div></div></section>`;
 }
 function paintUpdateStatus() {
   const area = $('#update-status'); if (!area || !updaterState) return;
@@ -761,4 +788,4 @@ document.addEventListener('pointerup', event => { if (!pointerDrag || pointerDra
 document.addEventListener('pointercancel', () => { pointerDrag?.target?.classList.remove('drag-over'); pointerDrag = null; suppressDragClick = false; });
 
 document.addEventListener('input', event => { if (event.target.matches?.('[data-appearance-color]')) previewAppearance(); });
-document.addEventListener('error', event => { if (event.target.matches?.('[data-profile-image]')) event.target.hidden = true; }, true);
+document.addEventListener('error', event => { if (event.target.matches?.('[data-profile-image],[data-recipe-image]')) event.target.hidden = true; }, true);
