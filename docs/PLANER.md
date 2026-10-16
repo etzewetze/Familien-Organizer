@@ -32,6 +32,8 @@ Geburtstage zeigen einen Kuchen und den Namen, etwa **🎂 Anna · 36 Jahre**. O
 
 **Bestehenden Termin bearbeiten:** Antippen öffnet ein vollständiges Formular mit Personen, Überschrift, Beschreibung, Adresse, Farbe, Datum und Zeitangaben. Alle Angaben lassen sich gemeinsam bearbeiten und speichern; der Assistent wird nur beim Anlegen verwendet. Lesegeschützte Google-Termine lassen sich ansehen.
 
+**Termin duplizieren:** Einen gespeicherten Termin antippen und **Duplizieren** wählen. Unter **Für welchen Tag?** den gewünschten neuen Anfangstag einstellen und den Kalender für die Kopie auswählen. Bei einem schreibbaren Google-Termin ist dessen Kalender vorausgewählt; bei einer schreibgeschützten Quelle ist der Familienkalender vorausgewählt. **Duplikat anlegen** legt einen unabhängigen Termin an und öffnet dessen Tag im Kalender. Uhrzeiten, Dauer, Personen, Beschreibung, Ort, Farbe und Symbole werden übernommen. Ein mehrtägiger Termin bleibt gleich viele Kalendertage lang, auch über Monatsgrenzen hinweg. Eine feste Startzeit bleibt ohne Ende. Das Original bleibt erhalten. Auch importierte ICS-Termine bieten diese Funktion. Es werden die gespeicherten Angaben kopiert; Änderungen im vorherigen Formular zuerst speichern. Bei einer zwischenzeitlichen Änderung des Originals dieses neu öffnen. Nach einem Verbindungsfehler kann dieselbe Anfrage ohne zusätzliche Kopie wiederholt werden.
+
 Termine für eine Person verwenden deren zugeteilte Farbe. Bei mehreren Personen geht der Verlauf von oben nach unten durch **alle ausgewählten Personenfarben**. Drei Kinder erscheinen beispielsweise als Rot → Grün → Blau. Der kräftige Farbstreifen zeigt die Originalfarben; der Hintergrund verwendet hellere, zur Kartenfarbe passende Farbtöne für lesbaren Text. Der Verlauf folgt der gespeicherten Personenreihenfolge und endet in der Farbe der letzten Person. Das gilt für Übersicht, Woche, Monat und Liste, auch für ganztägige Termine. Änderungen einer Personenfarbe wirken auf vorhandene Termine.
 
 Termine für Alle folgen der Standardfarbe aus den Einstellungen, solange keine eigene Terminfarbe gewählt wurde. Mit **Standardfarbe für Alle verwenden** eine eigene Farbe wieder aufheben. Änderungen der Standardfarbe wirken dann auch auf diese bestehenden Termine. Die eigene Farbe wird bei einem Google-Rundlauf über private Metadaten erhalten; sie ist keine beliebige Farbänderung der Google-Oberfläche.
@@ -99,6 +101,14 @@ Belohnungen besitzen einen eigenen Reiter mit Punkteständen, Einlösemöglichke
 Das Elternpasswort ist vom Familienpasswort getrennt und hat mindestens acht Zeichen. Zum erstmaligen Anlegen wird das Familienpasswort verlangt; zum späteren Ändern zusätzlich das bisherige Elternpasswort. Passwörter werden als gesalzene Hashes gespeichert und weder in die Oberfläche noch in den JSON-Export gegeben.
 
 Es schützt manuelle Punkte und Software-Updates. Alle angemeldeten Familiengeräte dürfen weiterhin gewöhnliche Termine, Aufgaben und Belohnungen bearbeiten; die Anzeige „Kind“ ist noch kein eigener eingeschränkter Benutzerzugang.
+
+## Listen und Einkaufsmodus
+
+Unter **Listen & Einkauf** die gewünschte Liste wählen. **Bearbeiten** zeigt die bisherigen Kästchen zum direkten Abhaken sowie den Stift für Titel, Menge und Kategorie. Weitere Listen und Lebensmittel lassen sich dort anlegen.
+
+In der Listenkopfzeile auf **Einkauf** wechseln. Die gesamte Lebensmittelzeile ist jetzt ein großes Tippziel. **Doppeltippen** hakt ab und streicht Titel und Menge durch; ein weiterer Doppeltipp öffnet den Eintrag wieder. Ein einzelner Tipp ändert den Stand nicht. Erledigte Einträge bleiben an ihrer Position, damit beim Einkaufen nichts unter dem Finger wegspringt. Mengen und Kategorien bleiben sichtbar. Fehlende Lebensmittel lassen sich über das Eingabefeld ergänzen. Zum Ändern von Mengen oder Löschen auf **Bearbeiten** zurückwechseln.
+
+Bei Tastatur- oder Vorlesebedienung reicht eine Aktivierung der Lebensmittelzeile. Der Modus wird für jede Liste in diesem Browser gemerkt; er stellt andere Geräte nicht um. Die Häkchen werden dagegen gemeinsam auf dem Server gespeichert. Gleichzeitige Änderungen werden über die Eintragsrevision geprüft. Ohne Verbindung lassen sich die gemeinsamen Einträge nicht verändern.
 
 ## Essen und Rezepte
 

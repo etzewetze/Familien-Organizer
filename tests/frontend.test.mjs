@@ -17,11 +17,11 @@ import { schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, 
 import { calendarCategories, calendarOptionDefaults, isDayOffCategory, germanStates, planCaption, calendarEntriesOnDate } from '../public/calendar-data.js';
 
 // Ausführung der Ansichtslogik ohne echten Browser. Ersetzt keine visuelle QA.
-function fixture(t) {
+function fixture(t, preferences = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'family-ui-')), store = new Store(directory);
   store.setMeta('settings', { familyName: 'Familie Test', timezone: 'Europe/Berlin', photoInterval: 15, photoFit: 'contain', remoteManifestUrl: '', immichUrl: '' });
   seed(store, ['Anna', 'Ben', 'Mia', 'Leo'], true, store.state().serverDate);
-  const elements = new Map(), listeners = new Map(), styleValues = new Map(), stored = new Map();
+  const elements = new Map(), listeners = new Map(), styleValues = new Map(), stored = new Map(Object.entries(preferences));
   const element = id => {
     if (!elements.has(id)) elements.set(id, { innerHTML: '', open: false, dataset: {}, classList: { add() {}, toggle() {} }, append() {}, remove() {}, addEventListener() {}, setAttribute() {}, querySelector: s => element(s), querySelectorAll: () => [], showModal() { this.open = true; }, close() { this.open = false; } });
     return elements.get(id);
@@ -141,6 +141,93 @@ test('Dienstplan kann im Import gewählt und als zeitgebundener Arbeitstag bearb
   assert.equal(data.allDay,false); assert.equal(data.pauseSchedules,false); assert.equal(data.startTime,'06:00'); assert.equal(data.category,'workday');
   elements.get('[name=category]').value='holiday'; run('updateCalendarEntryFields()');
   assert.equal(elements.get('[name=entryAllDay]').disabled,true); assert.equal(elements.get('[name=entryAllDay]').checked,true); assert.equal(elements.get('[name=pauseSchedules]').disabled,false);
+});
+test('Termin duplizieren bietet Datum und Zielkalender, auch bei einer schreibgeschützten Quelle', async t => {
+  const { run,elements,listeners } = fixture(t), click = listeners.get('click')[0];
+  run("S.events=[{id:'original',_rev:7,title:'Kopie <script>',startDate:'2026-10-16',endDate:'2026-10-17',startTime:'22:00',endTime:'06:00',memberIds:[]}];editRecord('events','original')");
+  assert.ok(elements.get('#editor').innerHTML.includes('data-action="duplicate-event"'));
+  await click({ target:{ closest:() => ({ dataset:{ action:'duplicate-event' } }) } });
+  let html = elements.get('#editor').innerHTML;
+  assert.ok(html.includes('event-duplicate-form')); assert.ok(html.includes('name="startDate" type="date" value="2026-10-17"'));
+  assert.ok(html.includes('Kopie &lt;script&gt;')); assert.ok(!html.includes('<script>')); assert.ok(html.includes('22:00–06:00'));
+  assert.ok(html.includes('Kalender für das Duplikat')); assert.equal(run('editing.old.startDate'),'2026-10-16');
+  run("S.google=[{id:'account',email:'test@example.com',calendars:[{id:'writer',title:'Familie',selected:true,accessRole:'writer'},{id:'reader',title:'Nur lesen',selected:true,accessRole:'reader'}]}];S.events[0].googleAccountId='account';S.events[0].calendarId='writer';openEventEditor(S.events[0]);openEventDuplicate()");
+  html = elements.get('#editor').innerHTML; assert.ok(html.includes('value="[&quot;account&quot;,&quot;writer&quot;]" selected')); assert.ok(!html.includes('Nur lesen'));
+  run("S.events[0].googleReadOnly=true;S.events[0].calendarId='reader';openEventEditor(S.events[0]);openEventDuplicate()");
+  html = elements.get('#editor').innerHTML; assert.ok(html.includes('value="" selected')); assert.ok(html.includes('Nur Familienkalender'));
+});
+test('Importierte Termine bieten Duplizieren und einen Rückweg zum ursprünglichen Kalenderformular', async t => {
+  const { run,elements,listeners }=fixture(t), click=listeners.get('click')[0];
+  run("S.calendarEntries=[{id:'import',_rev:3,title:'Aus ICS',category:'event',startDate:'2026-10-16',endDate:'2026-10-16',allDay:true}];editRecord('calendarEntries','import')");
+  assert.ok(elements.get('#editor').innerHTML.includes('data-action="duplicate-event"'));
+  await click({ target:{closest:() => ({dataset:{action:'duplicate-event'}})} }); assert.equal(run('editing.sourceKind'),'calendarEntries'); assert.ok(elements.get('#editor').innerHTML.includes('event-duplicate-form'));
+  await click({ target:{closest:() => ({dataset:{action:'duplicate-event-back'}})} }); assert.ok(elements.get('#editor').innerHTML.includes('record-form')); assert.equal(run('editing.kind'),'calendarEntries');
+  run("S.calendarEntries[0].category='holiday';editRecord('calendarEntries','import')"); assert.ok(!elements.get('#editor').innerHTML.includes('data-action="duplicate-event"'));
+});
+test('Duplizieren sendet Datum und Quellrevision, behält beim Wiederholen die Kennung und zeigt den neuen Tag', async t => {
+  const { run,context,elements } = fixture(t), requests = []; let fail = true;
+  run("editRecord('events',S.events[0].id);openEventDuplicate()");
+  const sourceId = run('editing.old.id'), rev = run('editing.old._rev'), requestId = run('editing.requestId');
+  context.fetch = async (url,options) => {
+    if (url.endsWith('/duplicate')) { requests.push({ url,body:JSON.parse(options.body) }); if (fail) throw new Error('Netzfehler'); return { ok:true,json:async () => ({id:'copied',startDate:'2026-10-21'}) }; }
+    return { ok:true,json:async () => context.initialState };
+  };
+  context.form = { fields:{ startDate:'2026-10-21',googleTarget:'' } };
+  await assert.rejects(run('saveEventDuplicate(form)'),/nicht erreichbar/); assert.equal(elements.get('#editor').open,true); assert.equal(run('editing.requestId'),requestId);
+  fail = false; await run('saveEventDuplicate(form)');
+  assert.equal(requests.length,2); assert.deepEqual(requests[0],requests[1]);
+  assert.equal(requests[0].url,`/api/events/${sourceId}/duplicate`); assert.equal(requests[0].body._rev,rev); assert.equal(requests[0].body.startDate,'2026-10-21'); assert.equal(requests[0].body.requestId,requestId);
+  assert.equal(requests[0].body.googleAccountId,''); assert.equal(run('cursor'),'2026-10-21'); assert.equal(run('location.hash'),'calendar'); assert.equal(elements.get('#editor').open,false);
+});
+test('Eine verspätete Duplikatantwort schließt keinen inzwischen geöffneten Dialog', async t => {
+  const { run,context,elements } = fixture(t); let finish;
+  run("editRecord('events',S.events[0].id);openEventDuplicate()"); const before = run('cursor');
+  context.fetch = async url => url.endsWith('/duplicate') ? new Promise(resolve => { finish = resolve; }) : { ok:true,json:async () => context.initialState };
+  context.form = { fields:{ startDate:'2026-10-21',googleTarget:'' } };
+  const pending = run('saveEventDuplicate(form)'); run("editRecord('notes')"); const note = elements.get('#editor').innerHTML;
+  finish({ ok:true,json:async () => ({id:'copy',startDate:'2026-10-21'}) }); await pending;
+  assert.equal(elements.get('#editor').innerHTML,note); assert.equal(elements.get('#editor').open,true); assert.equal(run('cursor'),before);
+});
+test('Einkaufsmodus hakt nur bei Doppeltipp ab, öffnet wieder und lässt Reihenfolge, Mengen und Kategorien bestehen', async t => {
+  const { run,context,listeners,stored } = fixture(t), click = listeners.get('click')[0], requests = [];
+  run("route='lists';activeList='shopping';S.items=[{id:'milk',_rev:1,title:'Milch <b>',listId:'shopping',category:'Kühlung',quantity:2,unit:'l',checked:false},{id:'yogurt',_rev:2,title:'Joghurt',listId:'shopping',category:'Kühlung',quantity:3,unit:'Becher',checked:false}]");
+  assert.ok(run('listsPage()').includes('data-check-item="milk"')); assert.ok(!run('listsPage()').includes('data-shopping-item'));
+  await click({ target:{ closest:() => ({ dataset:{ action:'shopping-mode' } }) } });
+  assert.deepEqual(JSON.parse(stored.get('shoppingLists')),['shopping']); let html = run('listsPage()');
+  assert.ok(html.includes('Doppeltippen zum Abhaken')); assert.ok(html.includes('Milch &lt;b&gt;')); assert.ok(!html.includes('data-check-item')); assert.ok(!html.includes('data-edit="items"')); assert.ok(html.includes('2 l')); assert.ok(html.includes('Kühlung'));
+  context.fetch = async (url,options) => {
+    if (url.startsWith('/api/records/items/')) { const payload=JSON.parse(options.body); requests.push(payload); const index=context.initialState.items.findIndex(item => item.id === payload.id); context.initialState.items[index]={ ...payload,_rev:payload._rev+1 }; }
+    return { ok:true,json:async () => url === '/api/state' ? context.initialState : {} };
+  };
+  const tap = id => click({ detail:1,target:{ closest:() => ({ dataset:{ shoppingItem:id } }) } });
+  await tap('milk'); assert.equal(requests.length,0); await tap('milk'); assert.equal(requests.length,1); assert.equal(requests[0].checked,true); assert.equal(requests[0]._rev,1);
+  html = run('listsPage()'); assert.ok(html.includes('class="shopping-item done" data-shopping-item="milk"')); assert.ok(html.indexOf('data-shopping-item="milk"') < html.indexOf('data-shopping-item="yogurt"'));
+  await tap('milk'); await tap('milk'); assert.equal(requests.length,2); assert.equal(requests[1].checked,false); assert.equal(requests[1]._rev,2);
+  await tap('milk'); await tap('yogurt'); assert.equal(requests.length,2);
+  run('lastShoppingTap.at=Date.now()-500'); await tap('yogurt'); assert.equal(requests.length,2); await tap('yogurt'); assert.equal(requests.length,3);
+});
+test('Einkaufsmodus wird pro Liste gemerkt; beschädigte lokale Einstellungen verhindern den Listenstart nicht', t => {
+  const { run,stored } = fixture(t,{ shoppingLists:'["shopping"]' });
+  assert.ok(run('listsPage()').includes('class="panel shopping-mode"'));
+  run("S.lists.push({id:'custom',title:'Zweiter Einkauf'});activeList='custom'"); assert.ok(!run('listsPage()').includes('class="panel shopping-mode"'));
+  run('toggleShoppingMode()'); assert.deepEqual(JSON.parse(stored.get('shoppingLists')),['shopping','custom']);
+  run("activeList='shopping';toggleShoppingMode()"); assert.deepEqual(JSON.parse(stored.get('shoppingLists')),['custom']); assert.ok(run('listsPage()').includes('data-check-item='));
+  const broken=fixture(t,{ shoppingLists:'kaputtes JSON' }); assert.ok(broken.run('listsPage()').includes('Listenmodus')); assert.ok(!broken.run('listsPage()').includes('data-shopping-item'));
+});
+test('Einkaufsmodus bleibt bei Schreibfehlern unverändert und erlaubt Tastaturbedienung ohne Doppeltipp', async t => {
+  const { run,context,listeners } = fixture(t), click=listeners.get('click')[0], requests=[];
+  run("S.items=[{id:'milk',_rev:1,title:'Milch',listId:'shopping',category:'Kühlung',quantity:1,unit:'l',checked:false}];shoppingLists.add('shopping')");
+  context.tile={ dataset:{ shoppingItem:'milk' } }; let fail=true;
+  context.fetch=async (url,options) => {
+    if(url.includes('/records/items/')) { const payload=JSON.parse(options.body); requests.push(payload); if(fail) return { ok:false,status:409,json:async () => ({error:'Auf anderem Gerät geändert'}) }; context.initialState.items[0]={ ...payload,_rev:2 }; }
+    return {ok:true,json:async () => url === '/api/state' ? context.initialState : {}};
+  };
+  await run('tapShoppingItem(tile)'); await run('tapShoppingItem(tile)'); assert.equal(requests.length,1); assert.equal(run('S.items[0].checked'),false); assert.equal(run('busy'),false);
+  await run('tapShoppingItem(tile)'); assert.equal(requests.length,1);
+  run('online=false'); await run('tapShoppingItem(tile,true)'); assert.equal(requests.length,1);
+  run("online=true;activeList='other'"); await run('tapShoppingItem(tile,true)'); assert.equal(requests.length,1);
+  run("activeList='shopping'"); fail=false;
+  await click({ detail:0,target:{ closest:() => context.tile } }); assert.equal(requests.length,2); assert.equal(run('S.items[0].checked'),true);
 });
 test('Rezeptimport öffnet eine maskierte editierbare Vorschau und überschreibt keinen neuen Dialog', async t => {
   const { context, run, elements } = fixture(t), requests = [];

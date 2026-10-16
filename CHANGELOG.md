@@ -1,5 +1,16 @@
 # Änderungsübersicht
 
+## 0.8.2 · 2026-10-16
+
+Termine duplizieren und Einkaufsmodus (LXC-Version)
+
+- Im Terminformular **Duplizieren** öffnen, Zieldatum und Kalender auswählen und **Duplikat anlegen** wählen. Uhrzeiten, Personen, Beschreibung, Ort, Farbe und Symbole werden übernommen. Mehrtägige und ganztägige Termine behalten ihre Länge; feste Startzeiten bleiben ohne Ende.
+- Die Kopie ist unabhängig vom Original. Für Google entsteht eine neue Termin-ID; schreibgeschützte Quellen lassen sich in den Familienkalender oder einen anderen schreibbaren Kalender kopieren. Importierte ICS-Termine lassen sich ebenfalls als eigene Termine duplizieren.
+- Quellrevision und Zielkalender werden serverseitig geprüft. Wiederholung derselben bestätigten Anfrage nach einem Verbindungsfehler erzeugt keine weitere Kopie. Kopierkennungen bleiben bei Bearbeitung, Google-Abgleich und Sicherung erhalten.
+- In jeder Liste zwischen **Bearbeiten** und **Einkauf** wechseln. Im Einkaufsmodus hakt ein Doppeltipp auf die gesamte Lebensmittelzeile ab und streicht Titel und Menge durch; derselbe Doppeltipp öffnet sie wieder.
+- Erledigte Einträge bleiben im Einkaufsmodus an derselben Position. Mengen und Kategorien bleiben sichtbar; Einträge lassen sich weiterhin ergänzen. Tastatur und Vorlesefunktion können mit einer Aktivierung umschalten.
+- Der Einkaufsmodus wird pro Liste im jeweiligen Browser gespeichert; der Erledigungsstand bleibt gemeinsam und revisionsgeschützt. Die gewohnte Bearbeitungsansicht mit Kästchen und Stift bleibt verfügbar.
+
 ## 0.8.1 · 2026-10-16
 
 Kompakter Monat und Arbeitstage (LXC-Version)

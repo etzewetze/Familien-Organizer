@@ -296,6 +296,12 @@ export function createApp(env = process.env, services = {}) {
             return json(res, { ok: true });
           }
         }
+        const duplicateRoute = path.match(/^\/api\/events\/([a-zA-Z0-9-]{1,100})\/duplicate$/);
+        if (duplicateRoute && req.method === 'POST') {
+          const value = model.duplicateEvent(duplicateRoute[1], await body(req));
+          if (value.googleAccountId) void google.sync().catch(() => {});
+          return json(res, value, 201);
+        }
         const templateRoute = path.match(/^\/api\/task-templates\/([a-zA-Z0-9-]+)\/assign$/);
         if (templateRoute && req.method === 'POST') return json(res, model.assignTemplate(templateRoute[1], await body(req)), 201);
         const completeRoute = path.match(/^\/api\/tasks\/([a-zA-Z0-9-]+)\/complete$/);

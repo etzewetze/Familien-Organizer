@@ -159,7 +159,7 @@ export class GoogleSync {
     const remoteColor = validOwnId ? event.extendedProperties?.private?.familyColor : existing?.color;
     const color = !memberIds.length && isColor(remoteColor) ? remoteColor : '';
     const localSymbols = existing || (validOwnId ? ownRecord : null);
-    return { id, title: (event.summary || 'Ohne Titel').slice(0, 160), startDate: start.date, endDate: startOnly ? start.date : allDay ? addDays(end.date, -1) : end.date, startTime: start.time, endTime: startOnly ? '' : end.time, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color, location: (event.location || '').slice(0, 300), description: (event.description || '').slice(0, 5000), googleAccountId: account.id, calendarId: calendar.id, googleEventId: event.id, googleReadOnly: !['owner', 'writer'].includes(calendar.accessRole), emoji: localSymbols?.emoji || '', imageFile: localSymbols?.imageFile || '' };
+    return { id, title: (event.summary || 'Ohne Titel').slice(0, 160), startDate: start.date, endDate: startOnly ? start.date : allDay ? addDays(end.date, -1) : end.date, startTime: start.time, endTime: startOnly ? '' : end.time, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color, location: (event.location || '').slice(0, 300), description: (event.description || '').slice(0, 5000), googleAccountId: account.id, calendarId: calendar.id, googleEventId: event.id, googleReadOnly: !['owner', 'writer'].includes(calendar.accessRole), emoji: localSymbols?.emoji || '', imageFile: localSymbols?.imageFile || '', ...(localSymbols?.duplicateRequest ? { duplicateRequest: localSymbols.duplicateRequest } : {}) };
   }
   async pullCalendar(account, calendar) {
     const date = this.store.state().serverDate;

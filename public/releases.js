@@ -1,5 +1,11 @@
-export const VERSION = '0.8.1';
+export const VERSION = '0.8.2';
 export const releases = [
+  { version: '0.8.2', date: '2026-10-16', title: 'Termine duplizieren und Einkaufsmodus', changes: [
+    'Einen Termin öffnen, Duplizieren wählen und den gewünschten Tag einstellen. Uhrzeiten, Dauer, Personen und Details bleiben erhalten; das Original bleibt bestehen.',
+    'Der Zielkalender der Kopie ist wählbar. Auch importierte und schreibgeschützte Termine lassen sich als eigene Termine kopieren.',
+    'Unter Listen & Einkauf auf Einkauf umschalten: Doppeltippen hakt Lebensmittel ab und streicht sie durch. Ein weiterer Doppeltipp öffnet sie wieder.',
+    'Im Einkaufsmodus bleiben erledigte Einträge an ihrer Position. Der Modus wird pro Liste auf diesem Gerät gemerkt; der Erledigungsstand gilt für alle Geräte.',
+  ] },
   { version: '0.8.1', date: '2026-10-16', title: 'Kompakter Monat und Arbeitstage', changes: [
     'Feiertage hinterlegen in der Monats- und Jahresansicht den ganzen Tag. Unter Darstellung ist die Farbe anpassbar; Hellgrün ist voreingestellt.',
     'Geburtstage stehen im Monat als kompakte Zeile. Mehrere Geburtstage oder Feiertage werden zusammengefasst und lassen sich antippen, ansehen und bearbeiten. Die bisherige Wochenansicht bleibt erhalten.',

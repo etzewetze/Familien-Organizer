@@ -98,7 +98,7 @@ export class Model {
           check(calendar && ['owner', 'writer'].includes(calendar.accessRole), 'Dieser Google-Kalender ist nicht schreibbar oder nicht ausgewählt.');
         } else check(!calendarId, 'Bitte Google-Konto auswählen.');
         check(!old?.googleReadOnly, 'Dieser Google-Kalender ist schreibgeschützt.', 403);
-        return { title: title(), startDate, endDate, startTime, endTime, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color: memberIds.length ? '' : color, location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false, ...symbols() };
+        return { title: title(), startDate, endDate, startTime, endTime, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color: memberIds.length ? '' : color, location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false, ...symbols(), ...(old?.duplicateRequest ? { duplicateRequest: old.duplicateRequest } : {}) };
       }
       case 'calendarEntries': {
         check(calendarCategories.some(([key]) => key === data.category), 'Bitte Ferien, Feiertag, Arbeitstag oder importierten Termin auswählen.');
@@ -201,6 +201,28 @@ export class Model {
       }
       const saved = this.store.put(kind, recordId, value);
       if (kind === 'events' && value.googleAccountId) this.enqueue(saved, 'save');
+      return saved;
+    });
+  }
+  duplicateEvent(eventId, data) {
+    return this.store.transaction(() => {
+      check(typeof data.requestId === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(data.requestId), 'Ungültige Duplizierungskennung.');
+      const sourceKind = data.sourceKind ?? 'events';
+      check(['events','calendarEntries'].includes(sourceKind), 'Ungültige Terminquelle.');
+      const startDate = day(data.startDate), googleAccountId = text(data.googleAccountId, 100), calendarId = text(data.calendarId, 300);
+      const receipt = { sourceKind, eventId, revision: data._rev, startDate, googleAccountId, calendarId }, id = 'copy-' + data.requestId, existing = this.store.get('events', id);
+      if (existing) {
+        check(JSON.stringify(existing.duplicateRequest) === JSON.stringify(receipt), 'Dieser Dupliziervorgang wurde bereits anders verwendet. Bitte den Termin neu öffnen.', 409);
+        return existing;
+      }
+      const source = this.store.get(sourceKind, eventId);
+      check(source, 'Termin wurde nicht gefunden.', 404);
+      check(sourceKind === 'events' || source.category === 'event', 'Nur Termine können hier dupliziert werden.');
+      check(source._rev === data._rev, 'Der Termin wurde geändert. Bitte neu öffnen.', 409);
+      const days = source.startOnly ? 0 : Math.round((Date.parse(source.endDate || source.startDate) - Date.parse(source.startDate)) / 86400000);
+      const value = this.validate('events', { title: source.title, description: source.description, location: source.location, memberIds: source.memberIds ?? (source.memberId ? [source.memberId] : []), color: source.color, emoji: source.emoji, imageFile: source.imageFile, startDate, endDate: addDays(startDate, days), allDay: source.allDay, startOnly: source.startOnly, startTime: source.startTime, endTime: source.endTime, googleAccountId, calendarId });
+      const saved = this.store.put('events', id, { ...value, duplicateRequest: receipt });
+      if (saved.googleAccountId) this.enqueue(saved, 'save');
       return saved;
     });
   }

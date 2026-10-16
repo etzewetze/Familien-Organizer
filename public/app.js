@@ -30,6 +30,7 @@ const paths = {
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   expand: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
   edit: '<path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/>',
+  copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
   trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',
   pin: '<path d="m16 3 5 5-5 2-3 6-2-2-6 7m0-16 2-2 5 5-6 3Z"/>',
   download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
@@ -66,6 +67,8 @@ if (!scheduleSelection || typeof scheduleSelection !== 'object' || Array.isArray
 navSort = navigationOrder(navSort, nav.map(item => item[0]));
 let birthdaySearch = '', templateEditing = false, taskColumns = localStorage.getItem('taskColumns') || 'auto';
 let lastTaskTap = { id: '', at: 0 }, taskHold = null, suppressTaskClickUntil = 0;
+let lastShoppingTap = { id: '', listId: '', at: 0 }, shoppingLists;
+try { const saved = JSON.parse(localStorage.getItem('shoppingLists') || '[]'); shoppingLists = new Set(Array.isArray(saved) ? saved.filter(id => typeof id === 'string') : []); } catch { shoppingLists = new Set(); }
 let scheduleDraft = null, scheduleGuide = null, guideTimer = null;
 let calendarDataFilter = 'all';
 const calendarScrollPositions = new Map();
@@ -396,7 +399,7 @@ function render() {
 function headerMembers() {
   return `<div class="header-members" role="group" aria-label="Familienmitglieder"><div class="header-members-inner"><button class="header-person ${!filter ? 'selected' : ''}" data-filter="" aria-pressed="${!filter}" style="${personStyle('')}"><span class="member-ring">${I('people')}</span><span>Alle</span></button>${S.members.map(m => `<button class="header-person ${filter === m.id ? 'selected' : ''}" data-filter="${m.id}" ${route === 'tasks' ? `data-task-drop="${m.id}"` : ''} style="${personStyle(m.id)}" aria-pressed="${filter === m.id}">${avatar(m.id)}<span>${E(m.name)}</span>${route === 'tasks' ? `<small class="header-points">${S.points[m.id].available} Punkte</small>` : ''}</button>`).join('')}</div></div>`;
 }
-function updateDisabled() { if (!online) document.querySelectorAll('[data-edit],[data-complete],[data-check-item],[data-redeem],[data-action=import-recipe],form button[type=submit]').forEach(el => el.disabled = true); }
+function updateDisabled() { if (!online) document.querySelectorAll('[data-edit],[data-complete],[data-check-item],[data-shopping-item],[data-action=duplicate-event],[data-redeem],[data-action=import-recipe],form button[type=submit]').forEach(el => el.disabled = true); }
 function eventCard(e, compact = false) {
   const people = eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle';
   const time = e.birthdayId ? 'Geburtstag · jährlich' : e.allDay ? 'Ganztägig' : e.startOnly ? `${e.startTime} · ohne Ende` : `${e.startTime}–${e.endTime}`;
@@ -508,10 +511,34 @@ function mealsPage() {
     }).join('')}</div></section>`;
   }).join('')}</div></div><div class="flex between section-gap"><h2>Eure Rezepte</h2><span class="small muted">In eine Mahlzeit ziehen oder Auswählen verwenden.</span></div><div class="recipe-grid section-gap">${S.recipes.map(r => `<article class="panel recipe-card" draggable="true" data-drag-kind="recipe" data-drag-id="${r.id}" data-drag-rev="${r._rev}"><button class="recipe-image-button" data-recipe="${r.id}" aria-label="${E(r.title)} · Rezept öffnen">${recipePicture(r)}</button><div class="flex between" style="width:100%"><span class="tag green">${E(r.category)}</span><button class="drag-handle" data-drag-handle aria-label="${E(r.title)} in den Essensplan ziehen">${I('menu')}</button></div><h3>${E(r.title)}</h3><div class="recipe-meta"><span>${I('clock')}${r.minutes} Min.</span><span>${I('people')}${r.servings} Portionen</span></div><div class="recipe-bottom flex between"><button class="panel-link" data-recipe="${r.id}">Zum Rezept</button>${iconBtn('Rezept bearbeiten', 'edit-recipe', 'edit', `data-edit="recipes" data-id="${r.id}"`)}</div></article>`).join('') || '<div class="panel">Noch keine Rezepte. Legt eines an oder importiert einen Link.</div>'}</div>`;
 }
+function toggleShoppingMode() {
+  if (!S.lists.some(list => list.id === activeList)) return;
+  if (shoppingLists.has(activeList)) shoppingLists.delete(activeList); else shoppingLists.add(activeList);
+  shoppingLists = new Set([...shoppingLists].filter(id => S.lists.some(list => list.id === id)));
+  localStorage.setItem('shoppingLists', JSON.stringify([...shoppingLists]));
+  lastShoppingTap = { id: '', listId: '', at: 0 }; render();
+}
+async function toggleListItem(id) {
+  const item = S?.items.find(item => item.id === id);
+  if (!item) throw new Error('Dieser Listeneintrag ist nicht mehr vorhanden.');
+  await mutate('/records/items/' + item.id, 'PUT', { ...item, checked: !item.checked });
+}
+async function tapShoppingItem(target, keyboard = false) {
+  const id = target.dataset.shoppingItem, item = S?.items.find(item => item.id === id), time = Date.now();
+  if (busy || !online || !shoppingLists.has(activeList) || item?.listId !== activeList) { lastShoppingTap = { id: '', listId: '', at: 0 }; return; }
+  if (!keyboard && (lastShoppingTap.id !== id || lastShoppingTap.listId !== activeList || time - lastShoppingTap.at >= 450)) { lastShoppingTap = { id, listId: activeList, at: time }; return; }
+  lastShoppingTap = { id: '', listId: '', at: 0 }; busy = true;
+  try { await toggleListItem(id); } catch (error) { toast(error.message, true); } finally { busy = false; }
+}
+function listItemRow(item, shopping = false) {
+  if (shopping) return `<button type="button" class="shopping-item ${item.checked ? 'done' : ''}" data-shopping-item="${item.id}" role="checkbox" aria-checked="${item.checked}" aria-label="${E(item.title)}, ${E(quantity(item.quantity))} ${E(item.unit)}. ${item.checked ? 'Erledigt' : 'Offen'}. Doppeltippen zum ${item.checked ? 'Öffnen' : 'Abhaken'}, mit Tastatur einmal aktivieren."><span class="check-button ${item.checked ? 'checked' : ''}" aria-hidden="true">${item.checked ? I('check') : ''}</span><span class="spacer"><span class="shopping-title">${E(item.title)}</span>${item.generatedWeek ? '<small class="todo-detail">Aus dem Essensplan</small>' : ''}</span>${item.quantity || item.unit ? `<span class="shopping-quantity">${quantity(item.quantity)} ${E(item.unit)}</span>` : ''}</button>`;
+  return `<div class="todo-row ${item.checked ? 'done' : ''}"><button class="check-button ${item.checked ? 'checked' : ''}" role="checkbox" aria-checked="${item.checked}" aria-label="${E(item.title)} ${item.checked ? 'wieder öffnen' : 'abhaken'}" data-check-item="${item.id}">${item.checked ? I('check') : ''}</button><div class="spacer"><div class="todo-title">${E(item.title)}</div>${item.generatedWeek ? '<span class="todo-detail">Aus dem Essensplan</span>' : ''}</div>${item.quantity || item.unit ? `<span class="small muted">${quantity(item.quantity)} ${E(item.unit)}</span>` : ''}<div class="task-buttons">${iconBtn('Eintrag bearbeiten', 'edit-item', 'edit', `data-edit="items" data-id="${item.id}"`)}</div></div>`;
+}
 function listsPage() {
-  const list = S.lists.find(l => l.id === activeList) || S.lists[0]; activeList = list.id;
-  const items = S.items.filter(i => i.listId === activeList), categories = [...new Set(items.map(i => i.category))].sort((a, b) => a.localeCompare(b, 'de'));
-  return `${pageHead('Nicht vergessen.', 'Einkauf, Packlisten und alles, was ihr euch merken möchtet.', `<button class="button primary" data-edit="lists">${I('plus')}<span>Liste</span></button>`)}<div class="list-layout"><aside class="panel list-nav">${S.lists.map(l => `<button data-list="${l.id}" class="${l.id === activeList ? 'active' : ''}">${I(l.id === 'shopping' ? 'food' : 'lists')}<span class="spacer">${E(l.title)}</span><span class="tag">${S.items.filter(i => i.listId === l.id && !i.checked).length}</span></button>`).join('')}</aside><section class="panel"><div class="panel-head"><div><h2>${E(list.title)}</h2><span class="small muted">${items.filter(i => !i.checked).length} offen · ${items.filter(i => i.checked).length} erledigt</span></div><div class="flex">${activeList !== 'shopping' ? iconBtn('Liste bearbeiten', 'edit-list', 'edit', `data-edit="lists" data-id="${list.id}"`) : ''}${iconBtn('Eintrag mit Menge hinzufügen', 'new-item', 'plus', 'data-edit="items"')}</div></div><div class="panel-body"><form id="quick-item" class="inline-add"><input name="title" placeholder="${activeList === 'shopping' ? 'Was brauchen wir noch?' : 'Neuer Eintrag …'}" aria-label="Neuer Listeneintrag" required maxlength="160"><button class="button primary" type="submit" aria-label="Eintrag hinzufügen">${I('plus')}</button></form>${items.length ? categories.map(category => `<div class="list-category">${E(category)}</div>${items.filter(i => i.category === category).sort((a, b) => Number(a.checked) - Number(b.checked)).map(item => `<div class="todo-row ${item.checked ? 'done' : ''}"><button class="check-button ${item.checked ? 'checked' : ''}" role="checkbox" aria-checked="${item.checked}" aria-label="${E(item.title)} ${item.checked ? 'wieder öffnen' : 'abhaken'}" data-check-item="${item.id}">${item.checked ? I('check') : ''}</button><div class="spacer"><div class="todo-title">${E(item.title)}</div>${item.generatedWeek ? '<span class="todo-detail">Aus dem Essensplan</span>' : ''}</div>${item.quantity || item.unit ? `<span class="small muted">${quantity(item.quantity)} ${E(item.unit)}</span>` : ''}<div class="task-buttons">${iconBtn('Eintrag bearbeiten', 'edit-item', 'edit', `data-edit="items" data-id="${item.id}"`)}</div></div>`).join('')}`).join('') : empty('Hier ist noch Platz', activeList === 'shopping' ? 'Zutaten aus dem Essensplan übernehmen oder Artikel selbst hinzufügen.' : 'Fügt euren ersten Eintrag hinzu.', 'lists')}</div></section></div>`;
+  const list = S.lists.find(list => list.id === activeList) || S.lists[0]; activeList = list.id;
+  const shopping = shoppingLists.has(activeList), items = S.items.filter(item => item.listId === activeList), categories = [...new Set(items.map(item => item.category))].sort((a,b) => a.localeCompare(b,'de'));
+  const rows = categories.map(category => `<div class="list-category">${E(category)}</div>${items.filter(item => item.category === category).sort((a,b) => shopping ? 0 : Number(a.checked) - Number(b.checked)).map(item => listItemRow(item, shopping)).join('')}`).join('');
+  return `${pageHead('Nicht vergessen.', 'Einkauf, Packlisten und alles, was ihr euch merken möchtet.', `<button class="button primary" data-edit="lists">${I('plus')}<span>Liste</span></button>`)}<div class="list-layout"><aside class="panel list-nav">${S.lists.map(list => `<button data-list="${list.id}" class="${list.id === activeList ? 'active' : ''}">${I(list.id === 'shopping' ? 'food' : 'lists')}<span class="spacer">${E(list.title)}</span><span class="tag">${S.items.filter(item => item.listId === list.id && !item.checked).length}</span></button>`).join('')}</aside><section class="panel ${shopping ? 'shopping-mode' : ''}"><div class="panel-head"><div><h2>${E(list.title)}</h2><span class="small muted">${items.filter(item => !item.checked).length} offen · ${items.filter(item => item.checked).length} erledigt</span></div><div class="flex list-tools"><div class="view-switch" role="group" aria-label="Listenmodus"><button type="button" data-action="shopping-mode" class="${shopping ? '' : 'active'}" aria-pressed="${!shopping}" ${shopping ? '' : 'disabled'}>Bearbeiten</button><button type="button" data-action="shopping-mode" class="${shopping ? 'active' : ''}" aria-pressed="${shopping}" ${shopping ? 'disabled' : ''}>${I('food')}Einkauf</button></div>${shopping ? '' : `${activeList !== 'shopping' ? iconBtn('Liste bearbeiten', 'edit-list', 'edit', `data-edit="lists" data-id="${list.id}"`) : ''}${iconBtn('Eintrag mit Menge hinzufügen', 'new-item', 'plus', 'data-edit="items"')}`}</div></div><div class="panel-body">${shopping ? '<p class="shopping-hint">Doppeltippen zum Abhaken oder Wiederöffnen. Erledigte Einträge bleiben an ihrer Stelle. Mit Tastatur oder Vorlesefunktion einmal aktivieren.</p>' : ''}<form id="quick-item" class="inline-add"><input name="title" placeholder="${activeList === 'shopping' ? 'Was brauchen wir noch?' : 'Neuer Eintrag …'}" aria-label="Neuer Listeneintrag" required maxlength="160"><button class="button primary" type="submit" aria-label="Eintrag hinzufügen">${I('plus')}</button></form>${items.length ? rows : empty('Hier ist noch Platz', activeList === 'shopping' ? 'Zutaten aus dem Essensplan übernehmen oder Artikel selbst hinzufügen.' : 'Fügt euren ersten Eintrag hinzu.', 'lists')}</div></section></div>`;
 }
 function notesPage() {
   return `${pageHead('Für später. Für alle.', 'Gedanken, Ideen und wichtige Familieninfos.', `<button class="button primary" data-edit="notes">${I('plus')}<span>Notiz</span></button>`)}${S.notes.length ? `<div class="notes-grid">${[...S.notes].sort((a, b) => Number(b.pinned) - Number(a.pinned)).map(n => `<article class="panel note-card ${n.pinned ? 'pinned' : ''}"><div class="flex between"><h3>${E(n.title)}</h3>${n.pinned ? I('pin') : ''}</div><div class="note-body">${E(n.body)}</div><div class="note-footer"><button data-edit="notes" data-id="${n.id}" aria-label="${E(n.title)} bearbeiten">${I('edit')}</button></div></article>`).join('')}</div>` : `<div class="panel">${empty('Ein gemeinsamer Platz für Gedanken', 'Wichtige Infos, kleine Ideen und große Pläne finden hier ihren Platz.', 'notes', btn('Notiz hinzufügen', 'new-note', 'plus', 'primary', 'data-edit="notes"'))}</div>`}`;
@@ -565,7 +592,7 @@ function editRecord(kind, id = '', defaults = {}) {
   else if (kind === 'rewards') fields = `${field('Belohnung', 'title', record.title, 'text', required, true)}${field('Benötigte Punkte', 'cost', record.cost || 25, 'number', 'min="1" max="100000" step="1" required', true)}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="1000"')}`;
   const deletable = old && kind !== 'members' && !(kind === 'lists' && old.id === 'shopping') && !old.googleReadOnly;
   const preview = kind === 'recipes' && record._imported ? `<div class="info-box full"><strong>Rezeptimport · Vorschau</strong><p>Bitte Zutatenmengen und Portionen prüfen. Erst mit „Speichern“ wird das Rezept übernommen.</p>${(record._importWarnings || []).map(warning => `<p>${E(warning)}</p>`).join('')}</div>` : '';
-  dialog(title, `<form id="record-form"><div class="form-grid">${preview}${fields}</div><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${deletable ? '<button class="button danger" type="button" data-action="delete-record">Löschen</button><div class="spacer"></div>' : ''}<button type="button" class="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit" ${old?.googleReadOnly ? 'disabled' : ''}>Speichern</button></div></form>`);
+  dialog(title, `<form id="record-form"><div class="form-grid">${preview}${fields}</div><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${deletable ? '<button class="button danger" type="button" data-action="delete-record">Löschen</button><div class="spacer"></div>' : ''}${kind === 'calendarEntries' && old?.category === 'event' ? `<button class="button" type="button" data-action="duplicate-event">${I('copy')}Duplizieren</button>` : ''}<button type="button" class="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit" ${old?.googleReadOnly ? 'disabled' : ''}>Speichern</button></div></form>`);
   if (kind === 'calendarEntries') updateCalendarEntryFields();
 }
 async function saveEditor(form) {
@@ -651,6 +678,7 @@ document.addEventListener('click', async event => {
   if (suppressDragClick) { event.preventDefault(); return; }
   if (Date.now() < suppressWakeClickUntil) { event.preventDefault(); return; }
   const target = event.target.closest('button,a,[data-slide]'); if (!target) return;
+  if (target.dataset.shoppingItem) { await tapShoppingItem(target, event.detail === 0); return; }
   if (Date.now() < suppressTaskClickUntil && target.dataset.taskTile) return;
   if (target.dataset.taskTile) { await tapTask(target); return; }
   if (target.dataset.template) { if (templateEditing) editRecord('taskTemplates', target.dataset.template); else openTemplateAssign(target.dataset.template); return; }
@@ -670,7 +698,7 @@ document.addEventListener('click', async event => {
   if (target.dataset.taskBoard !== undefined) { taskBoard = target.dataset.taskBoard; filter = taskBoard === 'all' ? '' : taskBoard; render(); return; }
   if (target.dataset.mealLayout) { setMealLayout(target.dataset.mealLayout); return; }
   if (target.dataset.taskMode) { taskMode = target.dataset.taskMode; render(); return; }
-  if (target.dataset.list) { activeList = target.dataset.list; render(); return; }
+  if (target.dataset.list) { activeList = target.dataset.list; lastShoppingTap = { id: '', listId: '', at: 0 }; render(); return; }
   if (target.dataset.photoSource) { photoSource = target.dataset.photoSource; localStorage.setItem('photoSource', photoSource); photoLoaded = false; photoItems = []; render(); void loadPhotos(); return; }
   if (target.dataset.edit) { try { editRecord(target.dataset.edit, target.dataset.id, { ...(target.dataset.date ? { startDate: target.dataset.date, fixedDate: true } : {}), ...(target.dataset.member !== undefined ? { memberId: target.dataset.member } : {}), ...(target.dataset.planType ? { type: target.dataset.planType } : {}) }); } catch (error) { toast(error.message, true); } return; }
   if (target.dataset.recipe) { viewRecipe(target.dataset.recipe); return; }
@@ -681,10 +709,13 @@ document.addEventListener('click', async event => {
     if (action === 'collapse-nav') { navCollapsed = !navCollapsed; localStorage.setItem('navCollapsed', String(navCollapsed)); render(); }
     else if (action === 'edit-nav') { navEditing = !navEditing; if (navEditing) navCollapsed = false; render(); }
     else if (action === 'edit-templates') { templateEditing = !templateEditing; render(); }
+    else if (action === 'shopping-mode') toggleShoppingMode();
+    else if (action === 'duplicate-event') openEventDuplicate();
+    else if (action === 'duplicate-event-back') editRecord(editing.sourceKind, editing.old.id);
     else if (action === 'schedule-guide-ok') { if (scheduleGuide && Date.now() >= scheduleGuide.readyAt) finishScheduleGuide(); }
     else if (action === 'remove-assigned-task') await removeAssignedTask(target.dataset.id);
     else if (target.dataset.complete) { if (target.hasAttribute('data-close-task-actions')) editor.close(); await completeTask(target.dataset.complete, target.dataset.date); }
-    else if (target.dataset.checkItem) { const item = S.items.find(i => i.id === target.dataset.checkItem); await mutate('/records/items/' + item.id, 'PUT', { ...item, checked: !item.checked }); }
+    else if (target.dataset.checkItem) await toggleListItem(target.dataset.checkItem);
     else if (target.dataset.redeem) {
       const memberId = $('[name=reward-member]').value, reward = S.rewards.find(r => r.id === target.dataset.redeem);
       if (await ask('Belohnung einlösen?', `${member(memberId).name} löst „${reward.title}“ für ${reward.cost} Punkte ein.`, 'Einlösen')) await mutate(`/rewards/${reward.id}/redeem`, 'POST', { memberId, requestId: uid() }, 'Belohnung eingelöst. Viel Spaß!');
@@ -754,6 +785,7 @@ document.addEventListener('submit', async event => {
     else if (form.id === 'recipe-import-form') await loadRecipeImport(data.url);
     else if (form.id === 'event-wizard-form') await advanceEventWizard(form);
     else if (form.id === 'event-edit-form') await saveEventEditor(form);
+    else if (form.id === 'event-duplicate-form') await saveEventDuplicate(form);
     else if (form.id === 'settings-appearance') await saveAppearance(form, data);
     else if (form.id === 'settings-device') saveDeviceSettings(data);
     else if (form.id === 'weather-search-form') await searchWeather(data.query);
@@ -1028,7 +1060,24 @@ function updateEventColorControls() {
 function eventColorFromForm(data, people) { return !people.length && data.get('useDefaultColor') !== 'on' ? data.get('eventColor') || appearanceFor(S.settings).allColor : ''; }
 function openEventEditor(old) {
   const draft = { ...old, memberIds: eventMembers(old) }; editing = { kind: 'events', old, draft, symbol: { imageFile: old.imageFile || '', file: null, removed: false } };
-  dialog(old.googleReadOnly ? 'Termin ansehen' : 'Termin bearbeiten', `<form id="event-edit-form"><div class="form-grid">${eventPeopleField(draft)}${eventImageField()}${emojiField(draft.emoji)}${field('Überschrift', 'title', draft.title, 'text', 'required maxlength="160"', true)}${textareaField('Beschreibung (optional)', 'description', draft.description, 'rows="3" maxlength="5000"')}${field('Adresse / Ort (optional)', 'location', draft.location, 'text', 'maxlength="300"', true)}${eventColorField(draft)}${field('Datum', 'startDate', draft.startDate, 'date', 'required')}<div id="event-end-date" ${draft.startOnly && !draft.allDay ? 'hidden' : ''}>${field('Enddatum', 'endDate', draft.endDate || draft.startDate, 'date', draft.startOnly && !draft.allDay ? 'disabled' : 'required')}</div>${eventTimeFields(draft, old, false)}</div><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${old.googleReadOnly ? '' : '<button class="button danger" type="button" data-action="delete-record">Löschen</button>'}<div class="spacer"></div><button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit" ${old.googleReadOnly ? 'disabled' : ''}>Speichern</button></div></form>`);
+  dialog(old.googleReadOnly ? 'Termin ansehen' : 'Termin bearbeiten', `<form id="event-edit-form"><div class="form-grid">${eventPeopleField(draft)}${eventImageField()}${emojiField(draft.emoji)}${field('Überschrift', 'title', draft.title, 'text', 'required maxlength="160"', true)}${textareaField('Beschreibung (optional)', 'description', draft.description, 'rows="3" maxlength="5000"')}${field('Adresse / Ort (optional)', 'location', draft.location, 'text', 'maxlength="300"', true)}${eventColorField(draft)}${field('Datum', 'startDate', draft.startDate, 'date', 'required')}<div id="event-end-date" ${draft.startOnly && !draft.allDay ? 'hidden' : ''}>${field('Enddatum', 'endDate', draft.endDate || draft.startDate, 'date', draft.startOnly && !draft.allDay ? 'disabled' : 'required')}</div>${eventTimeFields(draft, old, false)}</div><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${old.googleReadOnly ? '' : '<button class="button danger" type="button" data-action="delete-record">Löschen</button>'}<button class="button" type="button" data-action="duplicate-event">${I('copy')}Duplizieren</button><div class="spacer"></div><button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit" ${old.googleReadOnly ? 'disabled' : ''}>Speichern</button></div></form>`);
+}
+function openEventDuplicate() {
+  const sourceKind = editing?.kind, old = sourceKind === 'events' || sourceKind === 'calendarEntries' && editing.old?.category === 'event' ? editing.old : null;
+  if (!old) return;
+  clearEventPreview();
+  const targets = [['', 'Nur Familienkalender'], ...S.google.flatMap(account => account.calendars.filter(calendar => calendar.selected && ['owner','writer'].includes(calendar.accessRole)).map(calendar => [JSON.stringify([account.id,calendar.id]), `${calendar.title} · ${account.email}`]))];
+  const preferred = old.googleAccountId && !old.googleReadOnly ? JSON.stringify([old.googleAccountId,old.calendarId]) : '';
+  editing = { kind: 'event-duplicate', sourceKind, old, requestId: uid() };
+  dialog('Termin duplizieren', `<form id="event-duplicate-form"><div class="event-summary"><strong>${E(old.title)}</strong><span>${fullDate(old.startDate)}${old.endDate !== old.startDate ? ' – ' + fullDate(old.endDate) : ''}</span><span>${old.allDay ? 'Ganztägig' : E(old.startTime) + (old.startOnly ? ' · ohne Ende' : '–' + E(old.endTime))}</span></div><div class="form-grid section-gap">${field('Für welchen Tag?', 'startDate', addDays(old.startDate, 1), 'date', 'required', true)}${selectField('Kalender für das Duplikat', 'googleTarget', targets.some(([key]) => key === preferred) ? preferred : '', targets, true)}</div><p class="field-hint section-gap">Uhrzeiten, Dauer, Personen und Details des gespeicherten Termins werden übernommen. Das Original bleibt erhalten. Änderungen im vorherigen Formular werden erst durch Speichern übernommen.</p><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions"><button class="button" type="button" data-action="duplicate-event-back">Zurück</button><button class="button primary" type="submit">Duplikat anlegen</button></div></form>`);
+}
+async function saveEventDuplicate(form) {
+  const data = new FormData(form), current = editing;
+  const target = data.get('googleTarget') ? JSON.parse(data.get('googleTarget')) : [];
+  const copied = await api(`/events/${current.old.id}/duplicate`, 'POST', { sourceKind: current.sourceKind, startDate: data.get('startDate'), googleAccountId: target[0] || '', calendarId: target[1] || '', _rev: current.old._rev, requestId: current.requestId });
+  await refresh(false);
+  if (editor.open && editing === current) { editor.close(); cursor = copied.startDate; if (route === 'calendar') render(); else go('calendar'); }
+  toast('Termin dupliziert.');
 }
 async function saveEventEditor(form) {
   const data = new FormData(form), selected = data.getAll('event-person');
@@ -1170,6 +1219,7 @@ function requireLogin(version) {
   for (const url of photoUrls.values()) URL.revokeObjectURL(url); photoUrls.clear();
   returnToOrganizer(); editor.close(); editor.innerHTML = ''; confirmDialog.close(); confirmDialog.innerHTML = '';
   resolveConfirmation?.(false); resolveConfirmation = null; editing = null; pointerDrag = null; nativeDrag = null; filter = ''; taskBoard = 'all';
+  lastShoppingTap = { id: '', listId: '', at: 0 };
   for (const url of [taskPreviewUrl, memberPreviewUrl, recipePreviewUrl, backgroundPreviewUrl]) if (url) URL.revokeObjectURL(url);
   taskPreviewUrl = memberPreviewUrl = recipePreviewUrl = backgroundPreviewUrl = ''; clearEventPreview();
   updaterState = null; status = { ...status, configured: true, authenticated: false, version: version || status?.version || VERSION };
