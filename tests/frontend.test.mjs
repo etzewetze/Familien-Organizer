@@ -14,6 +14,7 @@ import { emojis, emojiCategories, findEmojis, isEmoji } from '../public/symbols.
 import { weatherCode, weatherValue, weatherTime, rainOutlook } from '../public/weather.js';
 import { deviceConfig, idleAction } from '../public/device-mode.js';
 import { schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder } from '../public/schedules.js';
+import { calendarCategories, calendarOptionDefaults, germanStates, planCaption, calendarEntriesOnDate } from '../public/calendar-data.js';
 
 // Ausführung der Ansichtslogik ohne echten Browser. Ersetzt keine visuelle QA.
 function fixture(t) {
@@ -30,7 +31,7 @@ function fixture(t) {
     location: { hash: '#home' }, localStorage: { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) }, innerWidth: 1440, innerHeight: 900,
     addEventListener() {}, setInterval() {}, setTimeout() {}, clearInterval() {},
     Intl, Date, console, URL, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties, initialState: store.state(),
-    schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder, structuredClone, crypto, clearTimeout, requestAnimationFrame() {},
+    calendarCategories, calendarOptionDefaults, germanStates, planCaption, calendarEntriesOnDate, schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder, structuredClone, crypto, clearTimeout, requestAnimationFrame() {},
     VERSION, emojis, emojiCategories, findEmojis, isEmoji, weatherCode, weatherValue, weatherTime, rainOutlook, deviceConfig, idleAction,
     FormData: class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key] ?? null; } getAll(key) { return [].concat(this.fields[key] || []); } *[Symbol.iterator]() { for (const [key, value] of Object.entries(this.fields)) for (const item of [].concat(value)) yield [key, item]; } },
   });
@@ -41,7 +42,7 @@ function fixture(t) {
 }
 test('Alle zehn Ansichten und Kalenderdarstellungen erzeugen HTML ohne Laufzeitfehler', t => {
   const { run } = fixture(t);
-  for (const view of ['schedulesPage', 'homePage', 'calendarPage', 'birthdaysPage', 'tasksPage', 'rewardsPage', 'mealsPage', 'listsPage', 'notesPage', 'photosPage', 'settingsPage']) {
+  for (const view of ['calendarDataPage', 'schedulesPage', 'homePage', 'calendarPage', 'birthdaysPage', 'tasksPage', 'rewardsPage', 'mealsPage', 'listsPage', 'notesPage', 'photosPage', 'settingsPage']) {
     const html = run(`${view}()`); assert.ok(html.includes('page-head')); assert.ok(!html.includes('undefined')); assert.ok(!html.includes('NaN'));
   }
   for (const mode of ['week', 'month', 'year', 'agenda']) { const html = run(`calendarMode='${mode}';calendarPage()`); assert.ok(html.length > 500); }
@@ -465,4 +466,47 @@ test('Eine Kitaplananlage speichert Zeiten und startet nur beim ersten Plan die 
   assert.equal(run('scheduleGuide.id'), 'saved-kita'); assert.equal(run('displayBlocked()'), true); assert.equal(run('location.hash'), 'calendar');
   run('finishScheduleGuide()'); assert.equal(stored.get('scheduleGuideSeen'), 'true');
   run("openScheduleEditor(null,{type:'kita'})"); await run('saveSchedule(form)'); assert.equal(run('scheduleGuide'), null);
+});
+
+test('Plannamen sind optional; namenlose Pläne zeigen die Person in Liste und Kalenderschalter', t => {
+  const { run,elements } = fixture(t);
+  run("openScheduleEditor(null,{type:'kita'})");
+  const html = elements.get('#editor').innerHTML, title = html.match(/<input name="title"[^>]+>/)[0];
+  assert.ok(!title.includes('required')); assert.ok(title.includes('value=""'));
+  run("S.schedules=[{id:'kita',type:'kita',title:'',memberId:S.members[0].id,entries:[],showInCalendar:true}]");
+  assert.ok(run('schedulesPage()').includes('<h2>Anna</h2>')); assert.ok(run('scheduleToggles()').includes('<span>Anna</span>'));
+});
+test('Ferien und Feiertage erscheinen in Kalenderansichten, sind abschaltbar und bleiben in der Verwaltung bearbeitbar', t => {
+  const { run } = fixture(t);
+  run("cursor='2026-10-12';S.calendarEntries=[{id:'ferien',_rev:3,title:'Herbst <script>',category:'vacation',startDate:cursor,endDate:cursor,allDay:true,enabled:true,memberId:'',source:'<b>Quelle</b>'}]");
+  for (const mode of ['week','month','year','agenda']) { const html = run(`calendarMode='${mode}';calendarPage()`); assert.ok(html.includes('Herbst &lt;script&gt;')); assert.ok(html.includes('data-calendar-option="vacation"')); }
+  run('S.calendarOptions.vacation=false'); assert.ok(!run('calendarPage()').includes('Herbst &lt;script&gt;'));
+  const management = run('calendarDataPage()'); assert.ok(management.includes('Herbst &lt;script&gt;')); assert.ok(management.includes('&lt;b&gt;Quelle&lt;/b&gt;')); assert.ok(management.includes('data-edit="calendarEntries"'));
+});
+test('Ferienformular speichert Zuordnung, Aktivierung und Grenzen und lässt die Importkennung auf dem Server erhalten', async t => {
+  const { run,context,elements } = fixture(t), requests = [];
+  run("S.calendarEntries=[{id:'holiday',_rev:4,title:'Feiertag',category:'holiday',startDate:cursor,endDate:cursor,allDay:true,enabled:true,memberId:'',source:'Importquelle',importKey:'a'.repeat(64)}];editRecord('calendarEntries','holiday')");
+  assert.ok(elements.get('#editor').innerHTML.includes('Ende (einschließlich)')); assert.ok(elements.get('#editor').innerHTML.includes('Importquelle'));
+  context.fetch = async (url,options) => { requests.push({url,options}); return {ok:true,json:async () => url === '/api/state' ? context.initialState : {}}; };
+  context.fields = { title:'Schließtag',category:'holiday',startDate:run('cursor'),endDate:run('cursor'),memberId:run('S.members[1].id'),entryAllDay:'on',pauseSchedules:'on' };
+  await run('saveEditor({fields})'); const data = JSON.parse(requests[0].options.body);
+  assert.equal(requests[0].url,'/api/records/calendarEntries/holiday'); assert.equal(data._rev,4); assert.equal(data.enabled,false); assert.equal(data.allDay,true); assert.equal(data.memberId,run('S.members[1].id'));
+});
+test('ICS-Auswahl lädt nur eine Vorschau; Bestätigen sendet ausgewählte Indizes und die Person', async t => {
+  const { run,context,elements } = fixture(t), requests = [];
+  run("openCalendarImport('ics')"); elements.set('#calendar-import-file',{}); elements.get('#calendar-import-file').files = [{ size:30,text:async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR' }];
+  context.fetch = async (url,options) => { requests.push({url,options}); return { ok:true,json:async () => url === '/api/calendar/import/preview' ? { token:'private-token',source:'ICS <b>',warnings:['Bitte <script> prüfen'],entries:[{title:'Sport <b>',category:'event',startDate:run('cursor'),endDate:run('cursor'),allDay:false,startTime:'16:00',endTime:'17:00'}] } : url === '/api/state' ? context.initialState : { imported:1,skipped:0 } }; };
+  context.form = { querySelector:() => elements.get('#calendar-import-file'),fields:{memberId:run('S.members[0].id'),category:'event',from:'2026-01-01',until:'2026-12-31'} };
+  await run('loadCalendarPreview(form,{...form.fields})'); assert.equal(requests.length,1); assert.equal(requests[0].url,'/api/calendar/import/preview');
+  assert.ok(elements.get('#editor').innerHTML.includes('Sport &lt;b&gt;')); assert.ok(elements.get('#editor').innerHTML.includes('Bitte &lt;script&gt; prüfen'));
+  context.confirmForm = { fields:{memberId:run('S.members[1].id'),'calendar-entry':['0']} };
+  await run('commitCalendarImport(confirmForm,{memberId:confirmForm.fields.memberId})');
+  const sent = JSON.parse(requests[1].options.body); assert.equal(requests[1].url,'/api/calendar/import/commit'); assert.equal(sent.token,'private-token'); assert.deepEqual(sent.selected,[0]); assert.equal(sent.memberId,run('S.members[1].id'));
+});
+test('Verspätete Ferien-Vorschau überschreibt keinen neuen Dialog', async t => {
+  const { run,context,elements } = fixture(t); let resolve;
+  run("openCalendarImport('holidays')"); context.fetch = () => new Promise(done => { resolve = done; });
+  const pending = run("loadCalendarPreview({fields:{}},{state:'DE-BW',year:'2026',vacations:'on',holidays:'on',memberId:''})");
+  run("editRecord('notes')"); resolve({ok:true,json:async () => ({token:'old',entries:[],warnings:[],source:'Alt'})}); await pending;
+  assert.equal(run('editing.kind'),'notes'); assert.ok(elements.get('#editor').innerHTML.includes('record-form'));
 });

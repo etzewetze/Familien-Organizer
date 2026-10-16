@@ -12,6 +12,9 @@ import { UpdaterClient } from './src/updater-client.mjs';
 import { seed } from './src/seed.mjs';
 import { Weather, weatherLocations } from './src/weather.mjs';
 import { VERSION, releases } from './public/releases.js';
+import { Holidays } from './src/holidays.mjs';
+import { parseCalendar } from './src/calendar-import.mjs';
+import { calendarOptionDefaults } from './public/calendar-data.js';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -39,6 +42,8 @@ export function createApp(env = process.env, services = {}) {
   const updater = services.updater || new UpdaterClient(env.UPDATER_SOCKET);
   const loadRecipe = services.importRecipe || importRecipe;
   const weather = services.weather || new Weather();
+  const holidays = services.holidays || new Holidays(), calendarPreviews = new Map();
+  let activeCalendarImports = 0;
   const now = services.now || Date.now;
   let updateCheck, updateCheckedAt = -Infinity, lastUpdateStatus;
   async function completedUpdate(force = false) {
@@ -168,6 +173,37 @@ export function createApp(env = process.env, services = {}) {
         }
         if (path === '/api/state' && req.method === 'GET') return json(res, { ...store.state(), version });
         if (path === '/api/changelog' && req.method === 'GET') return json(res, { version, previousVersion: store.meta('previousAppVersion', ''), changeId: version + ':' + store.meta('lastSuccessfulUpdate', ''), releases });
+        if (path === '/api/calendar/options' && req.method === 'PUT') {
+          const data = await body(req);
+          check(data._revision === store.meta('revision'), 'Die Kalenderauswahl wurde zwischenzeitlich geändert. Bitte neu laden.', 409);
+          const options = {};
+          for (const key of Object.keys(calendarOptionDefaults)) { check(typeof data[key] === 'boolean', 'Ungültige Kalenderauswahl.'); options[key] = data[key]; }
+          store.transaction(() => { store.setMeta('calendarOptions', options); store.bump(); }); return json(res, options);
+        }
+        if (path === '/api/calendar/holiday-groups' && req.method === 'GET') return json(res, await holidays.groups(url.searchParams.get('state')));
+        if (path === '/api/calendar/import/preview' && req.method === 'POST') {
+          const data = await body(req, false, 3 * 1024 * 1024), memberId = model.member(data.memberId, true);
+          check(['holidays','ics'].includes(data.mode), 'Bitte Ferien/Feiertage oder ICS-Datei auswählen.');
+          check(activeCalendarImports < 2, 'Es laufen bereits Kalenderimporte. Bitte kurz warten.', 429);
+          for (const [key, preview] of calendarPreviews) if (preview.expires < now() || preview.sessionHash === sessionHash) calendarPreviews.delete(key);
+          check(calendarPreviews.size < 8, 'Es sind zu viele Importvorschauen geöffnet. Bitte später erneut versuchen.', 429);
+          activeCalendarImports++;
+          try {
+            const result = data.mode === 'holidays' ? await holidays.preview(data) : parseCalendar(data.content, { from: data.from, until: data.until, category: data.category, timezone: store.meta('settings', {}).timezone || 'Europe/Berlin' });
+            const entries = result.entries.map(entry => model.validate('calendarEntries', { ...entry, memberId }));
+            check(entries.length <= 1000, 'Maximal 1000 Einträge pro Import.');
+            const token = randomBytes(24).toString('hex');
+            calendarPreviews.set(token, { sessionHash, entries, expires: now() + 10 * 60000 });
+            return json(res, { token, entries, warnings: result.warnings, source: result.source });
+          } finally { activeCalendarImports--; }
+        }
+        if (path === '/api/calendar/import/commit' && req.method === 'POST') {
+          const data = await body(req), preview = calendarPreviews.get(data.token);
+          check(preview && preview.sessionHash === sessionHash && preview.expires >= now(), 'Die Importvorschau ist abgelaufen oder gehört zu einem anderen Gerät. Bitte neu laden.', 409);
+          check(Array.isArray(data.selected) && data.selected.length > 0 && data.selected.length <= 1000 && new Set(data.selected).size === data.selected.length && data.selected.every(index => Number.isInteger(index) && index >= 0 && index < preview.entries.length), 'Bitte mindestens einen gültigen Eintrag auswählen.');
+          const result = model.importCalendar(data.selected.map(index => preview.entries[index]), model.member(data.memberId, true));
+          return json(res, result, 201);
+        }
         if (path === '/api/weather/search' && req.method === 'GET') return json(res, await weather.search(url.searchParams.get('q')));
         if (path === '/api/weather/locations' && req.method === 'PUT') {
           const data = await body(req);

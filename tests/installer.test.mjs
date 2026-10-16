@@ -175,6 +175,7 @@ test('Fehlgeschlagener Start des Updatedienstes nimmt eine Erstinstallation zur�
 test('Update behält Konfiguration, Notizen, Schlüssel und Fotos und entfernt alten Code', t => {
   const f = fixture(t); writeFileSync(join(f.source, 'src', 'obsolete.txt'), 'old'); passed(f.run()); f.seed();
   const birthdayStore = new Store(f.data); birthdayStore.put('birthdays', 'birthday', { name: 'Test Geburtstag', month: 10, day: 7, birthYear: 1990, leapDay: 'mar1', memberId: '', notes: '' }); birthdayStore.close();
+  const calendarStore = new Store(f.data); calendarStore.put('schedules','empty-title-plan',{ title:'',memberId:'child',type:'kita',entries:[] }); calendarStore.put('calendarEntries','vacation',{ title:'Ferien',memberId:'child',category:'vacation',startDate:'2026-10-12',endDate:'2026-10-16',enabled:true }); calendarStore.setMeta('calendarOptions',{ vacation:false,holiday:true,event:true }); calendarStore.close();
   const key = readFileSync(join(f.data, 'master.key'));
   const env = readFileSync(join(f.app, '.env'), 'utf8') + 'GOOGLE_CLIENT_SECRET="privat-test"\n'; writeFileSync(join(f.app, '.env'), env);
   rmSync(join(f.source, 'src', 'obsolete.txt')); f.release('v24.20.0'); passed(f.run());
@@ -183,6 +184,7 @@ test('Update behält Konfiguration, Notizen, Schlüssel und Fotos und entfernt a
   assert.match(readlinkSync(f.runtimeLink), /v24\.20\.0/);
   assert.ok(existsSync(join(f.app, 'public', 'birthdays.js'))); assert.ok(existsSync(join(f.app, 'src', 'recipe-import.mjs')));
   const afterUpdate = new Store(f.data); assert.equal(afterUpdate.get('birthdays', 'birthday').birthYear, 1990); afterUpdate.close();
+  const updatedCalendar = new Store(f.data); assert.equal(updatedCalendar.get('schedules','empty-title-plan').title,''); assert.equal(updatedCalendar.get('calendarEntries','vacation').memberId,'child'); assert.equal(updatedCalendar.meta('calendarOptions').vacation,false); updatedCalendar.close();
   const update = join(f.backups, 'updates', readdirSync(join(f.backups, 'updates'))[0]);
   assert.deepEqual(readFileSync(join(update, 'master.key')), key); assert.equal(readFileSync(join(update, '.env'), 'utf8'), env); assert.equal(readFileSync(join(update, 'photos', 'foto.jpg'), 'utf8'), 'test-photo');
 });

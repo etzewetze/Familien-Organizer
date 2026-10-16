@@ -111,3 +111,18 @@ dialog.schedule-guide::backdrop{background:transparent}
 @media(prefers-reduced-motion:reduce){.guide-spotlight{animation:none}}
 
 .scheduled-events-area{position:absolute;inset:0;pointer-events:none}.scheduled-events-area .time-event{pointer-events:auto}
+.calendar-data-switches{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--surface,#fff)}
+.calendar-data-switches .checkbox-field{font-size:.78rem;gap:7px}
+.calendar-data-switches input{width:17px;height:17px;min-height:0}
+.calendar-data-filter{max-width:320px}
+.calendar-entry-row{display:flex;align-items:center;gap:12px;padding:15px 2px;border-bottom:1px solid var(--line);min-width:0}
+.calendar-entry-row>.spacer{min-width:0;border-left:3px solid var(--person);padding-left:12px}
+.calendar-entry-row strong{font-size:.9rem;overflow-wrap:anywhere}
+.calendar-entry-row .todo-detail{display:block;overflow-wrap:anywhere}
+.calendar-entry-row>.checkbox-field{margin:0}
+.calendar-import-preview{margin-top:15px;max-height:48vh;overflow:auto;border:1px solid var(--line);border-radius:12px}
+.calendar-import-row{display:flex;align-items:center;gap:12px;padding:12px;cursor:pointer;border-bottom:1px solid var(--line)}
+.calendar-import-row input{width:18px;height:18px;min-height:0;flex-shrink:0}
+.calendar-import-row strong{display:block;font-size:.85rem;overflow-wrap:anywhere}
+.calendar-import-row small{display:block;font-size:.72rem;color:var(--muted);margin-top:4px}
+@media(max-width:620px){.calendar-data-switches{gap:10px;padding:10px}.calendar-entry-row{gap:7px}.calendar-entry-row .icon-button{width:34px;height:34px}.calendar-entry-row strong{font-size:.8rem}}

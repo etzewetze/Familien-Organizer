@@ -1,3 +1,4 @@
+import { scheduleClosed } from './calendar-data.js';
 export const schoolDays = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
 export const periodCounts = [6, 8, 10, 12];
 const minutes = time => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
@@ -12,10 +13,11 @@ export function defaultPeriods(count = 6) {
 }
 
 // A school day is one slim interval from the first occupied lesson to the last.
-export function scheduleWindows(schedules, date, { enabledOnly = true, selected = {}, memberId = '' } = {}) {
+export function scheduleWindows(schedules, date, { enabledOnly = true, selected = {}, memberId = '', closures = [], calendarOptions = {} } = {}) {
   const weekday = new Date(date + 'T12:00:00Z').getUTCDay();
   if (weekday < 1 || weekday > 5) return [];
   return schedules.filter(plan => (!enabledOnly || plan.showInCalendar) && selected[plan.id] !== false && (!memberId || plan.memberId === memberId) && (!plan.validFrom || date >= plan.validFrom) && (!plan.validUntil || date <= plan.validUntil)).flatMap(plan => {
+    if (scheduleClosed(plan, date, closures, calendarOptions)) return [];
     const entries = plan.entries.filter(entry => entry.weekday === weekday);
     if (!entries.length) return [];
     const times = plan.type === 'school' ? entries.map(entry => plan.periods[entry.period - 1]).filter(Boolean) : entries;

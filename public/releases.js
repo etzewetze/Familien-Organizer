@@ -1,5 +1,11 @@
-export const VERSION = '0.7.0';
+export const VERSION = '0.8.0';
 export const releases = [
+  { version: '0.8.0', date: '2026-10-16', title: 'Ferien, Feiertage und Kalenderimport', changes: [
+    'Plannamen dürfen leer sein. Die Anzeige verwendet dann den zugeordneten Personennamen.',
+    'Ferien und Feiertage lassen sich im Kalender aktivieren, ansehen, bearbeiten und selbst ergänzen. Bundesland und Jahr laden eine prüfbare Vorschau.',
+    'ICS-Dateien importieren, Einträge auswählen und Alle oder eine Person zuordnen. Wiederholungen werden im ausgewählten Zeitraum aufgelöst; doppelte Importe werden übersprungen.',
+    'Schulpläne können während zugeordneter Ferien und Feiertage pausieren. Für Kita ist die Ferienpause getrennt einstellbar.',
+  ] },
   { version: '0.7.0', date: '2026-10-16', title: 'Aufgabenbibliothek, Stundenpläne und Jahreskalender', changes: [
     'Geburtstage lassen sich direkt nach Namen durchsuchen. Der Kalender bietet eine Jahresansicht mit Geburtstagen und Terminen.',
     'Wiederverwendbare Aufgabenvorlagen mit Bild oder Emoji, Punkten und optionaler Nummer: ziehen oder bei einer Person nach Name oder Nummer auswählen.',

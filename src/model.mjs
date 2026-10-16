@@ -3,6 +3,7 @@ import { KINDS } from './store.mjs';
 import { appearanceDefaults, isColor, isImageFile } from '../public/appearance.js';
 import { isEmoji } from '../public/symbols.js';
 import { periodCounts } from '../public/schedules.js';
+import { calendarCategories } from '../public/calendar-data.js';
 
 export class AppError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -99,6 +100,18 @@ export class Model {
         check(!old?.googleReadOnly, 'Dieser Google-Kalender ist schreibgeschützt.', 403);
         return { title: title(), startDate, endDate, startTime, endTime, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color: memberIds.length ? '' : color, location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false, ...symbols() };
       }
+      case 'calendarEntries': {
+        check(calendarCategories.some(([key]) => key === data.category), 'Bitte Ferien, Feiertag oder importierten Termin auswählen.');
+        const startDate = day(data.startDate), endDate = day(data.endDate || startDate), allDay = data.category !== 'event' || data.allDay !== false;
+        const startOnly = !allDay && !!data.startOnly, startTime = allDay ? '' : text(data.startTime, 5, true), endTime = allDay || startOnly ? '' : text(data.endTime, 5, true);
+        check(endDate >= startDate && (!startOnly || endDate === startDate), 'Das Ende muss nach dem Beginn liegen.');
+        check(allDay || (startOnly ? [startTime] : [startTime,endTime]).every(time => /^([01]\d|2[0-3]):[0-5]\d$/.test(time)), 'Ungültige Uhrzeit.');
+        check(allDay || startOnly || endDate > startDate || endTime > startTime, 'Das Ende muss nach dem Beginn liegen.');
+        const importKey = text(old?.importKey ?? data.importKey, 64);
+        check(!importKey || /^[a-f0-9]{64}$/.test(importKey), 'Ungültige Importkennung.');
+        for (const key of ['enabled','pauseSchedules']) check(data[key] === undefined || typeof data[key] === 'boolean', 'Ungültige Kalenderaktivierung.');
+        return { title: title(), category: data.category, memberId: memberId(), startDate, endDate, allDay, startOnly, startTime, endTime, enabled: data.enabled ?? old?.enabled ?? true, pauseSchedules: data.category !== 'event' && (data.pauseSchedules ?? old?.pauseSchedules ?? true), description: text(data.description, 5000), location: text(data.location, 300), source: text(old?.source ?? data.source, 200), importKey };
+      }
       case 'birthdays': {
         const month = number(data.month, 1, 12, true), birthdayDay = number(data.day, 1, 31, true);
         day(`2000-${String(month).padStart(2, '0')}-${String(birthdayDay).padStart(2, '0')}`);
@@ -116,6 +129,7 @@ export class Model {
       }
       case 'schedules': {
         check(['school', 'kita'].includes(data.type), 'Bitte Stundenplan oder Kita auswählen.');
+        for (const key of ['pauseDuringVacations','pauseOnHolidays']) check(data[key] === undefined || typeof data[key] === 'boolean', 'Ungültige Ferien-/Feiertagsauswahl.');
         const validFrom = day(data.validFrom, true), validUntil = day(data.validUntil, true);
         check(!validFrom || !validUntil || validUntil >= validFrom, 'Das Gültigkeitsende liegt vor dem Beginn.');
         const periodCount = data.type === 'school' ? number(data.periodCount, 6, 12, true) : 6;
@@ -141,7 +155,7 @@ export class Model {
           check(endTime > startTime, 'Die Abholzeit muss nach der Bringzeit liegen.');
           return { weekday, startTime, endTime, title: text(entry.title, 80) };
         });
-        return { title: title(), type: data.type, memberId: this.member(data.memberId), periodCount, periods, entries, validFrom, validUntil, showInCalendar: !!data.showInCalendar };
+        return { title: text(data.title, 160), type: data.type, memberId: this.member(data.memberId), periodCount, periods, entries, validFrom, validUntil, showInCalendar: !!data.showInCalendar, pauseDuringVacations: data.pauseDuringVacations ?? old?.pauseDuringVacations ?? data.type === 'school', pauseOnHolidays: data.pauseOnHolidays ?? old?.pauseOnHolidays ?? true };
       }
       case 'tasks': {
         const repeat = data.repeat || 'none';
@@ -192,6 +206,22 @@ export class Model {
   }
   enqueue(event, operation) {
     this.store.db.prepare("INSERT INTO outbox(record_id,operation,data) VALUES (?,?,?) ON CONFLICT(record_id) DO UPDATE SET operation=excluded.operation,data=excluded.data,error='',attempts=0").run(event.id, operation, JSON.stringify(event));
+  }
+  importCalendar(entries, memberId) {
+    this.member(memberId, true);
+    check(Array.isArray(entries) && entries.length > 0 && entries.length <= 1000, 'Bitte 1 bis 1000 Einträge importieren.');
+    return this.store.transaction(() => {
+      const records = entries.map(entry => this.validate('calendarEntries', { ...entry, memberId }));
+      const known = new Set(this.store.all('calendarEntries').map(entry => `${entry.memberId}|${entry.category}|${entry.importKey}`));
+      let imported = 0, skipped = 0;
+      for (const entry of records) {
+        check(entry.importKey, 'Importkennung fehlt.');
+        const key = `${entry.memberId}|${entry.category}|${entry.importKey}`;
+        if (known.has(key)) { skipped++; continue; }
+        this.store.put('calendarEntries', this.store.id(), entry); known.add(key); imported++;
+      }
+      return { imported, skipped };
+    });
   }
   delete(kind, id, rev) {
     check(KINDS.includes(kind), 'Bereich nicht gefunden.', 404);

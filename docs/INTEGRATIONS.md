@@ -130,3 +130,10 @@ Diese Integration muss gegen eure eingesetzte Immich-Version geprüft werden. AP
 - [schema.org: Recipe](https://schema.org/Recipe)
 - [Google: Strukturierte Rezeptdaten](https://developers.google.com/search/docs/appearance/structured-data/recipe?hl=de)
 - [Node.js 22.13: SQLite](https://nodejs.org/download/release/v22.13.1/docs/api/sqlite.html)
+
+
+## Ferien, Feiertage und ICS
+
+Die optionale Ferien-/Feiertagsabfrage verwendet ausschließlich die festen HTTPS-Endpunkte von [OpenHolidays API](https://openholidaysapi.org/swagger/index.html) für deutsche Bundesländer. Daten werden höchstens sechs Stunden im Speicher zwischengespeichert; Weiterleitungen, übergroße Antworten und unbegrenzte Anfragen werden abgewiesen. Quellenbezeichnung und Personenzuordnung bleiben beim lokalen Speichern erhalten. Für den Abruf werden weder ein Konto noch Familien-/Personennamen benötigt. Lokale Einträge und Dateiuploads funktionieren ohne diesen externen Dienst.
+
+ICS-Dateien werden lokal im Container geparst. Der Import berücksichtigt die üblichen Regeln aus [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545), einschließlich exklusivem DTEND bei ganztägigen Exporten und Zeitzonen. Nicht alle möglichen Erweiterungen und Wiederholungsregeln werden unterstützt; Hinweise stehen vor dem Speichern in der Vorschau. Die Datei selbst wird nicht als öffentliche Datei abgelegt. Es entsteht kein Abonnement, und in der Datei enthaltene URLs/Anhänge werden nicht aufgerufen.

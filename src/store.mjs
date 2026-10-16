@@ -3,8 +3,9 @@ import { mkdirSync, readFileSync, writeFileSync, chmodSync, existsSync } from 'n
 import { resolve, join } from 'node:path';
 import { randomBytes, randomUUID, createCipheriv, createDecipheriv } from 'node:crypto';
 import { appearanceDefaults } from '../public/appearance.js';
+import { calendarOptionDefaults } from '../public/calendar-data.js';
 
-export const KINDS = ['members', 'events', 'birthdays', 'tasks', 'taskTemplates', 'schedules', 'recipes', 'meals', 'lists', 'items', 'notes', 'rewards', 'pointAwards'];
+export const KINDS = ['members', 'events', 'calendarEntries', 'birthdays', 'tasks', 'taskTemplates', 'schedules', 'recipes', 'meals', 'lists', 'items', 'notes', 'rewards', 'pointAwards'];
 export class Store {
   constructor(directory) {
     this.directory = resolve(directory);
@@ -103,6 +104,7 @@ export class Store {
     const settings = { ...appearanceDefaults, ...this.meta('settings', {}) };
     return {
       ...data, revision: this.meta('revision'), settings,
+      calendarOptions: { ...calendarOptionDefaults, ...this.meta('calendarOptions', {}) },
       weather: this.meta('weather', { locations: [], primaryId: '' }),
       serverDate: new Intl.DateTimeFormat('sv-SE', { timeZone: settings.timezone || 'Europe/Berlin' }).format(new Date()),
       completions: this.db.prepare('SELECT * FROM completions').all(),

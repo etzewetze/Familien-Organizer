@@ -56,7 +56,7 @@ Verteilte Aufgaben zeigen ihr Bild oder Emoji, andernfalls den Titel. **Einmal t
 
 ## Stundenpläne, Kita und Unterkalender
 
-Im Reiter **Stundenpläne** einen **Stundenplan** oder **Kitaplan** anlegen und eine Person zuordnen. Name und optionaler Gültigkeitszeitraum, etwa das Schuljahr, gelten für den gesamten Plan.
+Im Reiter **Stundenpläne** einen **Stundenplan** oder **Kitaplan** anlegen und eine Person zuordnen. Der Name darf leer bleiben; dann wird der Name der zugeordneten Person angezeigt. Ein optionaler Gültigkeitszeitraum, etwa das Schuljahr, gilt für den gesamten Plan.
 
 Schulpläne enthalten Montag bis Freitag und wahlweise **6, 8, 10 oder 12 Stunden**. Die Standardstunden dauern 45 Minuten ab 08:00 Uhr, nach je zwei Stunden folgen 15 Minuten Pause. Alle Anfangs-/Endzeiten lassen sich an den tatsächlichen Schulplan anpassen. Pro Tag und Stunde ein Fach eingeben; freie Felder bleiben leer. Nach jeweils zwei Stunden erscheint ein farbiger Pausenbalken. Beim Reduzieren der Stundenzahl wird vor dem Entfernen belegter späterer Felder nachgefragt.
 
@@ -67,6 +67,22 @@ Kitapläne besitzen für jeden Wochentag ein Aktiv-Kästchen, **Bringen**, **Abh
 Die Wochenansicht zeigt je Kind bzw. Plan einen schmalen farbigen Balken, daneben bleiben die normalen Termine. Mehrere Pläne stehen nebeneinander. Beginn und Ende stehen am Balken, der Name läuft senkrecht. Schulpläne reichen vom ersten bis zum letzten belegten Fach des Tages; Pausen/Freistunden dazwischen gehören zur Anwesenheitszeit. Kitapläne reichen von Bringen bis Abholen. Monats- und Listenansicht zeigen eine kompakte Zeile, die Jahresansicht eine Markierung; der Gültigkeitszeitraum wird berücksichtigt. Die Pläne erzeugen keine normalen Termine und werden nicht nach Google exportiert.
 
 Beim ersten angebotenen Plan wechselt die Ansicht zum Kalender. Die Umgebung wird abgedunkelt und der neue Schalter rund markiert. Nach fünf Sekunden lässt sich **OK, verstanden** drücken. Die Einführung erscheint pro Browser einmal; nach Löschen aller Stunden-/Kitapläne ist sie wieder möglich.
+
+## Ferien, Feiertage und Kalenderimport
+
+Unter **Kalender → Ferien, Feiertage & Import** alle Ferien, Feiertage und importierten Termine ansehen und bearbeiten. Derselbe Bereich ist über die Einstellungen erreichbar. Die Schalter **Ferien**, **Feiertage** und **Importierte Termine** gelten gemeinsam für alle Familiengeräte. Ausschalten entfernt keine Daten; in der Verwaltung bleiben sie sichtbar. Das Kästchen an einer Zeile aktiviert nur diesen Eintrag. Der Stift öffnet Titel, Person, Zeitraum, Aktivierung und Beschreibung; **Löschen** entfernt ihn.
+
+**Bundesland laden:** Bundesland, Jahr, Ferien und/oder gesetzliche Feiertage sowie **Alle** oder eine Person auswählen. Bei Bedarf die Schulart/Feriengruppe wählen. **Vorschau laden** zeigt die vom Dienst gelieferten Einträge; unerwünschte Zeilen abwählen und die Person vor **Auswahl importieren** prüfen. Datenquelle ist [OpenHolidays API](https://www.openholidaysapi.org/de/). Örtliche Ausnahmen, bewegliche Ferientage und Kita-Schließtage bitte prüfen und mit **Eigener Eintrag** ergänzen. Es werden nur Region/Jahr an den Dienst geschickt; Personen- und Familiennamen bleiben im Container. Für ein weiteres Jahr den Abruf erneut starten. Ein Live-Abruf aus dem Ziel-LXC ist noch zu prüfen.
+
+**Eigener Eintrag:** Ferien/Schließzeit, Feiertag oder Termin wählen und die Person bzw. Alle zuordnen. Ganztägige Zeiträume verwenden ein einschließliches Enddatum. Importierte Termine können auch Uhrzeiten, Zeitspannen oder nur eine feste Startzeit enthalten. Jeder Import-/Ferieneintrag lässt sich anschließend wie ein eigener Eintrag bearbeiten.
+
+**ICS-Datei importieren:** Eine exportierte `.ics`-Kalenderdatei bis 2 MB auswählen, die Art (Termine, Ferien/Schließzeiten, Feiertage), den Importzeitraum und die Person einstellen. Häufige tägliche, wöchentliche, monatliche und jährliche Serien werden innerhalb des gewählten Zeitraums (maximal drei Jahre) als einzelne Einträge übernommen. COUNT/UNTIL, übliche Wochentags-/Monatsregeln, EXDATE, zusätzliche RDATE und Einzel-Ausnahmen werden berücksichtigt. Nicht unterstützte Regeln, beispielsweise BYSETPOS oder eigene Windows-Zeitzonen, erscheinen als Hinweis. Es gibt höchstens 1000 Einträge je Vorschau. Zeitzonen werden in die Familienzeitzone umgerechnet; Uhrzeiten werden minutengenau gespeichert.
+
+Vor dem Bestätigen kann die Person gewechselt werden. Nur ausgewählte Zeilen werden übernommen. Vorschauen bleiben zehn Minuten gültig und sind an das angemeldete Gerät gebunden. Ein Dateiupload allein legt keine Termine an. Dateien werden als Text eingelesen; Anhänge und externe Links darin werden nicht abgerufen.
+
+Importe sind **Momentaufnahmen**, keine Kalenderabonnements. Ein erneuter Import derselben Einträge für dieselbe Person überspringt vorhandene Daten und überschreibt eigene Änderungen nicht. Derselbe Import lässt sich für eine weitere Person wiederholen. Zum erneuten Übernehmen eines bereits bearbeiteten Eintrags diesen zuerst löschen. ICS-Wiederholungen sind nach dem Import einzelne Einträge; spätere Änderungen am Ursprungs-Kalender werden nicht automatisch synchronisiert. Für laufenden Google-Abgleich bleibt die Google-Anbindung verfügbar.
+
+**Ferienpause der Pläne:** Schulpläne berücksichtigen standardmäßig zugeordnete Ferien und Feiertage, Kitapläne standardmäßig Feiertage. Im Plan beide Optionen getrennt ein-/ausschalten. Eine Ferienzeit für Anna pausiert Annas passenden Plan; Ferien für Alle gelten für alle entsprechend eingestellten Pläne. Bei ausgeschaltetem Eintrag oder abgeschalteter Kategorie greift auch die Planpause nicht. Eigene Ferien-/Schließzeiten können über **Für die Ferien-/Feiertagspause berücksichtigen** von dieser Wirkung ausgenommen werden. Kita wird durch Schulferien nur dann pausiert, wenn die Ferienoption im Kitaplan eingeschaltet ist.
 
 ## Navigation anpassen
 

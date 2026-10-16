@@ -12,6 +12,8 @@ test('Sicherung einer laufenden WAL-Datenbank erhält Daten und Entschlüsselung
   store.put('birthdays', 'birthday', { name: 'Test Geburtstag', month: 10, day: 7, birthYear: 1990, leapDay: 'mar1', memberId: '', notes: '' });
   store.put('taskTemplates', 'template', { title: 'Küche', code: 20, points: 5, imageFile: 'fixture.png' });
   store.put('schedules', 'plan', { title: 'Kita', type: 'kita', memberId: 'member', showInCalendar: true, entries: [{ weekday: 1, startTime: '07:30', endTime: '15:00' }] });
+  store.put('calendarEntries','vacation',{ title:'Ferien',category:'vacation',memberId:'member',startDate:'2026-10-12',endDate:'2026-10-16',enabled:false });
+  store.setMeta('calendarOptions',{ vacation:false,holiday:true,event:true });
   for (const folder of ['task-images','ui-images']) { mkdirSync(join(data,folder)); writeFileSync(join(data,folder,'fixture.png'), Buffer.from([137,80,78,71,13,10,26,10])); }
   t.after(() => { store.close(); rmSync(directory, { recursive: true, force: true }); });
   const result = spawnSync(process.execPath, ['scripts/backup.mjs', target], { cwd: new URL('../', import.meta.url), env: { ...process.env, DATA_DIR: data }, encoding: 'utf8' });
@@ -25,5 +27,7 @@ test('Sicherung einer laufenden WAL-Datenbank erhält Daten und Entschlüsselung
   assert.equal(JSON.parse(copy.prepare('SELECT data FROM records WHERE id=?').get('note').data).body, 'WAL-Test');
   assert.equal(JSON.parse(copy.prepare('SELECT data FROM records WHERE kind=? AND id=?').get('birthdays', 'birthday').data).birthYear, 1990);
   assert.equal(JSON.parse(copy.prepare('SELECT data FROM records WHERE kind=? AND id=?').get('taskTemplates', 'template').data).code, 20);
+  assert.equal(JSON.parse(copy.prepare('SELECT data FROM records WHERE kind=? AND id=?').get('calendarEntries','vacation').data).enabled,false);
+  assert.equal(JSON.parse(copy.prepare('SELECT value FROM meta WHERE key=?').get('calendarOptions').value).vacation,false);
   assert.equal(JSON.parse(copy.prepare('SELECT data FROM records WHERE kind=? AND id=?').get('schedules', 'plan').data).entries[0].endTime, '15:00'); copy.close();
 });

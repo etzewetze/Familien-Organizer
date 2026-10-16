@@ -1,5 +1,19 @@
 # Änderungsübersicht
 
+## 0.8.0 · 2026-10-16
+
+Ferien, Feiertage und Kalenderimport (LXC-Version)
+
+- Namen von Stunden- und Kitaplänen sind optional. Ohne Namen werden die Personennamen angezeigt.
+- Unter Kalender → Ferien, Feiertage & Import sowie in den Einstellungen ist die neue Kalenderdatenverwaltung erreichbar.
+- Ferien, Feiertage und importierte Termine sind gemeinsam aktivierbar. Auch ausgeblendete Einträge lassen sich ansehen, bearbeiten, Personen zuordnen und löschen.
+- Ferien/Feiertage nach deutschem Bundesland und Jahr von OpenHolidays API laden; gegebenenfalls eine Schulart auswählen. Vor dem Speichern Einträge und Personenzuordnung prüfen.
+- ICS-Datei bis 2 MB importieren: Vorschau, Zeitraum, Art, Auswahl einzelner Einträge und Zuordnung zu Alle oder einer Person. Keine Daten werden allein durch die Vorschau gespeichert.
+- Häufige tägliche, wöchentliche, monatliche und jährliche Wiederholungen einschließlich Ausnahmen werden für höchstens drei Jahre aufgelöst. Nicht unterstützte Regeln werden gemeldet.
+- Importe sind Momentaufnahmen. Erneute Importe derselben Person überspringen vorhandene Einträge und bewahren manuelle Änderungen. Die Zuordnung zu einer weiteren Person ist unabhängig möglich.
+- Schulpläne pausieren auf Wunsch während zugeordneter Ferien/Feiertage. Kita pausiert standardmäßig an Feiertagen; die Ferienpause ist zusätzlich einschaltbar.
+- Neue Kalenderdaten, Zuordnungen, Aktivierungen und namenlose Pläne bleiben in Sicherungen und Updates erhalten.
+
 ## 0.7.0 · 2026-10-16
 
 Aufgabenbibliothek, Stundenpläne und Jahreskalender (LXC-Version)
