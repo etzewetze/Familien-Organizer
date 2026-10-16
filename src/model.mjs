@@ -3,7 +3,7 @@ import { KINDS } from './store.mjs';
 import { appearanceDefaults, isColor, isImageFile } from '../public/appearance.js';
 import { isEmoji } from '../public/symbols.js';
 import { periodCounts } from '../public/schedules.js';
-import { calendarCategories } from '../public/calendar-data.js';
+import { calendarCategories, isDayOffCategory } from '../public/calendar-data.js';
 
 export class AppError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -101,8 +101,8 @@ export class Model {
         return { title: title(), startDate, endDate, startTime, endTime, allDay, startOnly, memberIds, memberId: memberIds[0] || '', color: memberIds.length ? '' : color, location: text(data.location, 300), description: text(data.description, 5000), googleAccountId, calendarId, googleEventId: old?.googleEventId || '', googleReadOnly: old?.googleReadOnly || false, ...symbols() };
       }
       case 'calendarEntries': {
-        check(calendarCategories.some(([key]) => key === data.category), 'Bitte Ferien, Feiertag oder importierten Termin auswählen.');
-        const startDate = day(data.startDate), endDate = day(data.endDate || startDate), allDay = data.category !== 'event' || data.allDay !== false;
+        check(calendarCategories.some(([key]) => key === data.category), 'Bitte Ferien, Feiertag, Arbeitstag oder importierten Termin auswählen.');
+        const startDate = day(data.startDate), endDate = day(data.endDate || startDate), allDay = isDayOffCategory(data.category) || data.allDay !== false;
         const startOnly = !allDay && !!data.startOnly, startTime = allDay ? '' : text(data.startTime, 5, true), endTime = allDay || startOnly ? '' : text(data.endTime, 5, true);
         check(endDate >= startDate && (!startOnly || endDate === startDate), 'Das Ende muss nach dem Beginn liegen.');
         check(allDay || (startOnly ? [startTime] : [startTime,endTime]).every(time => /^([01]\d|2[0-3]):[0-5]\d$/.test(time)), 'Ungültige Uhrzeit.');
@@ -110,7 +110,7 @@ export class Model {
         const importKey = text(old?.importKey ?? data.importKey, 64);
         check(!importKey || /^[a-f0-9]{64}$/.test(importKey), 'Ungültige Importkennung.');
         for (const key of ['enabled','pauseSchedules']) check(data[key] === undefined || typeof data[key] === 'boolean', 'Ungültige Kalenderaktivierung.');
-        return { title: title(), category: data.category, memberId: memberId(), startDate, endDate, allDay, startOnly, startTime, endTime, enabled: data.enabled ?? old?.enabled ?? true, pauseSchedules: data.category !== 'event' && (data.pauseSchedules ?? old?.pauseSchedules ?? true), description: text(data.description, 5000), location: text(data.location, 300), source: text(old?.source ?? data.source, 200), importKey };
+        return { title: title(), category: data.category, memberId: memberId(), startDate, endDate, allDay, startOnly, startTime, endTime, enabled: data.enabled ?? old?.enabled ?? true, pauseSchedules: isDayOffCategory(data.category) && (data.pauseSchedules ?? old?.pauseSchedules ?? true), description: text(data.description, 5000), location: text(data.location, 300), source: text(old?.source ?? data.source, 200), importKey };
       }
       case 'birthdays': {
         const month = number(data.month, 1, 12, true), birthdayDay = number(data.day, 1, 31, true);

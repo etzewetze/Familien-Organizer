@@ -62,6 +62,43 @@ test('ICS-Zeitzonen werden in die Familienzeitzone umgerechnet; Uhrzeiten ohne E
   const invalid = parseCalendar(file(['DTSTART;TZID=Windows-Custom-Zone:20261017T160000','SUMMARY:Ungültig']),options);
   assert.equal(invalid.entries.length,0); assert.ok(invalid.warnings.some(warning => warning.includes('Zeitzone')));
 });
+test('Dienstplanimport erhält Nacht-, Serien- und Tagesdienste als Arbeitstage mit ihren Zeiten', () => {
+  const content = file(
+    ['UID:night','DTSTART;TZID=Europe/Berlin:20261016T220000','DTEND;TZID=Europe/Berlin:20261017T060000','RRULE:FREQ=WEEKLY;COUNT=2','SUMMARY:Nachtdienst'],
+    ['UID:day','DTSTART;VALUE=DATE:20261020','DTEND;VALUE=DATE:20261021','SUMMARY:Arbeitstag'],
+    ['UID:point','DTSTART:20261021T080000','SUMMARY:Offenes Ende']);
+  const parsed = parseCalendar(content,{ ...options,category:'workday' });
+  assert.deepEqual(parsed.warnings,[]); assert.equal(parsed.entries.length,4);
+  const [night,next,day,point] = parsed.entries;
+  assert.equal(night.category,'workday'); assert.equal(night.allDay,false); assert.equal(night.startTime,'22:00'); assert.equal(night.endTime,'06:00'); assert.equal(night.endDate,'2026-10-17');
+  assert.equal(next.startDate,'2026-10-23'); assert.equal(next.endDate,'2026-10-24');
+  assert.equal(day.allDay,true); assert.equal(day.endDate,'2026-10-20'); assert.equal(day.startTime,'');
+  assert.equal(point.startOnly,true); assert.equal(point.startTime,'08:00'); assert.equal(point.endTime,'');
+  assert.ok(parsed.entries.every(entry => entry.pauseSchedules === false));
+  assert.notEqual(night.importKey,parseCalendar(content,options).entries[0].importKey);
+  assert.deepEqual(parsed.entries.map(entry => entry.importKey),parseCalendar(content,{ ...options,category:'workday' }).entries.map(entry => entry.importKey));
+});
+test('Arbeitstage sind zugeordnet, bearbeitbar und lösen keine Schul- oder Kitapause aus', t => {
+  const { model,store,anna } = fixture(t), date = '2026-10-12';
+  const entry = model.save('calendarEntries','',{ title:'Frühdienst',category:'workday',memberId:anna.id,startDate:date,endDate:date,allDay:false,startTime:'06:00',endTime:'14:00',pauseSchedules:true });
+  assert.equal(entry.allDay,false); assert.equal(entry.pauseSchedules,false); assert.equal(entry.memberId,anna.id);
+  for (const type of ['school','kita']) assert.equal(scheduleClosed({ type,memberId:anna.id },date,[{ ...entry,allDay:true,pauseSchedules:true }]),false);
+  assert.throws(() => model.save('calendarEntries',entry.id,{ ...entry,endTime:'05:00' }),/Ende/);
+  const old = model.save('calendarEntries','',{ ...entry,category:'event',source:'ICS-Import',importKey:'c'.repeat(64) });
+  const changed = model.save('calendarEntries',old.id,{ ...old,category:'workday' });
+  assert.equal(changed.category,'workday'); assert.equal(changed.source,old.source); assert.equal(changed.importKey,old.importKey); assert.equal(changed.startTime,'06:00');
+  assert.equal(store.state().calendarEntries.find(item => item.id === changed.id).category,'workday');
+});
+test('Arbeitstagsmarkierungen beachten Aktivierung und das exklusive Ende um Mitternacht', () => {
+  const entry = { id:'work',category:'workday',memberId:'anna',startDate:'2026-10-12',endDate:'2026-10-13',allDay:false,startTime:'16:00',endTime:'00:00',enabled:true };
+  const marked = calendarEntriesOnDate([entry],'2026-10-12');
+  assert.equal(marked.length,1); assert.equal(marked[0].emoji,'💼'); assert.deepEqual(marked[0].memberIds,['anna']);
+  assert.equal(calendarEntriesOnDate([entry],'2026-10-13').length,0);
+  assert.equal(calendarEntriesOnDate([{ ...entry,endTime:'06:00' }],'2026-10-13').length,1);
+  assert.equal(calendarEntriesOnDate([entry],'2026-10-12',{ workday:false }).length,0);
+  assert.equal(calendarEntriesOnDate([{ ...entry,enabled:false }],'2026-10-12').length,0);
+  assert.equal(calendarEntriesOnDate([{ ...entry,category:'event' }],'2026-10-13').length,1);
+});
 test('Wöchentliche ICS-Serien respektieren COUNT, EXDATE und zusätzliche RDATE; erneutes Lesen erhält die Kennungen', () => {
   const content = file(['UID:sport','DTSTART;TZID=Europe/Berlin:20261012T080000','DTEND;TZID=Europe/Berlin:20261012T090000','RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=4','EXDATE;TZID=Europe/Berlin:20261014T080000','RDATE;TZID=Europe/Berlin:20261016T080000','SUMMARY:Sport']);
   const parsed = parseCalendar(content,options);

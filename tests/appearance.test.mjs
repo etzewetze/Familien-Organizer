@@ -42,6 +42,16 @@ test('Darstellung liefert geprüfte Farben und lesbare Header-/Akzenttexte ohne 
   assert.equal(contrastText('#ffffff'), '#111827'); assert.equal(contrastText('#000000'), '#ffffff');
   assert.ok(Object.values(theme).every(value => /^#[a-f0-9]{6}$/i.test(value))); assert.ok(!Object.values(theme).includes('url(evil)'));
 });
+test('Die Feiertagsfarbe hat einen grünen Altbestandsdefault und bleibt bei älteren Speichervorgängen erhalten', () => {
+  assert.equal(appearanceSettings({}).holidayColor,'#dcfce7');
+  const saved = appearanceSettings({ holidayColor:'#113355' });
+  assert.equal(saved.holidayColor,'#113355'); assert.equal(appearanceSettings({ allColor:'#123456' },saved).holidayColor,'#113355');
+  assert.equal(appearanceFor({ holidayColor:'url(evil)' }).holidayColor,'#dcfce7');
+  assert.throws(() => appearanceSettings({ holidayColor:'green' }));
+  const dark = themeProperties(saved), light = themeProperties({ holidayColor:'#ffffcc' });
+  assert.equal(dark['--holiday-color'],'#113355'); assert.equal(dark['--holiday-ink'],'#ffffff');
+  assert.equal(light['--holiday-color'],'#ffffcc'); assert.equal(light['--holiday-ink'],'#111827');
+});
 
 test('Gemeinsame Termine gehen durch alle Personenfarben und bleiben bis zur letzten Farbe opak', () => {
   const members = [{id:'a',color:'#ff0000'},{id:'b',color:'#00ff00'},{id:'c',color:'#0000ff'}];

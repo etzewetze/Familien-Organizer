@@ -27,7 +27,22 @@
 .year-dots{display:flex;gap:2px;min-height:4px}
 .year-dots i{display:block;width:5px;height:5px;border-radius:50%;background:var(--person,var(--primary))}
 .year-cake{font-size:.7rem;position:absolute;right:0;top:0}
+.year-workday{font-size:.65rem;position:absolute;left:0;top:0}
 .year-dots i.year-plan-dot{border-radius:0;background:var(--muted)}
+.month-cell.holiday-day,.year-day.holiday-day{background:var(--holiday-color,#dcfce7);color:var(--holiday-ink,#111827)}
+.month-cell.holiday-day .day-heading strong,.month-cell.holiday-day .day-heading span{color:var(--holiday-ink,#111827)}
+.month-cell.holiday-day.today,.year-day.holiday-day.today{box-shadow:inset 0 0 0 2px var(--primary)}
+.year-day.holiday-day:hover{outline:2px solid var(--primary);outline-offset:-2px}
+.day-marker{display:flex;align-items:center;min-width:0;width:100%;min-height:28px;margin:0 0 4px;padding:4px 6px;border-radius:6px;background:var(--surface,#fff);border:1px solid var(--line);border-left:3px solid var(--person,var(--primary));color:var(--ink);font-size:.7rem;line-height:1.35;text-align:left}
+.day-marker>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.holiday-marker{border:0;background:transparent;color:var(--holiday-ink,#111827);font-weight:700;padding-left:0}
+.day-marker:hover{box-shadow:inset 0 0 0 1px currentColor}
+.day-detail-list{display:grid;gap:8px}
+.day-detail-row{display:flex;align-items:center;gap:12px;padding:12px;text-align:left;border:1px solid var(--line);border-left:3px solid var(--person,var(--primary));border-radius:8px;background:var(--surface,#fff);color:var(--ink)}
+.day-detail-row .spacer{min-width:0;overflow-wrap:anywhere}
+.day-detail-row strong{display:block;font-size:.9rem}
+.day-detail-row small{display:block;color:var(--muted);margin-top:5px}
+.day-detail-row svg{width:18px;height:18px;flex-shrink:0}
 .task-workspace{display:grid;grid-template-columns:112px minmax(0,1fr);gap:16px;align-items:start;margin-top:20px}
 .template-library{padding:10px 8px;position:sticky;top:15px;max-height:78vh;overflow:auto;text-align:center}
 .template-heading{display:flex;align-items:center;justify-content:center;gap:3px;flex-wrap:wrap;margin-bottom:10px;font-size:.75rem}

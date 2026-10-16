@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AppError, check, day, addDays } from './model.mjs';
+import { calendarCategories, isDayOffCategory } from '../public/calendar-data.js';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const weekdays = ['SU','MO','TU','WE','TH','FR','SA'];
@@ -108,17 +109,17 @@ function normalizedEvent(properties, occurrence, timezone, category, source, uid
     end = { ...occurrence, date: addDays(occurrence.date, days) };
     if (!original.allDay) { endEpoch = toEpoch(end) + seconds * 1000; end = { ...end,...parts(endEpoch,occurrence.zone) }; }
   }
-  const allDay = original.allDay || category !== 'event', startLocal = original.allDay ? occurrence : parts(toEpoch(occurrence), timezone);
+  const dayOff = isDayOffCategory(category), allDay = original.allDay || dayOff, startLocal = original.allDay ? occurrence : parts(toEpoch(occurrence), timezone);
   const endLocal = end ? (end.allDay ? end : parts(endEpoch ?? toEpoch(end), timezone)) : startLocal;
   if (end) check(original.allDay ? end.date > occurrence.date : (endEpoch ?? toEpoch(end)) > toEpoch(occurrence), 'Das Kalenderende liegt vor dem Beginn.');
   let endDate = endLocal.date;
-  if (original.allDay && end || !original.allDay && category !== 'event' && end && endLocal.time === '00:00') endDate = addDays(endDate, -1);
-  return { title: unescape(get('SUMMARY')?.value || '(Ohne Titel)').slice(0,160), category, startDate: startLocal.date, endDate, allDay, startOnly: !allDay && !end, startTime: allDay ? '' : startLocal.time, endTime: allDay || !end ? '' : endLocal.time, enabled: true, pauseSchedules: category !== 'event', description: unescape(get('DESCRIPTION')?.value || '').slice(0,5000), location: unescape(get('LOCATION')?.value || '').slice(0,300), source, importKey: hash(`ics|${category}|${uid}|${identity(occurrence)}`) };
+  if (original.allDay && end || !original.allDay && dayOff && end && endLocal.time === '00:00') endDate = addDays(endDate, -1);
+  return { title: unescape(get('SUMMARY')?.value || '(Ohne Titel)').slice(0,160), category, startDate: startLocal.date, endDate, allDay, startOnly: !allDay && !end, startTime: allDay ? '' : startLocal.time, endTime: allDay || !end ? '' : endLocal.time, enabled: true, pauseSchedules: dayOff, description: unescape(get('DESCRIPTION')?.value || '').slice(0,5000), location: unescape(get('LOCATION')?.value || '').slice(0,300), source, importKey: hash(`ics|${category}|${uid}|${identity(occurrence)}`) };
 }
 
 export function parseCalendar(input, { timezone = 'Europe/Berlin', from, until, category = 'event' } = {}) {
   day(from); day(until); check(until >= from && dateNumber(until) - dateNumber(from) <= 1096, 'Der Importzeitraum darf höchstens drei Jahre umfassen.');
-  check(['event','vacation','holiday'].includes(category), 'Ungültige Importart.');
+  check(calendarCategories.some(([key]) => key === category), 'Ungültige Importart.');
   const { events,method } = parseEvents(input), entries = [], warnings = [], overrides = new Map(), source = 'ICS-Import';
   check(method !== 'CANCEL', 'Die Datei ist eine Absage, kein Kalenderexport.');
   const get = (event,name) => event.find(item => item.name === name);

@@ -1,5 +1,11 @@
-export const VERSION = '0.8.0';
+export const VERSION = '0.8.1';
 export const releases = [
+  { version: '0.8.1', date: '2026-10-16', title: 'Kompakter Monat und Arbeitstage', changes: [
+    'Feiertage hinterlegen in der Monats- und Jahresansicht den ganzen Tag. Unter Darstellung ist die Farbe anpassbar; Hellgrün ist voreingestellt.',
+    'Geburtstage stehen im Monat als kompakte Zeile. Mehrere Geburtstage oder Feiertage werden zusammengefasst und lassen sich antippen, ansehen und bearbeiten. Die bisherige Wochenansicht bleibt erhalten.',
+    'Dienstpläne lassen sich als Arbeitstage einer Person importieren. Sie erscheinen mit Koffer-Symbol und Dienstzeit als Tageskennzeichnung, ohne Terminblöcke im Stundenraster. Nacht- und Seriendienste behalten ihre Zeiten.',
+    'Arbeitstage sind separat ein-/ausblendbar und bearbeitbar. Vorhandene importierte Termine können in der Kalenderdatenverwaltung auf Arbeitstag umgestellt werden.',
+  ] },
   { version: '0.8.0', date: '2026-10-16', title: 'Ferien, Feiertage und Kalenderimport', changes: [
     'Plannamen dürfen leer sein. Die Anzeige verwendet dann den zugeordneten Personennamen.',
     'Ferien und Feiertage lassen sich im Kalender aktivieren, ansehen, bearbeiten und selbst ergänzen. Bundesland und Jahr laden eine prüfbare Vorschau.',

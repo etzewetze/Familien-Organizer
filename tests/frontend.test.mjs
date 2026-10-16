@@ -14,7 +14,7 @@ import { emojis, emojiCategories, findEmojis, isEmoji } from '../public/symbols.
 import { weatherCode, weatherValue, weatherTime, rainOutlook } from '../public/weather.js';
 import { deviceConfig, idleAction } from '../public/device-mode.js';
 import { schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder } from '../public/schedules.js';
-import { calendarCategories, calendarOptionDefaults, germanStates, planCaption, calendarEntriesOnDate } from '../public/calendar-data.js';
+import { calendarCategories, calendarOptionDefaults, isDayOffCategory, germanStates, planCaption, calendarEntriesOnDate } from '../public/calendar-data.js';
 
 // Ausführung der Ansichtslogik ohne echten Browser. Ersetzt keine visuelle QA.
 function fixture(t) {
@@ -31,7 +31,7 @@ function fixture(t) {
     location: { hash: '#home' }, localStorage: { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) }, innerWidth: 1440, innerHeight: 900,
     addEventListener() {}, setInterval() {}, setTimeout() {}, clearInterval() {},
     Intl, Date, console, URL, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties, initialState: store.state(),
-    calendarCategories, calendarOptionDefaults, germanStates, planCaption, calendarEntriesOnDate, schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder, structuredClone, crypto, clearTimeout, requestAnimationFrame() {},
+    calendarCategories, calendarOptionDefaults, isDayOffCategory, germanStates, planCaption, calendarEntriesOnDate, schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder, structuredClone, crypto, clearTimeout, requestAnimationFrame() {},
     VERSION, emojis, emojiCategories, findEmojis, isEmoji, weatherCode, weatherValue, weatherTime, rainOutlook, deviceConfig, idleAction,
     FormData: class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key] ?? null; } getAll(key) { return [].concat(this.fields[key] || []); } *[Symbol.iterator]() { for (const [key, value] of Object.entries(this.fields)) for (const item of [].concat(value)) yield [key, item]; } },
   });
@@ -78,6 +78,69 @@ test('Geburtstage erscheinen in allen Kalenderansichten und öffnen den Geburtst
   assert.ok(run('birthdaysPage()').includes('Heute!'));
   run("cursor='2030-10-07';calendarMode='week'"); assert.ok(run('calendarPage()').includes('40 Jahre'));
   run("editRecord('birthdays','birthday-one')"); assert.ok(elements.get('#editor').innerHTML.includes('value="1990"')); assert.ok(elements.get('#editor').innerHTML.includes('name="leapDay"'));
+});
+test('Monat bündelt Geburtstage und Feiertage, hält ihre Bearbeitung erreichbar und lässt Termine stehen', async t => {
+  const { run,elements,listeners } = fixture(t), click = listeners.get('click')[0];
+  run(`cursor='2026-10-07';S.serverDate=cursor;S.events=[{id:'appointment',title:'Arzt',allDay:false,startDate:cursor,endDate:cursor,startTime:'10:00',endTime:'11:00',memberIds:[]}];
+    S.birthdays=[{id:'b1',name:'Anna <script>',day:7,month:10,birthYear:1990},{id:'b2',name:'Ben',day:7,month:10,birthYear:1992}];
+    S.calendarEntries=[{id:'h1',category:'holiday',title:'Feiertag <b>',startDate:cursor,endDate:cursor,allDay:true},{id:'h2',category:'holiday',title:'Zweiter Feiertag',startDate:cursor,endDate:cursor,allDay:true}];`);
+  const html = run('monthCell(cursor)');
+  assert.ok(html.includes('holiday-day')); assert.ok(html.includes('🎂 2 Geburtstage')); assert.ok(html.includes('🎉 2 Feiertage'));
+  assert.equal((html.match(/class="event-card /g) || []).length,1); assert.ok(html.includes('data-edit="events" data-id="appointment"'));
+  assert.ok(html.includes('Anna &lt;script&gt;')); assert.ok(!html.includes('<script>')); assert.ok(!html.includes('birthday-event'));
+  await click({ target:{ closest:() => ({ dataset:{ action:'day-details',dayKind:'birthday',date:'2026-10-07' } }) } });
+  assert.ok(elements.get('#editor').innerHTML.includes('36 Jahre')); assert.ok(elements.get('#editor').innerHTML.includes('34 Jahre'));
+  for (const id of ['b1','b2']) assert.ok(elements.get('#editor').innerHTML.includes(`data-edit="birthdays" data-id="${id}"`));
+  await click({ target:{ closest:() => ({ dataset:{ edit:'birthdays',id:'b2' } }) } });
+  assert.ok(elements.get('#editor').innerHTML.includes('value="Ben"'));
+  run("showDayDetails('holiday',cursor)");
+  assert.ok(elements.get('#editor').innerHTML.includes('Feiertag &lt;b&gt;')); assert.ok(elements.get('#editor').innerHTML.includes('data-edit="calendarEntries" data-id="h2"'));
+  run("calendarMode='week'"); const week = run('calendarPage()');
+  assert.ok(week.includes('birthday-event')); assert.ok(week.includes('data-edit="calendarEntries" data-id="h1"')); assert.ok(!week.includes('holiday-day'));
+});
+test('Feiertagsflächen in Monat und Jahr folgen Sichtbarkeit und Personenfilter; die Farbe ist einstellbar', t => {
+  const { run,styleValues } = fixture(t);
+  run(`cursor='2026-10-07';S.serverDate=cursor;S.events=[];S.birthdays=[];
+    S.calendarEntries=[{id:'holiday',category:'holiday',title:'Familientag',memberId:S.members[0].id,startDate:cursor,endDate:cursor,allDay:true}];
+    S.settings.holidayColor='#112233';applyAppearance(S.settings);`);
+  assert.equal(styleValues.get('--holiday-color'),'#112233'); assert.equal(styleValues.get('--holiday-ink'),'#ffffff');
+  assert.ok(run('appearanceSettingsPanel()').includes('name="holidayColor"'));
+  assert.ok(run('monthCell(cursor)').includes('holiday-day'));
+  const year = run('yearCalendar()');
+  assert.match(year, /class="year-day today holiday-day" data-year-date="2026-10-07"/);
+  const day = year.match(/<button[^>]+data-year-date="2026-10-07"[\s\S]*?<\/button>/)[0]; assert.ok(!day.includes('<i style='));
+  run('filter=S.members[1].id'); assert.ok(!run('monthCell(cursor)').includes('holiday-day')); assert.ok(!run('yearCalendar()').includes('holiday-day'));
+  run("filter='';S.calendarOptions.holiday=false"); assert.ok(!run('monthCell(cursor)').includes('holiday-day')); assert.ok(!run('yearCalendar()').includes('holiday-day'));
+  run('S.calendarOptions.holiday=true;S.calendarEntries[0].enabled=false'); assert.ok(!run('monthCell(cursor)').includes('holiday-day'));
+});
+test('Arbeitstage stehen als Tageskennzeichnung außerhalb der Termine und beachten die Personenauswahl', t => {
+  const { run } = fixture(t);
+  run(`cursor='2026-10-16';S.events=[];S.birthdays=[];S.calendarEntries=[{id:'shift',category:'workday',title:'Nacht <b>',memberId:S.members[0].id,startDate:cursor,endDate:'2026-10-17',startTime:'22:00',endTime:'06:00',allDay:false,enabled:true}];`);
+  assert.equal(run('visibleEvents(cursor).length'),0);
+  for (const mode of ['week','month','agenda','year']) {
+    const html = run(`calendarMode='${mode}';calendarPage()`);
+    assert.ok(html.includes(mode === 'year' ? 'year-workday' : 'workday-marker')); assert.ok(html.includes('Nacht &lt;b&gt;')); assert.ok(html.includes('22:00–06:00 (+1 Tag)'));
+    assert.ok(!html.includes('class="time-event ')); assert.ok(!html.includes('class="event-card '));
+  }
+  assert.ok(run('monthCell(cursor)').includes('data-edit="calendarEntries" data-id="shift"'));
+  run('filter=S.members[1].id'); assert.ok(!run('monthCell(cursor)').includes('workday-marker'));
+  run("filter='';S.calendarOptions.workday=false"); assert.ok(!run('monthCell(cursor)').includes('workday-marker')); assert.ok(!run('yearCalendar()').includes('year-workday'));
+});
+test('Dienstplan kann im Import gewählt und als zeitgebundener Arbeitstag bearbeitet werden', async t => {
+  const { run,elements,context } = fixture(t), requests = [];
+  run("openCalendarImport('ics')"); assert.ok(elements.get('#editor').innerHTML.includes('value="workday"')); assert.ok(elements.get('#editor').innerHTML.includes('Arbeitstage / Dienstplan'));
+  run("editRecord('calendarEntries','',{category:'workday',allDay:false,startTime:'06:00',endTime:'14:00'})");
+  elements.get('[name=category]').value='workday'; elements.get('[name=entryAllDay]').checked=false; elements.get('[name=entryStartOnly]').checked=false;
+  run('updateCalendarEntryFields()');
+  assert.equal(elements.get('[name=entryAllDay]').disabled,false); assert.equal(elements.get('[name=pauseSchedules]').disabled,true);
+  assert.equal(elements.get('[name=startTime]').required,true); assert.equal(elements.get('[name=endTime]').required,true);
+  context.fetch=async (url,options) => { requests.push({ url,options }); return { ok:true,json:async () => url === '/api/state' ? context.initialState : {} }; };
+  context.form={ fields:{ title:'Frühdienst',category:'workday',memberId:run('S.members[0].id'),startDate:'2026-10-16',endDate:'2026-10-16',startTime:'06:00',endTime:'14:00',entryEnabled:'on',pauseSchedules:'on' } };
+  await run('saveEditor(form)');
+  const data=JSON.parse(requests.find(request => request.url === '/api/records/calendarEntries').options.body);
+  assert.equal(data.allDay,false); assert.equal(data.pauseSchedules,false); assert.equal(data.startTime,'06:00'); assert.equal(data.category,'workday');
+  elements.get('[name=category]').value='holiday'; run('updateCalendarEntryFields()');
+  assert.equal(elements.get('[name=entryAllDay]').disabled,true); assert.equal(elements.get('[name=entryAllDay]').checked,true); assert.equal(elements.get('[name=pauseSchedules]').disabled,false);
 });
 test('Rezeptimport öffnet eine maskierte editierbare Vorschau und überschreibt keinen neuen Dialog', async t => {
   const { context, run, elements } = fixture(t), requests = [];

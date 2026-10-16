@@ -1,18 +1,32 @@
 # Projektstand und Fortsetzung
 
 **Projekt:** Familien Organisierer  
-**Stand:** 2026-10-09, Version 0.6.0, Datenbankschema 1
+**Stand:** 2026-10-16, Version 0.8.1, Datenbankschema 1
 **Repository:** https://github.com/etzewetze/Familien-Organizer, öffentlich, Branch `main`
 
 ## Ziel und verbindliche Vorgaben
 
-Eigene deutsche Familienzentrale auf Proxmox LXC, mit eigenem Quellcode und Design. Der Kern benötigt keine Daely-Dienste. Optional angeschlossene Google-Kalender und Immich bleiben externe Systeme. Bildschirmgrößen Handy, Tablet, PC und Wanddisplay berücksichtigen. Native App und das eigene Stundenplan-Modul ausdrücklich erst später entwickeln.
+Eigene deutsche Familienzentrale auf Proxmox LXC, mit eigenem Quellcode und Design. Der Kern benötigt keine Daely-Dienste. Optional angeschlossene Google-Kalender und Immich bleiben externe Systeme. Bildschirmgrößen Handy, Tablet, PC und Wanddisplay berücksichtigen. Die native App folgt später. Aktuell wird nur dieses LXC-Repository bearbeitet; das separate Web-/PHP-Projekt bleibt außen vor.
 
 Der Nutzer hat das Repository und das Hochladen ausdrücklich autorisiert. Keine erneute allgemeine Upload-Freigabe einholen, die Sichtbarkeit nicht eigenmächtig ändern und das andere Repository `extraitems` nicht bearbeiten. Echte Familiendaten, Fotos, Schlüssel, `.env`, SQLite-Dateien und Sicherungen gehören nicht auf GitHub.
 
 **Container 100 läuft laut Nutzer inzwischen. Diesen erhalten und aktualisieren.** Kein Neuaufbau und keine Löschung. Es besteht kein direkter Zugang zum Proxmox des Nutzers; er führt die dokumentierten Host-Befehle aus. Root-Zugang vom Host mit `pct enter 100`; ein eigenes Root-Passwort ist optional mit `pct exec 100 -- passwd root` einstellbar. Kein voreingestelltes Root-Passwort und keine Verbindung zum Familienpasswort.
 
-## Geliefert in 0.6.0
+## Neu in 0.8.1
+
+Monatsansicht: Feiertage sind Tagesflächen in der gemeinsamen `holidayColor` (Default `#dcfce7`), mit kontrastierender Beschriftung. Dieselbe Farbe gilt im Jahreskalender; Heute bleibt per Umrandung erkennbar. Geburtstage und Feiertagsnamen stehen im Monat als kompakte Zeile, mehrere am selben Tag als antippbare Sammelzeile mit vollständiger Bearbeitungsliste. Gewöhnliche Termine bleiben sichtbar. Die bisherigen Feiertags-/Geburtstagskarten in Woche und Liste sind erhalten.
+
+`calendarEntries` unterstützt zusätzlich `workday`: ICS-Dienstpläne explizit als Arbeitstage importieren und einer Person zuordnen. Zeitumrechnung, Nacht-/Seriendienste und offene Endzeiten bleiben erhalten. Anzeige als 💼-Tageskennzeichnung mit Dienstzeit außerhalb des Terminrasters; Jahresansicht mit Symbol. Eigenes gemeinsames Aktivierungsfeld `calendarOptions.workday`. Arbeitstage pausieren keine Schul-/Kitapläne; ein Ende um Mitternacht markiert den Folgetag nicht zusätzlich. Bestehende importierte Termine sind manuell in Arbeitstage umstellbar. Eine andere Importart kann beim erneuten Einlesen zusätzliche Datensätze erzeugen; keine automatische Umstellung oder Synchronisierung.
+
+Neue Farb-/Aktivierungswerte werden bei alten Datenbanken ergänzt und bei älteren Speichervorgängen erhalten. Keine SQL-Schemaänderung; Sicherungen und Export enthalten Dienste und Farbe. Release bewusst **0.8.1**, nicht 0.9.0.
+
+## Seit 0.7.0 und 0.8.0
+
+Geburtstagssuche, Jahresansicht, Aufgabenvorlagen mit Nummer/Bild/Emoji und unabhängiger Verteilung per Ziehen oder Auswahl bei einer Person. Aufgaben als Symbole: Tippen zeigt Titel, Doppeltippen erledigt/öffnet, Halten bietet Entfernen. Personenraster automatisch oder zwei/drei/vier pro Reihe. Einklappbare und sortierbare Navigation.
+
+Schulpläne Mo–Fr mit 6/8/10/12 Stunden und Pausenbalken, Kita mit eigenen Zeiten; optionale Plannamen verwenden in der Anzeige den Personennamen. Aktivierbare Unterkalender als schmale farbige Spuren; Einführung nach erstmaliger Anlage, erneut nach Löschen aller Pläne. Ferien/Feiertage verwalten, aktivieren, bearbeiten und nach Bundesland/Jahr mit Vorschau laden. ICS-Datei lokal mit Vorschau, Serienauflösung und Personenzuordnung importieren; Duplikate pro Person überspringen. Ferien-/Feiertagspause für Schul-/Kitapläne separat einstellbar.
+
+## Grundlagen bis 0.6.0
 
 Neu in 0.6.0: Versionswechsel beenden alle Sitzungen und offenen OAuth-Vorgänge. Ein erfolgreiches Web-Update derselben Version wird zusätzlich über den gespeicherten Abschluss des Updatedienstes erkannt und genau einmal quittiert. Ein gewöhnlicher Neustart derselben Version erhält Sitzungen. Nach Login erscheint eine private Änderungsübersicht, pro Browser erst beim Schließen quittiert; Einstellungen erlauben erneutes Öffnen. `public/releases.js` und `CHANGELOG.md` enthalten dieselben Notizen. Beim ersten Wechsel aus einer älteren Oberfläche Browser neu laden.
 
@@ -91,28 +105,28 @@ Der Host-Ersteller bleibt für **neue** Container verfügbar: Proxmox >=8 x86_64
 
 ## Prüfstand und Grenzen
 
-**Vollständiger Lauf von `npm test` für den aktuellen 0.6.0-Code: 129 Tests bestanden, keine Fehler oder übersprungenen Tests.** Darunter 101 Anwendungstests, sechs Update-Protokoll-/Sicherungs-/Rücksetztests, zwölf Installer-/Konfigurationstests und zehn Proxmox-Hosttests.
+**Vollständiger Lauf von `npm test` für 0.8.1: 175 Tests bestanden, keine Fehler oder übersprungenen Tests.** Neue Prüfungen umfassen kompakte Monatszeilen und Bearbeitung, Feiertagsfarbe/-sichtbarkeit/-personenfilter in Monat/Jahr, unveränderte Wochenkarten, Arbeitstagsimport mit Nacht-/Seriendiensten, Aktivierungsdefaults und alte Speichervorgänge, Kalenderauswahl und Formulare. Sicherung prüft zusätzlich Farbe, Arbeitstagsschalter, Person und Dienstzeiten.
 
 Bei 0.5.0 meldete ein erster Gesamtlauf einen nicht reproduzierten Fehler im bestehenden Installer-Rücksetztest. Der Einzeltest und der vollständige Wiederholungslauf bestanden; der Installercode wurde für diese und die aktuelle Version nicht geändert.
 
-Syntaxprüfung für 41 JavaScript-Dateien einschließlich 24 Laufzeit-/Skriptmodulen, beide Bash-Installer und 36 Bash-Blöcke der Anleitungen bestanden; `git diff --check` ohne Fehler.
+Syntaxprüfung für alle zwölf geänderten JavaScript-Dateien und `git diff --check` bestanden. Die Installationsskripte wurden für 0.8.1 nicht geändert.
 
 Prüfungen umfassen Sitzungswechsel über echte SQLite-Neustarts, erste ältere Datenbank ohne Versionsmarker, gleiche Version mit erfolgreichem/fehlgeschlagenem Update, normale Neustarts, private Änderungsübersicht und Quittierung, geschützte Wetterorte und Revisionen, feste Wetterhosts/Parameter, 14 Tage/DST/Nacht/Nullwerte, Cache/Parallelabruf/Rate/Größenlimit/Ausfall, Symbole und Unicode-Emojis, Erhalt im Assistenten und Google-Abgleich, abgebrochene Uploads und Fotoladevorgänge, erster Wecktipp, Ruhe-/Fotomodus, verweigerte und verspätete Wake Locks. Außerdem Verläufe für zwei/drei Personen in allen Kalenderansichten und Übersicht, Starttermin mit deckendem Mehrpersonenverlauf, Personenfilter, aktuelle Personenfarbänderungen, helle/dunkle Kartenfarben, Einzelperson/Alle/Altdaten und Validierung der Verlaufsfarben. Weiterhin Rezeptbildformen aus JSON-LD, CDN-Import und Rückfall bei Bildfehlern, DNS-/Redirect-/Format-/Größen-/Entpackungs-/Zeitlimits einschließlich echtem begrenztem HTTP-Bildstream, private Rezeptbilder über zwei Sitzungen, Bildkarten und Mahlzeitvorauswahl, Upload/Importreferenz/Entfernen und veraltete Uploadantworten. Geburtstag mit Kuchen/Name/Alter oder ohne Geburtsjahr in Übersicht, Woche, Monat und Liste. Weiterhin Bild- und Farbvalidierung, Profilbilder und Hintergrundbilder über zwei Sitzungen, CSRF und Pfad-/Symlinkschutz, Upload vor Referenzspeicherung, gemeinsames Bearbeitungsformular und Layoutumschalter, variable Stundenachse und deren Umrechnung beim Scrollen, Zeitraster und Überlappungen, 15-Minuten-Ausblenden, Terminassistent, Mehrfachpersonen, ursprüngliche Drag-Revisionen, drei unabhängige Mahlzeiten und Altdaten, geschützte manuelle Punkte und Updates, Bilderzugriff, Google-Metadaten und stabile Revisionen. Tatsächliche Dateioperationen, WAL-Sicherung und Rücksetzung von SQLite, Originalschlüssel und Code werden ausgeführt. Paket-/systemd-/Git-Downloadbefehle verwenden isolierte Testersatzprogramme. Der Protokolltest verwendet einen echten HTTP-Server über Loopback mit injiziertem Clienttransport; die konfigurierte Socketadresse wird geprüft.
 
 **Keine echte visuelle Browser- oder Touch-Abnahme.** In der Umgebung ist kein Browser ausführbar. Ansichts- und Dialoglogik werden ohne Browser getestet; responsive CSS und Touch-Pointer-Logik sind implementiert, aber noch nicht auf realen Geräten abgenommen. Keine geprüften Screenshots.
 
-**Keine Live-Abnahme von 0.6.0 auf Proxmox/systemd/Unix-Socket.** Unix-Sockets lassen sich in dieser Entwicklungsumgebung nicht binden. Die Prüfungen ersetzen weder die realen Socketrechte noch LXC-UID-Zuordnung, AppArmor und systemd. Google, Immich und Wetter werden mit kontrollierten Ersatzantworten getestet, keine realen Nutzerkonten. Docker wurde nicht auf einer Zielmaschine geprüft; der neue Web-Updatedienst ist für LXC vorgesehen.
+**Keine Live-Abnahme von 0.8.1 auf Proxmox/systemd/Unix-Socket.** Unix-Sockets lassen sich in dieser Entwicklungsumgebung nicht binden. Die Prüfungen ersetzen weder die realen Socketrechte noch LXC-UID-Zuordnung, AppArmor und systemd. Google, Immich und Wetter werden mit kontrollierten Ersatzantworten getestet, keine realen Nutzerkonten. Docker wurde nicht auf einer Zielmaschine geprüft; der neue Web-Updatedienst ist für LXC vorgesehen.
 
 Weitere Grenzen: gemeinsamer Familienzugang; Google-Polling statt Push (90 Tage zurück/366 voraus), keine allgemeine lokale Terminserie oder vollständige Google-Konfliktoberfläche. Keine Offlinebearbeitung gemeinsamer Daten, keine Push-Erinnerungen. Gerätefotos bleiben lokal. Netzwerkfotos benötigen ein JSON-Manifest, keine allgemeine SMB-/WebDAV-Verzeichnis-Erkennung. Vollständige Wiederherstellung erfolgt mit SQLite und Originalschlüssel, keine Restore-Oberfläche. Große langfristige Datenmengen sind noch nicht unter Last geprüft.
 
 ## Nächste Schritte auf dem Zielsystem
 
-1. Bestehenden Container 100 über den eingerichteten Update-Knopf auf 0.6.0 bringen; falls noch ein Stand vor 0.3.0 läuft, einmal den vollständigen Checkout per Installer übertragen. Browser neu laden, mit vorhandenem Familienpasswort anmelden, Änderungsübersicht lesen; Daten und Elternpasswort erhalten. Wetterort und Tabletmodus in der Oberfläche einrichten.
+1. Bestehenden Container 100 über den eingerichteten Update-Knopf auf 0.8.1 bringen; falls noch ein Stand vor 0.3.0 läuft, einmal den vollständigen Checkout per Installer übertragen. Browser neu laden, mit vorhandenem Familienpasswort anmelden, Änderungsübersicht lesen; Daten und Elternpasswort erhalten. Wetterort und Tabletmodus in der Oberfläche einrichten.
 2. Browser-Abnahme bei 390×844, 768×1024 und 1440×900 sowie auf dem Wanddisplay. Hoch-/Querformat, lange Namen, 200 % Schrift und Touch prüfen.
-3. Mittige Profile und eigene Profilbilder, Standard-/eigene Farben für Alle, Theme und Hintergrundbild, beide Essensausrichtungen prüfen. Im Kalender variable und gleichmäßige Stunden, leere Tagesbreiten, vollständiges Bearbeitungsformular, 07:00–08:00 und 07:00–09:00, Überlappungen, feste Zeit ohne Ende, Farbverlauf für zwei/drei Personen und das deckende Ende bei gemeinsamen Startterminen, ganztägig/mehrtägig, Tages-Plus und mehrere Personen prüfen. Aufgabenbild, Checkbox, Ziehen Allgemein → Person und alle drei Mahlzeiten testen.
+3. Mittige Profile und eigene Profilbilder, Standard-/eigene Farben für Alle, Theme und Hintergrundbild, beide Essensausrichtungen prüfen. Im Kalender variable und gleichmäßige Stunden, leere Tagesbreiten, vollständiges Bearbeitungsformular, 07:00–08:00 und 07:00–09:00, Überlappungen, feste Zeit ohne Ende, Farbverlauf für zwei/drei Personen und das deckende Ende bei gemeinsamen Startterminen, ganztägig/mehrtägig, Tages-Plus und mehrere Personen prüfen. Feiertagsflächen in Monat/Jahr und Farbwechsel, kompakte Geburtstagslisten, Arbeitstagsimport mit Personen-/Aktivierungsschaltern sowie Aufgabenbibliothek, Tippen/Doppeltippen/Halten und alle drei Mahlzeiten testen.
 4. Wetterort suchen/wechseln/entfernen und Kopfzeilenort wählen; 14-Tage-Daten sowie Ausfall prüfen. Tabletmodus mit/ohne Fotos, erster Tipp ohne versehentliche Aufgabe, HTTPS-Wake-Lock sowie tatsächliche Hardware-Standby-/Aufweckmöglichkeiten am Tablet prüfen. Bild-/Emoji-Symbole bei Terminen und Aufgaben, einschließlich Assistent-Zurück und Entfernen, auf allen Geräten prüfen. Web-Updatedienst: Start nach Containerneustart, echte Socketrechte, Sicherungen, Statusanzeige und kontrollierte Fehler-/Rücksetzprobe auf einer Testkopie prüfen. Keine künstlichen Updatefehler auf der einzigen Familieninstallation provozieren.
 5. Google-OAuth für die eigene Domain und Konten, gemeinsame Kalender, Leserechte, Ausfall/Wiederverbindung und DST; Immich-Version und reale Album-/Bild-Endpunkte prüfen. Echten öffentlichen Rezeptlink mit Bildimport testen. Rezeptbild hochladen/entfernen, Bildauswahl für alle Mahlzeiten und Geburtstag mit/ohne Jahr in jeder Kalenderansicht prüfen.
-6. Danach die Webversion weiter festigen; Stundenpläne nach konkreten Anforderungen, native App erst nach ausreichend fertiger Webversion.
+6. Schul-/Kitapläne, Ferienpause, 6/8/10/12 Stunden und Unterkalender-Einführung auf den Geräten prüfen. Das separate Web-/PHP-Repository bleibt aktuell unberührt; native App erst später.
 
 ## Dateien zum Einstieg
 
@@ -121,7 +135,8 @@ Weitere Grenzen: gemeinsamer Familienzugang; Google-Polling statt Push (90 Tage 
 - `docs/INTEGRATIONS.md`: Google, Geburtstage, Rezeptimport, Immich und Bilderquellen.
 - `server.mjs`, `src/store.mjs`, `src/model.mjs`: HTTP, Speicherung, Validierung und Buchungen.
 - `src/google.mjs`, `src/photos.mjs`, `src/recipe-import.mjs`, `src/public-web.mjs`: Integrationen.
-- `public/app.js`, `public/planner.js`, `public/appearance.js`, `public/planner.css`, `public/extras.css`: UI, variable Zeit-/Drag-Logik, gemeinsame Darstellungsdefaults und Gestaltung.
+- `public/app.js`, `public/planner.js`, `public/appearance.js`, `public/planner.css`, `public/extras.css`, `public/organizer.css`: UI, variable Zeit-/Drag-Logik, gemeinsame Darstellungsdefaults und Gestaltung.
+- `src/calendar-import.mjs`, `src/holidays.mjs`, `public/calendar-data.js`, `public/schedules.js`: ICS, Ferien/Feiertage, Arbeitstage und Schul-/Kitapläne.
 - `src/weather.mjs`, `public/weather.js`: optionale Wetterintegration mit Cache und Darstellung.
 - `public/device-mode.js`, `public/symbols.js`, `public/releases.js`, `CHANGELOG.md`: Geräteeinstellungen, Emoji-Auswahl und Änderungsnotizen.
 - `src/updater-client.mjs`, `src/update-runner.mjs`, `scripts/update-agent.mjs`: begrenztes Update-Protokoll, Sicherung, Job und Rücksetzung.
@@ -130,6 +145,6 @@ Weitere Grenzen: gemeinsamer Familienzugang; Google-Polling statt Push (90 Tage 
 
 ## GitHub, Kontingent und Wiederaufnahme
 
-Die Veröffentlichung von 0.6.0 auf `main` baut auf dem vorhandenen 0.5.1-Stand auf (GitHub `5e97048e52a7183ed9a83c1c05420eade95f383b`, Tree `907ca6faaf66fb6972e62dd8624062433551e521`). Branch-Aktualisierung gegen den erwarteten Kopf prüfen und bei Konflikten niemals blind erzwingen. Lokale und über die GitHub-Verbindung erzeugte Commitkennungen können bei identischem Dateibaum abweichen; den Tree und Inhalte vergleichen. Die Veröffentlichung ist kein Nachweis der Installation auf dem Nutzer-LXC.
+Die Veröffentlichung von 0.8.1 auf `main` baut auf dem vorhandenen 0.8.0-Stand auf (GitHub `9eaa86ead3d999be373e9ff2ecf4ce3b6cf43ab2`, Tree `f0a101dfdfe8b79cdec74011ee8ca4658a235314`). Branch-Aktualisierung gegen den erwarteten Kopf prüfen und bei Konflikten niemals blind erzwingen. Lokale und über die GitHub-Verbindung erzeugte Commitkennungen können bei identischem Dateibaum abweichen; den Tree und Inhalte vergleichen. Die Veröffentlichung ist kein Nachweis der Installation auf dem Nutzer-LXC.
 
 Verbleibendes ChatGPT-Nutzungsvolumen kann hier nicht verlässlich ausgelesen werden; keine automatische Wiederaufnahme eingerichtet. Bei Unterbrechung GitHub und diese Datei für die nächste Sitzung verwenden. Fortsetzung: „Setze Familien Organisierer anhand von PROJECT_STATE.md fort.“ Nicht neu beginnen, vorhandene Daten und Einstellungen bewahren, relevante Prüfungen nach Änderungen ausführen und diesen Stand aktualisieren.

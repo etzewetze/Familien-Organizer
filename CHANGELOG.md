@@ -1,5 +1,16 @@
 # Änderungsübersicht
 
+## 0.8.1 · 2026-10-16
+
+Kompakter Monat und Arbeitstage (LXC-Version)
+
+- Feiertage markieren in Monat und Jahr den ganzen Tag in einer gemeinsamen, unter Einstellungen → Darstellung anpassbaren Farbe. Standard ist Hellgrün. Die Beschriftung erhält passenden Kontrast; Heute bleibt erkennbar.
+- Im Monat entfallen die Terminblöcke für Feiertage und Geburtstage. Kompakte Zeilen zeigen einzelne Einträge; mehrere Einträge derselben Art werden zusammengefasst und öffnen per Tipp eine vollständige Liste mit Bearbeitung. Gewöhnliche Termine bleiben sichtbar.
+- Die bestehende Darstellung von Feiertagen und Geburtstagen in Woche und Liste bleibt erhalten.
+- ICS-Dienstpläne können ausdrücklich als Arbeitstage einer Person importiert werden. Uhrzeiten, Nachtdienste, offene Endzeiten und Serien bleiben erhalten. Arbeitstage erscheinen als Tageskennzeichnung mit 💼 statt als Termin im Stundenraster; im Jahr als kleines Symbol.
+- Eigene Aktivierung und Verwaltung für Arbeitstage. Bereits importierte Termine können im Bearbeitungsformular auf Arbeitstag umgestellt werden. Arbeitstage lösen keine Schul-/Kitapause aus.
+- Bestehende Einstellungen erhalten die neue Feiertagsfarbe und den Arbeitstagsschalter automatisch. Ältere Speichervorgänge bewahren die neuen Werte. Sicherungen und Exporte enthalten Farben, Dienste und Zuordnungen.
+
 ## 0.8.0 · 2026-10-16
 
 Ferien, Feiertage und Kalenderimport (LXC-Version)

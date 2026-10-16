@@ -176,8 +176,11 @@ export function createApp(env = process.env, services = {}) {
         if (path === '/api/calendar/options' && req.method === 'PUT') {
           const data = await body(req);
           check(data._revision === store.meta('revision'), 'Die Kalenderauswahl wurde zwischenzeitlich geändert. Bitte neu laden.', 409);
-          const options = {};
-          for (const key of Object.keys(calendarOptionDefaults)) { check(typeof data[key] === 'boolean', 'Ungültige Kalenderauswahl.'); options[key] = data[key]; }
+          const options = { ...calendarOptionDefaults, ...store.meta('calendarOptions', {}) };
+          for (const key of Object.keys(calendarOptionDefaults)) {
+            check(data[key] === undefined || typeof data[key] === 'boolean', 'Ungültige Kalenderauswahl.');
+            if (data[key] !== undefined) options[key] = data[key];
+          }
           store.transaction(() => { store.setMeta('calendarOptions', options); store.bump(); }); return json(res, options);
         }
         if (path === '/api/calendar/holiday-groups' && req.method === 'GET') return json(res, await holidays.groups(url.searchParams.get('state')));

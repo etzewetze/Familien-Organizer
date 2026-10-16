@@ -38,6 +38,7 @@ test('HTTP: Ferien-Schalter sind gemeinsam und revisionsgeschützt; Einträge bl
   const options = await f.request('/calendar/options','PUT',{ vacation:false,holiday:true,event:true,_revision:state.revision },f.cookie); assert.equal(options.status,200);
   assert.equal((await f.request('/calendar/options','PUT',{ vacation:true,holiday:true,event:true,_revision:state.revision },f.other)).status,409);
   const next = await (await f.request('/state','GET',null,f.other)).json(); assert.equal(next.calendarOptions.vacation,false);
+  assert.equal(next.calendarOptions.workday,true);
   const created = await f.request('/records/calendarEntries','POST',{ title:'Kita geschlossen',category:'vacation',memberId:state.members[0].id,startDate:'2026-10-12',endDate:'2026-10-16' },f.cookie); assert.equal(created.status,201); const entry = await created.json();
   assert.equal((await f.request('/records/calendarEntries/'+entry.id,'PUT',{ ...entry,title:'Kita zu',enabled:false },f.other)).status,200);
   assert.equal((await f.request('/records/calendarEntries/'+entry.id,'PUT',entry,f.cookie)).status,409);
@@ -49,4 +50,24 @@ test('HTTP: ICS bleibt bis zum Bestätigen Vorschau und wird mit der gewählten 
   const preview = await previewResponse.json(); assert.equal(preview.entries.length,2); assert.equal(f.app.store.all('calendarEntries').length,0); assert.equal(f.loads,0);
   const commit = await f.request('/calendar/import/commit','POST',{ token:preview.token,selected:[1],memberId:f.state.members[0].id },f.cookie); assert.equal(commit.status,201);
   const entry = f.app.store.all('calendarEntries')[0]; assert.equal(entry.startDate,'2026-10-19'); assert.equal(entry.startTime,'08:00'); assert.equal(entry.endTime,'08:45'); assert.equal(entry.memberId,f.state.members[0].id);
+});
+test('HTTP: Dienstplanimport speichert Arbeitstage statt Termine und erhält die Person und Nachtdienstzeiten', async t => {
+  const f = await fixture(t), memberId = f.state.members[1].id;
+  const content = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:dienst\r\nDTSTART:20261016T220000\r\nDTEND:20261017T060000\r\nSUMMARY:Nachtdienst\r\nEND:VEVENT\r\nEND:VCALENDAR';
+  const previewResponse = await f.request('/calendar/import/preview','POST',{ mode:'ics',content,from:'2026-10-01',until:'2026-12-31',category:'workday',memberId },f.cookie);
+  assert.equal(previewResponse.status,200); const preview = await previewResponse.json();
+  assert.equal(preview.entries[0].category,'workday'); assert.equal(preview.entries[0].allDay,false);
+  const selection = { token:preview.token,selected:[0],memberId };
+  assert.equal((await f.request('/calendar/import/commit','POST',selection,f.cookie)).status,201);
+  const exported = await (await f.request('/export','GET',null,f.cookie)).json(), entry = exported.calendarEntries[0];
+  assert.equal(exported.events.some(item => item.title === 'Nachtdienst'),false);
+  assert.equal(entry.category,'workday'); assert.equal(entry.memberId,memberId); assert.equal(entry.startTime,'22:00'); assert.equal(entry.endTime,'06:00'); assert.equal(entry.endDate,'2026-10-17'); assert.equal(entry.pauseSchedules,false);
+  assert.deepEqual(await (await f.request('/calendar/import/commit','POST',selection,f.cookie)).json(),{ imported:0,skipped:1 });
+  const state = await (await f.request('/state','GET',null,f.cookie)).json();
+  assert.equal((await f.request('/calendar/options','PUT',{ workday:'false',_revision:state.revision },f.cookie)).status,400);
+  assert.equal((await f.request('/calendar/options','PUT',{ workday:false,_revision:state.revision },f.cookie)).status,200);
+  const off = await (await f.request('/state','GET',null,f.cookie)).json();
+  assert.equal(off.calendarOptions.workday,false); assert.equal(off.calendarOptions.holiday,true); assert.equal(off.calendarEntries.length,state.calendarEntries.length);
+  assert.equal((await f.request('/calendar/options','PUT',{ vacation:false,holiday:true,event:true,_revision:off.revision },f.cookie)).status,200);
+  const legacy = await (await f.request('/state','GET',null,f.cookie)).json(); assert.equal(legacy.calendarOptions.workday,false);
 });

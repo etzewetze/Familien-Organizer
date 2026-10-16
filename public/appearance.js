@@ -1,6 +1,6 @@
 export const appearanceDefaults = Object.freeze({
   allColor: '#6366f1', backgroundColor: '#f5f6fb', headerColor: '#ffffff',
-  surfaceColor: '#ffffff', navColor: '#172237', accentColor: '#4f46e5', textColor: '#20283d',
+  surfaceColor: '#ffffff', navColor: '#172237', accentColor: '#4f46e5', textColor: '#20283d', holidayColor: '#dcfce7',
   backgroundImage: '', calendarHourSize: 64, calendarAutoWidth: true, calendarCompactHours: true,
 });
 export const isColor = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
@@ -58,5 +58,6 @@ export function themeProperties(settings) {
   const theme = appearanceFor(settings);
   return { '--bg': theme.backgroundColor, '--header': theme.headerColor, '--surface': theme.surfaceColor, '--nav': theme.navColor, '--primary': theme.accentColor, '--ink': theme.textColor,
     '--muted': blend(theme.textColor, theme.surfaceColor, .67), '--line': blend(theme.textColor, theme.surfaceColor, .14), '--soft': blend(theme.textColor, theme.surfaceColor, .04),
-    '--header-ink': contrastText(theme.headerColor), '--nav-ink': contrastText(theme.navColor), '--primary-ink': contrastText(theme.accentColor) };
+    '--header-ink': contrastText(theme.headerColor), '--nav-ink': contrastText(theme.navColor), '--primary-ink': contrastText(theme.accentColor),
+    '--holiday-color': theme.holidayColor, '--holiday-ink': contrastText(theme.holidayColor) };
 }
