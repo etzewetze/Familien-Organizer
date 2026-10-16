@@ -5,6 +5,7 @@ import { VERSION } from './releases.js';
 import { emojiCategories, findEmojis, isEmoji } from './symbols.js';
 import { weatherCode, weatherValue, weatherTime, rainOutlook } from './weather.js';
 import { deviceConfig, idleAction } from './device-mode.js';
+import { schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder } from './schedules.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const E = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -42,7 +43,7 @@ const paths = {
   cake: '<path d="M4 12h16v9H4Zm0 4c2 2 4-2 6 0s4-2 6 0 3 1 4 0M8 12V8m4 4V8m4 4V8M8 5v1m4-3v3m4-1v1"/>',
 };
 const I = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.calendar}</svg>`;
-const nav = [['home', 'Übersicht', 'home'], ['calendar', 'Kalender', 'calendar'], ['birthdays', 'Geburtstage', 'cake'], ['tasks', 'Aufgaben', 'tasks'], ['rewards', 'Belohnungen', 'star'], ['meals', 'Essen & Rezepte', 'food'], ['lists', 'Listen & Einkauf', 'lists'], ['notes', 'Notizen', 'notes'], ['photos', 'Bilderrahmen', 'photos']];
+const nav = [['home', 'Übersicht', 'home'], ['calendar', 'Kalender', 'calendar'], ['birthdays', 'Geburtstage', 'cake'], ['tasks', 'Aufgaben', 'tasks'], ['schedules', 'Stundenpläne', 'book'], ['rewards', 'Belohnungen', 'star'], ['meals', 'Essen & Rezepte', 'food'], ['lists', 'Listen & Einkauf', 'lists'], ['notes', 'Notizen', 'notes'], ['photos', 'Bilderrahmen', 'photos']];
 const app = $('#app'), editor = $('#editor'), confirmDialog = $('#confirm');
 let S, status, route = location.hash.slice(1) || 'home', cursor = '', filter = '', online = true, editing = null, busy = false;
 let calendarMode = 'week', taskMode = 'all', activeList = 'shopping';
@@ -56,7 +57,166 @@ const weatherCache = new Map(), weatherPending = new Set();
 let displayConfig;
 try { displayConfig = deviceConfig(JSON.parse(localStorage.getItem('deviceMode') || '{}')); } catch { displayConfig = deviceConfig(); }
 let displayMode = 'active', lastActivity = Date.now(), displaySequence = 0, displayLoading = false, suppressWakeClickUntil = 0, wakeLock = null, wakePending = false, wakeStatus = '';
+let navCollapsed = localStorage.getItem('navCollapsed') === 'true', navEditing = false;
+let navSort, scheduleSelection;
+try { navSort = JSON.parse(localStorage.getItem('navOrder') || '[]'); } catch { navSort = []; }
+try { scheduleSelection = JSON.parse(localStorage.getItem('scheduleSelection') || '{}'); } catch { scheduleSelection = {}; }
+if (!scheduleSelection || typeof scheduleSelection !== 'object' || Array.isArray(scheduleSelection)) scheduleSelection = {};
+navSort = navigationOrder(navSort, nav.map(item => item[0]));
+let birthdaySearch = '', templateEditing = false, taskColumns = localStorage.getItem('taskColumns') || 'auto';
+let lastTaskTap = { id: '', at: 0 }, taskHold = null, suppressTaskClickUntil = 0;
+let scheduleDraft = null, scheduleGuide = null, guideTimer = null;
 const calendarScrollPositions = new Map();
+
+function calendarWindows(date) { return scheduleWindows(S.schedules || [], date, { selected: scheduleSelection, memberId: filter }); }
+function scaleEvents(date) {
+  return [...visibleEvents(date), ...calendarWindows(date).map(item => ({ startDate: date, endDate: date, startTime: item.startTime, endTime: item.endTime }))];
+}
+function scheduleToggles() {
+  const plans = (S.schedules || []).filter(plan => plan.showInCalendar && (!filter || plan.memberId === filter));
+  if (!plans.length) return '';
+  return `<div class="schedule-toggles" aria-label="Unterkalender"><span>Unterkalender</span>${plans.map(plan => `<label class="schedule-toggle" data-schedule-chip="${plan.id}" style="${personStyle(plan.memberId)}" title="${E(plan.title)}"><input type="checkbox" data-schedule-toggle="${plan.id}" ${scheduleSelection[plan.id] !== false ? 'checked' : ''}><span class="schedule-initial">${E((member(plan.memberId)?.name || '?').slice(0,1))}</span><span>${E(plan.title)}</span></label>`).join('')}</div>`;
+}
+function scheduleBars(windows, scale) {
+  return windows.map((item, index) => {
+    const name = member(item.memberId)?.name || '', label = `${name}: ${item.title}, ${item.startTime}–${item.endTime}`;
+    return `<button class="schedule-bar" data-edit="schedules" data-id="${item.id}" style="${personStyle(item.memberId)};left:${index * 25 + 3}px;top:${scale.position(item.start) / scale.total * 100}%;height:${(scale.position(item.end) - scale.position(item.start)) / scale.total * 100}%" title="${E(label)}" aria-label="${E(label)}"><span class="schedule-bar-start">${item.startTime}</span><span class="schedule-bar-name">${E(name)}</span><span class="schedule-bar-end">${item.endTime}</span></button>`;
+  }).join('');
+}
+function scheduleDayLabels(date) {
+  return calendarWindows(date).map(item => `<button class="schedule-day-label" data-edit="schedules" data-id="${item.id}" style="${personStyle(item.memberId)}">${E(member(item.memberId)?.name)} · ${item.startTime}–${item.endTime}</button>`).join('');
+}
+function yearCalendar() {
+  return `<div class="year-grid">${yearMonths(Number(cursor.slice(0, 4))).map(month => `<section class="year-month"><button class="year-month-title" data-year-month="${month.first}">${ds(month.first).toLocaleDateString('de-DE', { month: 'long' })}</button><div class="year-days">${['Mo','Di','Mi','Do','Fr','Sa','So'].map(day => `<span class="year-weekday">${day}</span>`).join('')}${'<span></span>'.repeat(month.offset)}${month.dates.map(date => {
+    const events = visibleEvents(date), windows = calendarWindows(date), label = `${fullWeekday(date)}, ${fullDate(date)}${events.length ? ': ' + events.map(event => event.title).join(', ') : ', keine Termine'}${windows.length ? ', ' + windows.map(item => `${member(item.memberId)?.name} ${item.startTime}–${item.endTime}`).join(', ') : ''}`;
+    return `<button class="year-day ${date === S.serverDate ? 'today' : ''}" data-year-date="${date}" title="${E(label)}" aria-label="${E(label)}"><span>${Number(date.slice(8))}</span>${events.some(event => event.birthdayId) ? '<small class="year-cake" aria-hidden="true">🎂</small>' : ''}<span class="year-dots">${events.slice(0,3).map(event => `<i style="${eventStyle(event)}"></i>`).join('')}${windows.length ? '<i class="year-plan-dot"></i>' : ''}</span></button>`;
+  }).join('')}</div></section>`).join('')}</div>`;
+}
+
+function taskIcon(record) {
+  if (isImageFile(record.imageFile)) return `<img src="/api/tasks/image?file=${encodeURIComponent(record.imageFile)}" alt="" draggable="false" data-record-image><span class="task-icon-fallback" hidden>${record.emoji ? `<span class="task-emoji">${E(record.emoji)}</span>` : `<span class="task-text-icon">${E(record.title)}</span>`}</span>`;
+  return record.emoji ? `<span class="task-emoji" aria-hidden="true">${E(record.emoji)}</span>` : `<span class="task-text-icon">${E(record.title)}</span>`;
+}
+function templateTile(template) {
+  return `<button class="template-tile ${templateEditing ? 'editing' : ''}" data-template="${template.id}" ${templateEditing ? '' : `draggable="true" data-drag-kind="template" data-drag-id="${template.id}" data-drag-rev="${template._rev}" data-drag-handle`} title="${E(template.title)}${template.code ? ' · Nr. ' + template.code : ''}" aria-label="${E(template.title)}${template.code ? ', Nummer ' + template.code : ''}${templateEditing ? ' bearbeiten' : ' verteilen'}">${taskIcon(template)}${template.code ? `<small class="task-code">${template.code}</small>` : ''}${templateEditing ? `<span class="template-pencil">${I('edit')}</span>` : ''}</button>`;
+}
+function assignedTaskTile(task, date) {
+  const done = !!completion(task, date);
+  return `<div class="assigned-task"><button class="task-tile ${done ? 'completed' : ''}" data-task-tile="${task.id}" data-date="${date}" aria-label="${E(task.title)}, ${task.points} Punkte, ${done ? 'erledigt' : 'offen'}. Doppeltippen zum Umschalten, gedrückt halten für Optionen." aria-pressed="${done}" ${done ? '' : `draggable="true" data-drag-kind="task" data-drag-id="${task.id}" data-drag-rev="${task._rev}" data-drag-handle`}>${taskIcon(task)}${done ? `<span class="task-done-mark">${I('check')}</span>` : ''}</button><div class="task-title-popover" hidden>${E(task.title)}${task.points ? ` · ${task.points} Punkte` : ''}</div></div>`;
+}
+function showTemplateMatches(input) {
+  const area = $('.template-results', input.closest('.template-combobox'));
+  const matches = matchTaskTemplates(S.taskTemplates || [], input.value);
+  area.innerHTML = matches.length ? matches.map(template => `<button data-assign-template="${template.id}" data-member="${E(input.dataset.templateSearch)}" title="${E(template.title)}" aria-label="${E(template.title)} hinzufügen">${taskIcon(template)}<span>${template.code ? `<b>${template.code}</b> · ` : ''}${E(template.title)}</span>${I('plus')}</button>`).join('') : '<p class="small muted">Keine passende Vorlage.</p>';
+  area.hidden = false; input.setAttribute('aria-expanded', 'true');
+}
+function openTemplateAssign(id) {
+  const template = (S.taskTemplates || []).find(item => item.id === id); if (!template) return;
+  editing = { kind: 'template-assignment', template, requestId: uid() };
+  dialog(template.title, `<form id="template-assign-form"><div class="template-preview">${taskIcon(template)}<p>${template.points} Punkte${template.code ? ' · Nr. ' + template.code : ''}</p></div>${selectField('Zuordnen', 'memberId', filter || '', [['','Allgemein'], ...S.members.map(person => [person.id, person.name])])}<p class="field-hint">Für ${fullDate(cursor)}. Die Vorlage bleibt für weitere Aufgaben erhalten.</p><p id="editor-error" class="form-error" role="alert"></p><div class="form-actions"><button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit">Aufgabe hinzufügen</button></div></form>`);
+}
+async function assignTemplateTo(id, memberId, requestId = uid()) {
+  if (!online) throw new Error('Die Verbindung fehlt. Bitte später erneut versuchen.');
+  const template = (S.taskTemplates || []).find(item => item.id === id); if (!template) throw new Error('Vorlage nicht gefunden.');
+  await mutate(`/task-templates/${id}/assign`, 'POST', { memberId, date: cursor, _rev: template._rev, requestId }, 'Aufgabe hinzugefügt.');
+}
+async function tapTask(target) {
+  if (busy || !online) return;
+  const id = target.dataset.taskTile, time = Date.now();
+  if (lastTaskTap.id === id && time - lastTaskTap.at < 450) {
+    lastTaskTap = { id: '', at: 0 }; busy = true;
+    try { await completeTask(id, target.dataset.date); } catch (error) { toast(error.message, true); } finally { busy = false; }
+  } else { lastTaskTap = { id, at: time }; const label = $('.task-title-popover', target.parentElement); if (label) label.hidden = !label.hidden; }
+}
+function taskActions(id) {
+  const task = S?.tasks.find(item => item.id === id); if (!task) return;
+  editing = { kind: 'task-actions', task };
+  lastTaskTap = { id: '', at: 0 };
+  dialog(task.title, `<p>${E(task.description || '')}</p><p class="small muted">${task.points} Punkte · ${E(member(task.memberId)?.name || 'Allgemein')}</p><div class="stack"><button class="button" data-complete="${task.id}" data-date="${cursor}" data-close-task-actions>${I('check')}${completion(task) ? 'Wieder öffnen' : 'Erledigt markieren'}</button><button class="button" data-edit="tasks" data-id="${task.id}">${I('edit')}Aufgabe bearbeiten</button><button class="button danger" data-action="remove-assigned-task" data-id="${task.id}">${I('trash')}Aus verteilter Liste entfernen</button></div>`);
+}
+async function removeAssignedTask(id) {
+  const task = S.tasks.find(item => item.id === id); if (!task) return;
+  if (await ask('Aufgabe entfernen?', `„${task.title}“ aus der verteilten Liste entfernen? Vorlagen und bereits verdiente Punkte bleiben erhalten.`, 'Entfernen', true)) {
+    await api(`/records/tasks/${id}`, 'DELETE', { _rev: task._rev }); editor.close(); await refresh(false); render(); toast('Aufgabe entfernt.');
+  }
+}
+
+function schedulesPage() {
+  const plans = (S.schedules || []).filter(plan => !filter || plan.memberId === filter);
+  return `${pageHead('Stundenpläne & Kita', 'Montag bis Freitag. Schulstunden oder eigene Bring- und Abholzeiten.', `<button class="button" data-edit="schedules" data-plan-type="kita">${I('plus')}Kitaplan</button><button class="button primary" data-edit="schedules" data-plan-type="school">${I('plus')}Stundenplan</button>`)}${plans.length ? `<div class="schedule-list">${plans.map(plan => `<section class="panel schedule-panel" style="${personStyle(plan.memberId)}"><div class="panel-head"><div><h2>${E(plan.title)}</h2><p class="small muted">${E(member(plan.memberId)?.name)} · ${plan.type === 'school' ? plan.periodCount + ' Schulstunden' : 'Kita / Unterkalender'}${plan.showInCalendar ? ' · im Kalender zuschaltbar' : ''}</p></div>${iconBtn('Plan bearbeiten', 'edit-schedule', 'edit', `data-edit="schedules" data-id="${plan.id}"`)}</div>${scheduleTable(plan)}</section>`).join('')}</div>` : `<div class="panel">${empty('Euer Wochenrhythmus', 'Legt für jedes Kind einen Schul- oder Kitaplan an. Im Kalender erscheinen aktivierte Pläne als schmale farbige Balken.', 'book')}</div>`}`;
+}
+function scheduleTable(plan) {
+  if (plan.type === 'kita') return `<div class="kita-week">${schoolDays.map((name, index) => { const entry = plan.entries.find(item => item.weekday === index + 1); return `<div><strong>${name}</strong><span>${entry ? `${entry.startTime}–${entry.endTime}` : 'Frei'}</span>${entry?.title ? `<small>${E(entry.title)}</small>` : ''}</div>`; }).join('')}</div>`;
+  return `<div class="school-scroll"><table class="school-table"><thead><tr><th scope="col">Stunde</th>${schoolDays.map(name => `<th scope="col">${name}</th>`).join('')}</tr></thead><tbody>${plan.periods.map((period, index) => `<tr><th scope="row">${index + 1}.<small>${period.startTime}–${period.endTime}</small></th>${schoolDays.map((_, day) => `<td>${E(plan.entries.find(entry => entry.weekday === day + 1 && entry.period === index + 1)?.title || '–')}</td>`).join('')}</tr>${index % 2 === 1 && index < plan.periodCount - 1 ? '<tr class="school-break"><td colspan="6">Pause</td></tr>' : ''}`).join('')}</tbody></table></div>`;
+}
+function openScheduleEditor(old, defaults = {}) {
+  const type = old?.type || defaults.type || 'school';
+  scheduleDraft = old ? structuredClone(old) : { type, title: type === 'school' ? 'Stundenplan' : 'Kitaplan', memberId: filter || S.members[0]?.id || '', periodCount: 6, periods: defaultPeriods(6), entries: type === 'kita' ? schoolDays.map((_, index) => ({ weekday: index + 1, startTime: '08:00', endTime: '15:00', title: '' })) : [], showInCalendar: true, validFrom: '', validUntil: '' };
+  editing = { kind: 'schedules', old }; renderScheduleEditor();
+}
+function renderScheduleEditor() {
+  const plan = scheduleDraft;
+  const grid = plan.type === 'school' ? `<label class="form-field">Angezeigte Schulstunden<select id="schedule-period-count">${periodCounts.map(count => `<option value="${count}" ${plan.periodCount === count ? 'selected' : ''}>${count} Schulstunden</option>`).join('')}</select></label><p class="field-hint">Zeiten sind anpassbar. Ein Fach pro Feld; leere Felder gelten als frei. Nach zwei Stunden wird eine Pause angezeigt.</p><div class="school-scroll"><table class="school-table edit-school"><thead><tr><th>Stunde / Uhrzeit</th>${schoolDays.map(name => `<th scope="col">${name}</th>`).join('')}</tr></thead><tbody>${plan.periods.slice(0, plan.periodCount).map((period, index) => `<tr><th scope="row">${index + 1}.<input type="time" name="start-${index}" value="${period.startTime}" aria-label="Beginn Stunde ${index + 1}" required><input type="time" name="end-${index}" value="${period.endTime}" aria-label="Ende Stunde ${index + 1}" required></th>${schoolDays.map((name, day) => `<td><input name="lesson-${day + 1}-${index + 1}" value="${E(plan.entries.find(entry => entry.weekday === day + 1 && entry.period === index + 1)?.title || '')}" maxlength="80" aria-label="${name}, Stunde ${index + 1}" placeholder="Fach"></td>`).join('')}</tr>${index % 2 === 1 && index < plan.periodCount - 1 ? '<tr class="school-break"><td colspan="6">Pause</td></tr>' : ''}`).join('')}</tbody></table></div>` : `<div class="kita-editor">${schoolDays.map((name, index) => { const day = index + 1, entry = plan.entries.find(item => item.weekday === day); return `<div class="kita-edit-day"><label class="checkbox-field"><input type="checkbox" name="day-${day}" ${entry ? 'checked' : ''}>${name}</label>${field('Bringen', `from-${day}`, entry?.startTime || '08:00', 'time')}${field('Abholen', `until-${day}`, entry?.endTime || '15:00', 'time')}${field('Hinweis (optional)', `note-${day}`, entry?.title || '', 'text', 'maxlength="80"')}</div>`; }).join('')}</div>`;
+  dialog(plan.type === 'school' ? 'Stundenplan bearbeiten' : 'Kitaplan / Unterkalender bearbeiten', `<form id="schedule-form"><div class="form-grid">${field('Name des Plans', 'title', plan.title, 'text', 'required maxlength="160"')}${selectField('Für wen?', 'memberId', plan.memberId, S.members.map(person => [person.id, person.name]))}${field('Gültig ab (optional)', 'validFrom', plan.validFrom, 'date')}${field('Gültig bis (optional)', 'validUntil', plan.validUntil, 'date')}<label class="checkbox-field full"><input type="checkbox" name="showInCalendar" ${plan.showInCalendar ? 'checked' : ''}>Im Hauptkalender als Unterkalender anbieten</label></div><div class="section-gap">${grid}</div><p class="form-error" id="editor-error" role="alert"></p><div class="form-actions">${editing.old ? '<button class="button danger" type="button" data-action="delete-record">Plan löschen</button>' : ''}<div class="spacer"></div><button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit">Speichern</button></div></form>`);
+}
+function collectSchedule(form) {
+  const values = new FormData(form), plan = scheduleDraft;
+  for (const key of ['title','memberId','validFrom','validUntil']) plan[key] = values.get(key) || '';
+  plan.showInCalendar = values.get('showInCalendar') === 'on';
+  if (plan.type === 'school') {
+    const retained = plan.entries.filter(entry => entry.period > plan.periodCount), entries = [];
+    for (let index = 0; index < plan.periodCount; index++) {
+      plan.periods[index] = { startTime: values.get(`start-${index}`) || '', endTime: values.get(`end-${index}`) || '' };
+      for (let weekday = 1; weekday <= 5; weekday++) { const title = (values.get(`lesson-${weekday}-${index + 1}`) || '').trim(); if (title) entries.push({ weekday, period: index + 1, title }); }
+    }
+    plan.entries = [...entries, ...retained];
+  } else plan.entries = schoolDays.flatMap((_, index) => { const weekday = index + 1; return values.get(`day-${weekday}`) ? [{ weekday, startTime: values.get(`from-${weekday}`), endTime: values.get(`until-${weekday}`), title: values.get(`note-${weekday}`) || '' }] : []; });
+}
+function resizeSchedule(count) {
+  if (!periodCounts.includes(count)) return;
+  const defaults = defaultPeriods(count);
+  while (scheduleDraft.periods.length < count) scheduleDraft.periods.push(defaults[scheduleDraft.periods.length]);
+  scheduleDraft.periodCount = count; renderScheduleEditor();
+}
+async function saveSchedule(form) {
+  collectSchedule(form);
+  const plan = scheduleDraft, old = editing.old;
+  const removed = plan.type === 'school' && plan.entries.filter(entry => entry.period > plan.periodCount).length;
+  if (removed && !await ask('Schulstunden reduzieren?', `${removed} belegte Felder liegen nach der ${plan.periodCount}. Stunde und werden beim Speichern entfernt.`, 'Reduzieren', true)) return;
+  const data = { ...plan, periods: plan.type === 'school' ? plan.periods.slice(0, plan.periodCount) : [], entries: plan.entries.filter(entry => plan.type !== 'school' || entry.period <= plan.periodCount), ...(old ? { _rev: old._rev } : {}) };
+  const first = !(S.schedules || []).some(item => item.showInCalendar);
+  const saved = await api('/records/schedules' + (old ? '/' + old.id : ''), old ? 'PUT' : 'POST', data);
+  editor.close(); await refresh(false); render(); toast('Plan gespeichert.');
+  if (first && saved.showInCalendar && !localStorage.getItem('scheduleGuideSeen')) startScheduleGuide(saved.id);
+}
+function startScheduleGuide(id) {
+  finishScheduleGuide(false); filter = ''; calendarMode = 'week';
+  scheduleGuide = { id, readyAt: Date.now() + 5000 };
+  go('calendar');
+  guideTimer = setInterval(() => { if (!scheduleGuide) return; positionScheduleGuide(); }, 200);
+}
+function positionScheduleGuide() {
+  if (!scheduleGuide || route !== 'calendar') return;
+  const target = document.querySelector(`[data-schedule-chip="${scheduleGuide.id}"]`); if (!target) return;
+  let overlay = $('#schedule-guide');
+  if (!overlay) {
+    overlay = document.createElement('dialog'); overlay.id = 'schedule-guide'; overlay.className = 'schedule-guide'; overlay.setAttribute('aria-labelledby', 'guide-title');
+    overlay.innerHTML = '<div class="guide-spotlight"></div><div class="guide-card"><h2 id="guide-title">Euer neuer Unterkalender</h2><p>Hier blendet ihr den Plan ein oder aus. Im Wochenkalender zeigt ein schmaler farbiger Balken den Beginn und das Ende für jedes Kind.</p><button class="button primary" data-action="schedule-guide-ok" disabled>OK (5)</button></div>';
+    overlay.addEventListener('cancel', event => { event.preventDefault(); if (scheduleGuide && Date.now() >= scheduleGuide.readyAt) finishScheduleGuide(); });
+    document.body.append(overlay); overlay.showModal(); target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+  }
+  const rect = target.getBoundingClientRect(), hole = $('.guide-spotlight', overlay), card = $('.guide-card', overlay);
+  Object.assign(hole.style, { top: `${rect.top - 7}px`, left: `${rect.left - 7}px`, width: `${rect.width + 14}px`, height: `${rect.height + 14}px` });
+  card.style.top = `${Math.max(12, Math.min(innerHeight - 240, rect.bottom + 26))}px`;
+  const button = $('[data-action=schedule-guide-ok]', overlay), remaining = Math.max(0, Math.ceil((scheduleGuide.readyAt - Date.now()) / 1000));
+  button.disabled = remaining > 0; button.textContent = remaining ? `OK (${remaining})` : 'OK, verstanden';
+}
+function finishScheduleGuide(acknowledge = true) {
+  if (acknowledge && scheduleGuide) localStorage.setItem('scheduleGuideSeen', 'true');
+  scheduleGuide = null; if (guideTimer) clearInterval(guideTimer); guideTimer = null;
+  const overlay = $('#schedule-guide'); if (overlay?.open) { overlay.close(); overlay.remove(); }
+}
+
 let slideTimer, slideIndex = 0, slidePaused = false, slideActive = false;
 const ds = date => new Date(date + 'T12:00:00');
 const addDays = (date, count) => { const d = ds(date); d.setDate(d.getDate() + count); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -109,7 +269,8 @@ async function refresh(renderView = true) {
   const changed = !S || S.revision !== next.revision || S.serverDate !== next.serverDate || !online;
   if (S && cursor === S.serverDate && S.serverDate !== next.serverDate) cursor = next.serverDate;
   S = next; online = true; cursor ||= S.serverDate;
-  if (renderView && changed && !editor.open && !confirmDialog.open && !pointerDrag && !nativeDrag && !document.activeElement?.closest('form')) render();
+  if (!S.schedules?.length) localStorage.removeItem?.('scheduleGuideSeen');
+  if (renderView && changed && !editor.open && !confirmDialog.open && !pointerDrag && !nativeDrag && !document.activeElement?.closest('form') && !document.activeElement?.matches?.('input[type=search]')) render();
 }
 async function mutate(path, method, data, message) {
   await api(path, method, data); await refresh(false); render(); if (message) toast(message);
@@ -131,7 +292,8 @@ function pageHead(title, subtitle, action = '') {
   return `<div class="page-head"><div><h1>${E(title)}</h1>${subtitle ? `<p>${E(subtitle)}</p>` : ''}</div><div class="head-actions">${action}</div></div>`;
 }
 function navigation() {
-  return `<aside class="rail" id="rail"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong><small>Unser Alltag. Zusammen.</small></div></div><div><div class="rail-label">Familienzentrale</div><nav class="nav-list" aria-label="Hauptnavigation">${nav.map(([id, label, icon]) => `<button class="nav-item ${route === id ? 'active' : ''}" data-nav="${id}" ${route === id ? 'aria-current="page"' : ''}>${I(icon)}${label}</button>`).join('')}<button class="nav-item" disabled>${I('book')}Stundenpläne<span class="badge">Später</span></button></nav></div><div class="nav-bottom"><button class="nav-item ${route === 'settings' ? 'active' : ''}" data-nav="settings">${I('settings')}Einstellungen</button></div><div class="self-hosted"><strong>${I('shield')}Euer eigener Server</strong>Familien Organisierer · ${E(status?.version || VERSION)}</div></aside>`;
+  const ordered = navSort.map(id => nav.find(item => item[0] === id)).filter(Boolean);
+  return `<aside class="rail ${navCollapsed ? 'collapsed' : ''}" id="rail"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong><small>Unser Alltag. Zusammen.</small></div></div><div class="rail-tools">${iconBtn(navCollapsed ? 'Navigation ausklappen' : 'Navigation einklappen', 'collapse-nav', navCollapsed ? 'right' : 'left', `aria-expanded="${!navCollapsed}"`)}${iconBtn('Reihenfolge bearbeiten', 'edit-nav', 'edit', `aria-pressed="${navEditing}"`)}</div><div><div class="rail-label">Familienzentrale</div><nav class="nav-list" aria-label="Hauptnavigation">${ordered.map(([id, label, icon], index) => `<div class="nav-row"><button class="nav-item ${route === id ? 'active' : ''}" data-nav="${id}" title="${E(label)}" aria-label="${E(label)}" ${route === id ? 'aria-current="page"' : ''}>${I(icon)}<span class="nav-text">${label}</span></button>${navEditing ? `<div class="nav-sort"><button data-nav-move="${id}" data-direction="-1" aria-label="${E(label)} nach oben" ${index === 0 ? 'disabled' : ''}>↑</button><button data-nav-move="${id}" data-direction="1" aria-label="${E(label)} nach unten" ${index === ordered.length - 1 ? 'disabled' : ''}>↓</button></div>` : ''}</div>`).join('')}</nav></div><div class="nav-bottom"><button class="nav-item ${route === 'settings' ? 'active' : ''}" data-nav="settings" title="Einstellungen" aria-label="Einstellungen">${I('settings')}<span class="nav-text">Einstellungen</span></button></div><div class="self-hosted"><strong>${I('shield')}Euer eigener Server</strong>Familien Organisierer · ${E(status?.version || VERSION)}</div></aside>`;
 }
 function render() {
   if (!S) return;
@@ -140,8 +302,8 @@ function render() {
   const previousGrid = $('.time-scroll');
   if (previousGrid?.dataset.week) { const heights = previousGrid.dataset.hourHeights?.split(',').map(Number) || Array(24).fill(Number(previousGrid.dataset.hourSize) || 64); calendarScrollPositions.set(previousGrid.dataset.week, { minute: hourScale(heights).minuteAt(previousGrid.scrollTop), left: previousGrid.scrollLeft }); }
   if (!nav.some(n => n[0] === route) && !['settings', 'weather'].includes(route)) route = 'home';
-  const pages = { home: homePage, calendar: calendarPage, birthdays: birthdaysPage, tasks: tasksPage, rewards: rewardsPage, meals: mealsPage, lists: listsPage, notes: notesPage, photos: photosPage, settings: settingsPage, weather: weatherPage };
-  app.innerHTML = `<div class="shell">${navigation()}<div class="workspace"><header class="topbar"><div class="topbar-left">${iconBtn('Menü öffnen', 'menu', 'menu')}<span class="family-title">${E(S.settings.familyName)}</span></div>${headerMembers()}<div class="topbar-right">${weatherHeader()}<span class="local-clock" aria-label="Aktuelle Uhrzeit">${clockText()}</span><span class="connection ${online ? '' : 'offline'}" id="connection">${online ? 'Verbunden' : 'Verbindung fehlt'}</span>${iconBtn('Bilderrahmen öffnen', 'photos', 'photos')}${iconBtn('Vollbild', 'fullscreen', 'expand')}</div></header>${online ? '' : '<div class="offline-banner">Verbindung zum Server fehlt. Änderungen sind erst nach der Verbindung möglich.</div>'}<main class="main" id="main">${pages[route]()}</main></div></div><nav class="mobile-nav" aria-label="Schnellnavigation">${[['home', 'Heute', 'home'], ['calendar', 'Kalender', 'calendar'], ['tasks', 'Aufgaben', 'tasks'], ['rewards', 'Belohnungen', 'star'], ['meals', 'Essen', 'food']].map(([id, label, icon]) => `<button data-nav="${id}" class="${route === id ? 'active' : ''}">${I(icon)}${label}</button>`).join('')}<button data-action="menu">${I('menu')}Mehr</button></nav>`;
+  const pages = { home: homePage, calendar: calendarPage, birthdays: birthdaysPage, tasks: tasksPage, rewards: rewardsPage, meals: mealsPage, lists: listsPage, notes: notesPage, photos: photosPage, schedules: schedulesPage, settings: settingsPage, weather: weatherPage };
+  app.innerHTML = `<div class="shell ${navCollapsed ? 'nav-collapsed' : ''}">${navigation()}<div class="workspace"><header class="topbar"><div class="topbar-left">${iconBtn('Menü öffnen', 'menu', 'menu')}<span class="family-title">${E(S.settings.familyName)}</span></div>${headerMembers()}<div class="topbar-right">${weatherHeader()}<span class="local-clock" aria-label="Aktuelle Uhrzeit">${clockText()}</span><span class="connection ${online ? '' : 'offline'}" id="connection">${online ? 'Verbunden' : 'Verbindung fehlt'}</span>${iconBtn('Bilderrahmen öffnen', 'photos', 'photos')}${iconBtn('Vollbild', 'fullscreen', 'expand')}</div></header>${online ? '' : '<div class="offline-banner">Verbindung zum Server fehlt. Änderungen sind erst nach der Verbindung möglich.</div>'}<main class="main" id="main">${pages[route]()}</main></div></div><nav class="mobile-nav" aria-label="Schnellnavigation">${[['home', 'Heute', 'home'], ['calendar', 'Kalender', 'calendar'], ['tasks', 'Aufgaben', 'tasks'], ['rewards', 'Belohnungen', 'star'], ['meals', 'Essen', 'food']].map(([id, label, icon]) => `<button data-nav="${id}" class="${route === id ? 'active' : ''}">${I(icon)}${label}</button>`).join('')}<button data-action="menu">${I('menu')}Mehr</button></nav>`;
   $('[data-action="menu"]', $('.topbar')).classList.add('mobile-menu');
   $('[data-action="photos"]', $('.topbar')).classList.add('picture-shortcut');
   document.querySelectorAll('#settings-family,#settings-photos,#settings-appearance').forEach(form => { form.dataset.revision = S.revision; });
@@ -150,6 +312,7 @@ function render() {
   ensureWeather();
   if (route === 'calendar' && calendarMode === 'week') { const grid = $('.time-scroll'), position = calendarScrollPositions.get(monday(cursor)); if (grid) { grid.scrollTop = weekTimeScale(cursor).position(position?.minute ?? 360); grid.scrollLeft = position?.left ?? 0; } }
   if (route === 'settings') { paintUpdateStatus(); void pollUpdateStatus(); }
+  if (scheduleGuide && route === 'calendar') requestAnimationFrame(() => positionScheduleGuide());
 }
 
 function headerMembers() {
@@ -171,20 +334,21 @@ function weekGrid(date, includeMeals = false) {
   }).join('')}</div></div>`;
 }
 
-function weekTimeScale(date) { const theme = appearanceFor(S.settings); return timeScale(Array.from({ length: 7 }, (_, i) => { const day = addDays(monday(date), i); return { date: day, events: visibleEvents(day) }; }), theme.calendarHourSize, theme.calendarCompactHours); }
+function weekTimeScale(date) { const theme = appearanceFor(S.settings); return timeScale(Array.from({ length: 7 }, (_, i) => { const day = addDays(monday(date), i); return { date: day, events: scaleEvents(day) }; }), theme.calendarHourSize, theme.calendarCompactHours); }
 function timeWeek(date) {
-  const days = Array.from({ length: 7 }, (_, i) => addDays(monday(date), i)), events = days.map(visibleEvents), theme = appearanceFor(S.settings), grid = calendarColumns(events, theme.calendarAutoWidth);
-  const scale = timeScale(days.map((date, i) => ({ date, events: events[i] })), theme.calendarHourSize, theme.calendarCompactHours);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(monday(date), i)), events = days.map(visibleEvents), windows = days.map(calendarWindows), theme = appearanceFor(S.settings), grid = calendarColumns(events, theme.calendarAutoWidth);
+  const scale = timeScale(days.map(date => ({ date, events: scaleEvents(date) })), theme.calendarHourSize, theme.calendarCompactHours);
+  if (windows.some(items => items.length)) { const widths = events.map((list, index) => (theme.calendarAutoWidth && !list.length ? 128 : 160) + windows[index].length * 25); grid.template = '52px ' + widths.map(width => `minmax(${width}px,1fr)`).join(' '); grid.minimum = 52 + widths.reduce((a,b) => a + b, 0); }
   const headers = `<div class="time-head time-corner">${I('clock')}<span>Uhrzeit</span></div>${days.map(day => dayHeading(day, `time-head ${day === S.serverDate ? 'today' : ''}`)).join('')}`;
   const hasAllDay = events.some(list => list.some(event => event.allDay));
   const allDay = hasAllDay ? `<div class="all-day-label">Ganztägig</div>${days.map((day, index) => `<div class="all-day-cell ${day === S.serverDate ? 'today' : ''}">${events[index].filter(e => e.allDay).map(e => eventCard(e, true)).join('')}</div>`).join('')}` : '';
   const axis = `<div class="time-axis">${Array.from({ length: 25 }, (_, h) => `<span style="top:${scale.position(h * 60) / scale.total * 100}%">${String(h).padStart(2, '0')}:00</span>`).join('')}</div>`;
   const rows = scale.hours.map(row => `<div class="hour-row" aria-hidden="true" style="top:${row.top / scale.total * 100}%;height:${row.height / scale.total * 100}%"></div>`).join('');
-  const columns = days.map((day, index) => `<div class="time-day ${day === S.serverDate ? 'today' : ''}" aria-label="${E(fullWeekday(day) + ', ' + fullDate(day))}">${rows}${layoutTimedEvents(events[index], day).map(({ event: e, start, end, column, columns }) => {
+  const columns = days.map((day, index) => `<div class="time-day ${day === S.serverDate ? 'today' : ''}" aria-label="${E(fullWeekday(day) + ', ' + fullDate(day))}">${rows}${scheduleBars(windows[index], scale)}<div class="scheduled-events-area" style="left:${windows[index].length * 25}px">${layoutTimedEvents(events[index], day).map(({ event: e, start, end, column, columns }) => {
     const people = eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle';
     const label = `${e.title}, ${e.startTime}${e.startOnly ? ', ohne Ende' : ' bis ' + e.endTime}, ${people}${e.location ? ', ' + e.location : ''}`;
     return `<button class="time-event ${e.startOnly ? 'start-only' : ''}" data-edit="events" data-id="${e.id}" style="${eventStyle(e)};top:${scale.position(start) / scale.total * 100}%;height:${(scale.position(end) - scale.position(start)) / scale.total * 100}%;left:calc(${column / columns * 100}% + 3px);width:calc(${100 / columns}% - 6px)" title="${E(label)}" aria-label="${E(label)}">${e.startOnly ? `<strong>${recordSymbols(e)}${E(e.startTime)} ${E(e.title)}</strong>` : `<span class="event-time">${E(e.startTime)}${e.endDate !== e.startDate ? ' …' : '–' + E(e.endTime)}</span><strong>${recordSymbols(e)}${E(e.title)}</strong>${end - start >= 60 ? `<span class="event-person">${E(people)}</span>${e.location ? `<span class="event-person">${E(e.location)}</span>` : ''}` : ''}`}</button>`;
-  }).join('')}</div>`).join('');
+  }).join('')}</div></div>`).join('');
   return `<div class="time-scroll" data-week="${monday(date)}" data-hour-size="${theme.calendarHourSize}" data-hour-heights="${scale.hours.map(row => row.height).join(',')}" tabindex="0" aria-label="Wochenkalender, 24 Stunden"><div class="time-grid" style="grid-template-columns:${grid.template};min-width:${grid.minimum}px;--hour-size:${theme.calendarHourSize}px;--calendar-total:${scale.total}px">${headers}${allDay}${axis}${columns}</div></div>`;
 }
 function taskRow(task, date, compact = false) {
@@ -199,35 +363,34 @@ function homePage() {
   return `${pageHead('Alles für eure Woche.', headingDate, `<button class="button primary" data-edit="events">${I('plus')}<span>Termin</span></button>`)}<div class="summary-row"><div class="summary-card"><div class="summary-icon">${I('calendar')}</div><div><strong>${visibleEvents(date).length}</strong><span>Termine heute</span></div><span class="summary-hint">Euer Tag im Blick</span></div><div class="summary-card"><div class="summary-icon orange">${I('tasks')}</div><div><strong>${complete}<span style="display:inline;font-size:1rem"> / ${tasks.length}</span></strong><span>Aufgaben erledigt</span></div><span class="summary-hint">Schritt für Schritt</span></div><div class="summary-card"><div class="summary-icon green">${I('lists')}</div><div><strong>${openShopping}</strong><span>Auf der Einkaufsliste</span></div><span class="summary-hint">Für euren Einkauf</span></div></div><div class="panel"><div class="panel-head"><div class="flex">${I('calendar')}<h2>Euer Wochenkalender</h2></div><div class="week-toolbar"><span class="week-caption">${weekCaption(cursor)}</span><div class="day-switch">${iconBtn('Vorherige Woche', 'prev', 'left')}${iconBtn('Nächste Woche', 'next', 'right')}</div><button class="panel-link" data-nav="calendar">Öffnen</button></div></div>${weekGrid(cursor, true)}</div><div class="home-grid"><section class="panel"><div class="panel-head"><div class="flex">${I('tasks')}<h2>Heute zu erledigen</h2><span class="tag orange">${tasks.length - complete} offen</span></div><button class="panel-link" data-nav="tasks">Alle Aufgaben</button></div><div class="panel-body">${tasks.length ? `<div class="flex between small muted"><span>${complete} von ${tasks.length} geschafft</span><span>${Math.round(complete / tasks.length * 100)} %</span></div><div class="mini-progress" style="margin:10px 0 4px"><div style="width:${complete / tasks.length * 100}%"></div></div>${tasks.slice(0, 7).map(t => taskRow(t, date, true)).join('')}` : empty('Alles frei für heute', 'Legt eine Aufgabe oder Routine für eure Familie an.', 'tasks', btn('Aufgabe hinzufügen', 'new-task', 'plus', 'subtle', 'data-edit="tasks"'))}</div></section><div class="home-side stack"><section class="panel meal-preview"><div class="panel-head"><div class="flex">${I('food')}<h2>Was gibt’s heute?</h2></div><button class="panel-link" data-nav="meals">Wochenplan</button></div><div class="panel-body">${todayRecipe ? `<span class="meal-label">${E(todayRecipe.category)}</span><h3>${E(todayRecipe.title)}</h3><div class="meal-meta"><span>${I('clock')}${todayRecipe.minutes} Min.</span><span>${I('people')}${todayMeal.servings} Portionen</span></div><button class="button" data-recipe="${todayRecipe.id}">${I('book')}Zum Rezept</button>` : `<h3>Heute noch nichts geplant</h3><p class="small muted">Sucht gemeinsam etwas Leckeres aus.</p><button class="button" data-action="plan-meal" data-date="${date}">${I('plus')}Essen auswählen</button>`}</div></section>${S.notes.length ? `<section class="panel"><div class="panel-body"><div class="flex between"><h3>${E((S.notes.find(n => n.pinned) || S.notes[0]).title)}</h3>${I('pin')}</div><div class="note-preview">${E((S.notes.find(n => n.pinned) || S.notes[0]).body.slice(0, 260))}</div><button class="panel-link" data-nav="notes">Unsere Notizen</button></div></section>` : ''}</div></div>`;
 }
 function calendarPage() {
-  const modes = [['week', 'Woche'], ['month', 'Monat'], ['agenda', 'Liste']];
-  const caption = calendarMode === 'month' ? ds(cursor).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }) : `${fullDate(monday(cursor))} – ${fullDate(addDays(monday(cursor), 6))}`;
+  const modes = [['week', 'Woche'], ['month', 'Monat'], ['year', 'Jahr'], ['agenda', 'Liste']];
+  const caption = calendarMode === 'year' ? cursor.slice(0, 4) : calendarMode === 'month' ? ds(cursor).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }) : `${fullDate(monday(cursor))} – ${fullDate(addDays(monday(cursor), 6))}`;
   let content;
   if (calendarMode === 'week') content = timeWeek(cursor);
+  else if (calendarMode === 'year') content = yearCalendar();
   else if (calendarMode === 'month') {
     const first = cursor.slice(0, 8) + '01', start = monday(first);
     content = `<div class="month-scroll"><div class="month-grid">${Array.from({ length: 7 }, (_, i) => `<div class="month-label">${fullWeekday(addDays(start, i))}</div>`).join('')}${Array.from({ length: 42 }, (_, i) => {
       const date = addDays(start, i);
-      return `<section class="month-cell ${date.slice(0, 7) !== cursor.slice(0, 7) ? 'outside' : ''} ${date === S.serverDate ? 'today' : ''}">${dayHeading(date)}${visibleEvents(date).map(e => eventCard(e, true)).join('')}</section>`;
+      return `<section class="month-cell ${date.slice(0, 7) !== cursor.slice(0, 7) ? 'outside' : ''} ${date === S.serverDate ? 'today' : ''}">${dayHeading(date)}${visibleEvents(date).map(e => eventCard(e, true)).join('')}${scheduleDayLabels(date)}</section>`;
     }).join('')}</div></div>`;
   } else content = Array.from({ length: 7 }, (_, i) => {
     const date = addDays(monday(cursor), i);
-    return `<section class="agenda-day">${dayHeading(date)}${visibleEvents(date).length ? visibleEvents(date).map(e => `<button class="agenda-event" data-edit="${e.birthdayId ? 'birthdays' : 'events'}" data-id="${e.birthdayId || e.id}"><span class="agenda-time">${e.allDay ? 'Ganztägig' : E(e.startTime) + (e.startOnly ? ' · ohne Ende' : '–' + E(e.endTime))}</span><span class="agenda-line" style="${eventStyle(e)}"></span><span class="spacer"><strong>${recordSymbols(e)}${E(e.title)}</strong><span class="todo-detail" style="display:block">${E(eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle')}${e.location ? ' · ' + E(e.location) : ''}</span></span>${e.birthdayId ? '<span class="tag">Geburtstag</span>' : ''}</button>`).join('') : '<p class="small muted">Keine Termine.</p>'}</section>`;
+    return `<section class="agenda-day">${dayHeading(date)}${visibleEvents(date).length ? visibleEvents(date).map(e => `<button class="agenda-event" data-edit="${e.birthdayId ? 'birthdays' : 'events'}" data-id="${e.birthdayId || e.id}"><span class="agenda-time">${e.allDay ? 'Ganztägig' : E(e.startTime) + (e.startOnly ? ' · ohne Ende' : '–' + E(e.endTime))}</span><span class="agenda-line" style="${eventStyle(e)}"></span><span class="spacer"><strong>${recordSymbols(e)}${E(e.title)}</strong><span class="todo-detail" style="display:block">${E(eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle')}${e.location ? ' · ' + E(e.location) : ''}</span></span>${e.birthdayId ? '<span class="tag">Geburtstag</span>' : ''}</button>`).join('') : '<p class="small muted">Keine Termine.</p>'}${scheduleDayLabels(date)}</section>`;
   }).join('');
-  return `${pageHead('Unser Kalender', 'Platz für euren Tag. Zeit für eure Familie.', `<button class="button primary" data-edit="events">${I('plus')}<span>Termin</span></button>`)}<div class="panel calendar-panel"><div class="panel-head"><div class="week-toolbar">${iconBtn('Vorheriger Zeitraum', 'prev', 'left')}<span class="week-caption">${E(caption)}</span>${iconBtn('Nächster Zeitraum', 'next', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><div class="view-switch">${modes.map(([id, label]) => `<button data-mode="${id}" class="${calendarMode === id ? 'active' : ''}">${label}</button>`).join('')}</div></div>${content}</div>${S.pendingSync.length ? '<p class="small muted section-gap">Google: Änderungen warten auf Synchronisierung.</p>' : ''}`;
+  return `${pageHead('Unser Kalender', 'Platz für euren Tag. Zeit für eure Familie.', `<button class="button primary" data-edit="events">${I('plus')}<span>Termin</span></button>`)}<div class="panel calendar-panel"><div class="panel-head"><div class="week-toolbar">${iconBtn('Vorheriger Zeitraum', 'prev', 'left')}<span class="week-caption">${E(caption)}</span>${iconBtn('Nächster Zeitraum', 'next', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><div class="view-switch">${modes.map(([id, label]) => `<button data-mode="${id}" class="${calendarMode === id ? 'active' : ''}">${label}</button>`).join('')}</div></div>${scheduleToggles()}${content}</div>${S.pendingSync.length ? '<p class="small muted section-gap">Google: Änderungen warten auf Synchronisierung.</p>' : ''}`;
 }
 function birthdaysPage() {
-  const upcoming = (S.birthdays || []).filter(b => !filter || b.memberId === filter || !b.memberId)
+  const upcoming = (S.birthdays || []).filter(b => (!filter || b.memberId === filter || !b.memberId) && b.name.toLocaleLowerCase('de').includes(birthdaySearch.trim().toLocaleLowerCase('de')))
     .map(birthday => ({ birthday, event: nextBirthday(birthday, S.serverDate) })).filter(item => item.event)
     .sort((a, b) => a.event.startDate.localeCompare(b.event.startDate) || a.birthday.name.localeCompare(b.birthday.name, 'de'));
-  return `${pageHead('Unsere Geburtstage', 'Einmal eintragen. Jedes Jahr gemeinsam daran denken.', `<button class="button primary" data-edit="birthdays">${I('plus')}<span>Geburtstag</span></button>`)}<div class="section-gap">${upcoming.length ? `<div class="birthday-grid">${upcoming.map(({ birthday: b, event }) => `<article class="panel birthday-card"><div class="flex between"><span class="tag ${event.startDate === S.serverDate ? 'green' : ''}">${event.startDate === S.serverDate ? 'Heute!' : 'Nächster Geburtstag'}</span>${iconBtn('Geburtstag bearbeiten', 'edit-birthday', 'edit', `data-edit="birthdays" data-id="${b.id}"`)}</div><h2>${E(b.name)}</h2><div class="birthday-date">${I('cake')}<span>${ds(event.startDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>${event.age > 0 ? `<p class="small muted">Wird ${event.age} ${event.age === 1 ? 'Jahr' : 'Jahre'} alt${b.memberId ? ` · ${E(member(b.memberId)?.name || '')}` : ''}</p>` : '<p class="small muted">Jährlich im Familienkalender</p>'}${b.month === 2 && b.day === 29 ? `<p class="small muted">29. Februar · in Nicht-Schaltjahren am ${b.leapDay === 'feb28' ? '28. Februar' : '1. März'}</p>` : ''}${b.notes ? `<p class="note-preview small">${E(b.notes)}</p>` : ''}<button class="panel-link" data-action="birthday-calendar" data-date="${event.startDate}">Im Kalender ansehen</button></article>`).join('')}</div>` : `<section class="panel">${empty('Keinen Geburtstag vergessen', 'Namen, Tag und Monat eintragen. Das Geburtsjahr ist optional.', 'cake', btn('Geburtstag hinzufügen', 'new-birthday', 'plus', 'primary', 'data-edit="birthdays"'))}</section>`}</div>`;
+  return `${pageHead('Unsere Geburtstage', 'Einmal eintragen. Jedes Jahr gemeinsam daran denken.', `<button class="button primary" data-edit="birthdays">${I('plus')}<span>Geburtstag</span></button>`).replace('<div class="head-actions">', `<label class="birthday-search"><span class="sr-only">Geburtstage nach Name suchen</span><input type="search" id="birthday-search" placeholder="Name suchen …" value="${E(birthdaySearch)}" autocomplete="off"></label><div class="head-actions">`)}<div id="birthday-results" class="section-gap">${upcoming.length ? `<div class="birthday-grid">${upcoming.map(({ birthday: b, event }) => `<article class="panel birthday-card"><div class="flex between"><span class="tag ${event.startDate === S.serverDate ? 'green' : ''}">${event.startDate === S.serverDate ? 'Heute!' : 'Nächster Geburtstag'}</span>${iconBtn('Geburtstag bearbeiten', 'edit-birthday', 'edit', `data-edit="birthdays" data-id="${b.id}"`)}</div><h2>${E(b.name)}</h2><div class="birthday-date">${I('cake')}<span>${ds(event.startDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>${event.age > 0 ? `<p class="small muted">Wird ${event.age} ${event.age === 1 ? 'Jahr' : 'Jahre'} alt${b.memberId ? ` · ${E(member(b.memberId)?.name || '')}` : ''}</p>` : '<p class="small muted">Jährlich im Familienkalender</p>'}${b.month === 2 && b.day === 29 ? `<p class="small muted">29. Februar · in Nicht-Schaltjahren am ${b.leapDay === 'feb28' ? '28. Februar' : '1. März'}</p>` : ''}${b.notes ? `<p class="note-preview small">${E(b.notes)}</p>` : ''}<button class="panel-link" data-action="birthday-calendar" data-date="${event.startDate}">Im Kalender ansehen</button></article>`).join('')}</div>` : `<section class="panel">${empty(birthdaySearch ? 'Kein passender Geburtstag' : 'Keinen Geburtstag vergessen', birthdaySearch ? 'Versucht einen anderen Namen.' : 'Namen, Tag und Monat eintragen. Das Geburtsjahr ist optional.', 'cake', btn('Geburtstag hinzufügen', 'new-birthday', 'plus', 'primary', 'data-edit="birthdays"'))}</section>`}</div>`;
 }
 
 function tasksPage() {
   const tasks = S.tasks.filter(t => due(t, cursor) && (taskMode === 'all' || taskMode === 'routines' && t.repeat !== 'none' || taskMode === 'todos' && t.repeat === 'none'));
-  const groups = [{ id: '', name: 'Allgemein' }, ...S.members];
-  if (filter) taskBoard = filter;
-  if (taskBoard !== 'all' && !groups.some(g => g.id === taskBoard)) taskBoard = 'all';
-  return `${pageHead('Gemeinsam schaffen wir das.', 'Aufgaben aus Allgemein in eine Personenspalte oder auf ein Profil im Header ziehen.', `<button class="button primary" data-edit="tasks" data-member="${taskBoard === 'all' ? '' : taskBoard}">${I('plus')}Aufgabe</button>`)}<div class="flex between wrap section-gap"><div class="week-toolbar">${iconBtn('Vorheriger Tag', 'prev-day', 'left')}<strong>${fullWeekday(cursor)}, ${fullDate(cursor)}</strong>${iconBtn('Nächster Tag', 'next-day', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><div class="view-switch task-scope-switch"><button data-task-board="all" class="${taskBoard === 'all' ? 'active' : ''}">Alle Bereiche</button><button data-task-board="" data-task-drop="" class="${taskBoard === '' ? 'active' : ''}">Allgemein</button></div><div class="view-switch">${[['all', 'Alle'], ['todos', 'To-dos'], ['routines', 'Routinen']].map(([id, name]) => `<button data-task-mode="${id}" class="${taskMode === id ? 'active' : ''}">${name}</button>`).join('')}</div></div><div class="task-board ${taskBoard !== 'all' ? 'single-column' : ''}">${groups.filter(g => taskBoard === 'all' || g.id === taskBoard).map(g => `<section class="panel task-column" data-task-drop="${g.id}"><div class="task-column-head"><div class="spacer"><h2>${E(g.name)}</h2><p>${g.id ? `${S.points[g.id].available} Punkte` : 'Gemeinsame Aufgaben'}</p></div>${iconBtn('Aufgabe hinzufügen', 'new-task', 'plus', `data-edit="tasks" data-member="${g.id}"`)}</div><div class="task-column-body">${tasks.filter(t => (t.memberId || '') === g.id).map(t => taskRow(t, cursor)).join('') || '<p class="task-empty">Hier ist Platz für Aufgaben.</p>'}</div></section>`).join('')}</div><p class="field-hint section-gap">Mit Touch am Griff ziehen. Auch ein Profil oben nimmt Aufgaben an. Alternativ im Bearbeiten-Fenster zuordnen.</p>`;
+  const groups = [{ id: '', name: 'Allgemein' }, ...S.members].filter(group => !filter || group.id === filter);
+  return `${pageHead('Gemeinsam schaffen wir das.', 'Vorlagen ziehen oder bei einer Person nach Name oder Nummer auswählen.', `<button class="button" data-edit="tasks">${I('plus')}Einzelaufgabe / Routine</button><button class="button primary" data-edit="taskTemplates">${I('plus')}Aufgabenvorlage</button>`)}<div class="flex between wrap section-gap"><div class="week-toolbar">${iconBtn('Vorheriger Tag', 'prev-day', 'left')}<strong>${fullWeekday(cursor)}, ${fullDate(cursor)}</strong>${iconBtn('Nächster Tag', 'next-day', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><label class="task-layout-control">Personen pro Reihe<select id="task-columns" aria-label="Personen pro Reihe">${['auto','2','3','4'].map(value => `<option value="${value}" ${taskColumns === value ? 'selected' : ''}>${value === 'auto' ? 'Automatisch' : value}</option>`).join('')}</select></label><div class="view-switch">${[['all', 'Alle'], ['todos', 'To-dos'], ['routines', 'Routinen']].map(([id, name]) => `<button data-task-mode="${id}" class="${taskMode === id ? 'active' : ''}">${name}</button>`).join('')}</div></div><div class="task-workspace"><aside class="panel template-library" aria-label="Wiederverwendbare Aufgaben"><div class="template-heading"><strong>Vorlagen</strong>${iconBtn('Aufgabenvorlagen bearbeiten', 'edit-templates', 'edit', `aria-pressed="${templateEditing}"`)}</div><div class="template-icons">${(S.taskTemplates || []).map(template => templateTile(template)).join('') || '<p class="small muted">Erste Vorlage mit + anlegen.</p>'}</div>${iconBtn('Aufgabenvorlage anlegen', 'new-template', 'plus', 'data-edit="taskTemplates"')}</aside><div class="task-board responsive-board" data-columns="${E(taskColumns)}">${groups.map(group => `<section class="panel task-column" data-task-drop="${group.id}"><div class="task-column-head" style="${personStyle(group.id)}"><div class="spacer"><h2>${E(group.name)}</h2><p>${group.id ? `${S.points[group.id].available} Punkte` : 'Gemeinsame Aufgaben'}</p></div></div><div class="template-combobox" data-template-for="${group.id}"><label><span class="sr-only">Aufgabe für ${E(group.name)} nach Name oder Nummer auswählen</span><input type="search" data-template-search="${group.id}" placeholder="Aufgabe / Nr., z. B. 20" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="template-options-${group.id || 'all'}"></label><div class="template-results" id="template-options-${group.id || 'all'}" hidden></div></div><div class="task-column-body task-tiles">${tasks.filter(task => (task.memberId || '') === group.id).map(task => assignedTaskTile(task, cursor)).join('') || '<p class="task-empty">Hier ist Platz für Aufgaben.</p>'}</div></section>`).join('')}</div></div><p class="field-hint section-gap">Einmal tippen: Titel. Doppelt tippen: erledigen oder wieder öffnen. Gedrückt halten oder Rechtsklick: bearbeiten / entfernen. Vorlagen bleiben beim Verteilen erhalten.</p>`;
 }
 function rewardsPage() {
   const selected = filter || S.members[0]?.id;
@@ -270,7 +433,7 @@ function textareaField(label, name, value, attrs = '', hint = '') {
 function memberOptions() { return [['', 'Für alle'], ...S.members.map(m => [m.id, m.name])]; }
 function dialog(title, body, footer = '') {
   if (recipePreviewUrl) { URL.revokeObjectURL(recipePreviewUrl); recipePreviewUrl = ''; }
-  editor.classList.toggle('wide', body.includes('event-edit-form') || body.includes('meal-form'));
+  editor.classList.toggle('wide', body.includes('event-edit-form') || body.includes('meal-form') || body.includes('schedule-form'));
   editor.innerHTML = `<div class="dialog-header"><h2 id="editor-title">${E(title)}</h2>${iconBtn('Schließen', 'close-editor', 'close')}</div><div class="dialog-body">${body}${footer}</div>`;
   if (!editor.open) editor.showModal();
 }
@@ -278,16 +441,18 @@ function editRecord(kind, id = '', defaults = {}) {
   clearEventPreview();
   const old = id ? S[kind]?.find(r => r.id === id) : null;
   if (id && !old) throw new Error('Dieser Eintrag ist nicht mehr vorhanden.');
+  if (kind === 'schedules') { openScheduleEditor(old, defaults); return; }
   if (kind === 'events') { if (old) openEventEditor(old); else startEventWizard(null, defaults); return; }
   const record = old || { ...defaults };
   editing = { kind, old, ...(kind === 'recipes' ? { imageFile: record.imageFile || '' } : {}) };
   const required = 'required maxlength="160"';
   let fields = '', title;
-  const titles = { events: 'Termin', birthdays: 'Geburtstag', tasks: 'Aufgabe', recipes: 'Rezept', lists: 'Liste', items: 'Listeneintrag', notes: 'Notiz', rewards: 'Belohnung', members: 'Familienmitglied' };
+  const titles = { events: 'Termin', birthdays: 'Geburtstag', tasks: 'Aufgabe', taskTemplates: 'Aufgabenvorlage', recipes: 'Rezept', lists: 'Liste', items: 'Listeneintrag', notes: 'Notiz', rewards: 'Belohnung', members: 'Familienmitglied' };
   title = titles[kind] + (old ? ' bearbeiten' : ' hinzufügen');
   if (kind === 'birthdays') {
     fields = `${field('Name', 'name', record.name, 'text', 'required maxlength="100"', true)}${field('Tag', 'day', record.day || '', 'number', 'required min="1" max="31" step="1"')}${selectField('Monat', 'month', record.month || '', [['', 'Bitte auswählen'], ...Array.from({ length: 12 }, (_, i) => [String(i + 1), ds(`2000-${String(i + 1).padStart(2, '0')}-01`).toLocaleDateString('de-DE', { month: 'long' })])])}${field('Geburtsjahr (optional)', 'birthYear', record.birthYear || '', 'number', `min="1" max="${S.serverDate.slice(0, 4)}" step="1"`)}${selectField('Zuordnung (optional)', 'memberId', record.memberId || '', [['', 'Keine Zuordnung'], ...S.members.map(m => [m.id, m.name])])}${selectField('29. Februar in Nicht-Schaltjahren', 'leapDay', record.leapDay || 'mar1', [['mar1', 'Am 1. März anzeigen'], ['feb28', 'Am 28. Februar anzeigen']], true)}${textareaField('Notizen', 'notes', record.notes, 'rows="3" maxlength="2000"')}<p class="field-hint full">Erscheint automatisch jedes Jahr im Kalender. Mit Geburtsjahr wird auch das Alter angezeigt.</p>`;
-  } else if (kind === 'tasks') fields = `${taskImageField(record)}${emojiField(record.emoji)}${field('Titel der Aufgabe', 'title', record.title, 'text', required, true)}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${selectField('Zuordnen', 'memberId', old ? record.memberId || '' : record.memberId || '', [['', 'Allgemein'], ...S.members.map(m => [m.id, m.name])])}${selectField('Wiederholung', 'repeat', record.repeat || 'none', [['none', 'Einmalig'], ['daily', 'Täglich'], ['weekdays', 'Montag bis Freitag'], ['weekly', 'Wöchentlich']])}${field('Fällig / erster Tag', 'startDate', record.startDate || S.serverDate, 'date')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}`;
+  } else if (kind === 'taskTemplates') fields = `${taskImageField(record)}${emojiField(record.emoji)}${field('Titel der Aufgabe', 'title', record.title, 'text', required, true)}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${field('Aufgabennummer (optional)', 'code', record.code ?? '', 'number', 'min="1" max="999999" step="1"')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}<p class="field-hint full">Diese Vorlage bleibt in der Bibliothek. Änderungen gelten für neue Verteilungen.</p>`;
+  else if (kind === 'tasks') fields = `${taskImageField(record)}${emojiField(record.emoji)}${field('Titel der Aufgabe', 'title', record.title, 'text', required, true)}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${selectField('Zuordnen', 'memberId', old ? record.memberId || '' : record.memberId || '', [['', 'Allgemein'], ...S.members.map(m => [m.id, m.name])])}${selectField('Wiederholung', 'repeat', record.repeat || 'none', [['none', 'Einmalig'], ['daily', 'Täglich'], ['weekdays', 'Montag bis Freitag'], ['weekly', 'Wöchentlich']])}${field('Fällig / erster Tag', 'startDate', record.startDate || S.serverDate, 'date')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}`;
   else if (kind === 'recipes') fields = `${recipeImageField(record)}${field('Rezeptname', 'title', record.title, 'text', required, true)}${field('Portionen', 'servings', record.servings || 4, 'number', 'min="1" max="100" step="1" required')}${field('Zeit in Minuten', 'minutes', record.minutes ?? 30, 'number', 'min="0" max="1440" step="1" required')}${field('Kategorie', 'category', record.category || 'Hauptgericht', 'text', 'maxlength="60"', true)}${textareaField('Zutaten · eine pro Zeile', 'ingredientsText', (record.ingredients || []).map(i => `${i.quantity} | ${i.unit} | ${i.name} | ${i.category}`).join('\n'), 'rows="5" placeholder="500 | g | Nudeln | Vorrat"', 'Menge | Einheit | Zutat | Kategorie. Dezimalzahlen mit Punkt oder Komma sind möglich.')}${textareaField('Zubereitung', 'instructions', record.instructions, 'rows="5" maxlength="15000"')}${field('Link zur Quelle (optional)', 'sourceUrl', record.sourceUrl, 'url', '', true)}`;
   else if (kind === 'members') fields = `${memberImageField(record)}${field('Name', 'name', record.name, 'text', 'required maxlength="50"', true)}${field('Farbe', 'color', record.color || '#6366f1', 'color', 'required')}${selectField('Anzeige', 'role', record.role || 'adult', [['adult', 'Erwachsen'], ['child', 'Kind']])}`;
   else if (kind === 'lists') fields = field('Name der Liste', 'title', record.title, 'text', required, true);
@@ -301,7 +466,7 @@ function editRecord(kind, id = '', defaults = {}) {
 async function saveEditor(form) {
   const data = Object.fromEntries(new FormData(form)), { kind, old } = editing;
   if (old) data._rev = old._rev;
-  if (kind === 'tasks') {
+  if (kind === 'tasks' || kind === 'taskTemplates') {
     const current = editing, file = $('#task-image-input')?.files?.[0];
     data.imageFile = data.removeImage ? '' : old?.imageFile || '';
     if (file) { data.imageFile = await uploadTaskImage(file); if (!editor.open || editing !== current) return; }
@@ -380,6 +545,14 @@ document.addEventListener('click', async event => {
   if (suppressDragClick) { event.preventDefault(); return; }
   if (Date.now() < suppressWakeClickUntil) { event.preventDefault(); return; }
   const target = event.target.closest('button,a,[data-slide]'); if (!target) return;
+  if (Date.now() < suppressTaskClickUntil && target.dataset.taskTile) return;
+  if (target.dataset.taskTile) { await tapTask(target); return; }
+  if (target.dataset.template) { if (templateEditing) editRecord('taskTemplates', target.dataset.template); else openTemplateAssign(target.dataset.template); return; }
+  if (target.dataset.assignTemplate) { if (busy) return; busy = true; try { await assignTemplateTo(target.dataset.assignTemplate, target.dataset.member); } catch (error) { toast(error.message, true); } finally { busy = false; } return; }
+  if (target.dataset.scheduleToggle) return;
+  if (target.dataset.yearDate) { cursor = target.dataset.yearDate; calendarMode = 'agenda'; render(); return; }
+  if (target.dataset.yearMonth) { cursor = target.dataset.yearMonth; calendarMode = 'month'; render(); return; }
+  if (target.dataset.navMove) { const index = navSort.indexOf(target.dataset.navMove), next = index + Number(target.dataset.direction); if (next >= 0 && next < navSort.length) { [navSort[index], navSort[next]] = [navSort[next], navSort[index]]; localStorage.setItem('navOrder', JSON.stringify(navSort)); render(); } return; }
   if (target.dataset.emoji !== undefined) { selectEmoji(target.dataset.emoji, target.closest('[data-emoji-picker]')); return; }
   if (target.dataset.emojiCategory !== undefined) { const picker = target.closest('[data-emoji-picker]'); picker.dataset.category = target.dataset.emojiCategory; renderEmojiChoices(picker); return; }
   if (target.dataset.confirm) { const yes = target.dataset.confirm === 'yes'; confirmDialog.close(); resolveConfirmation?.(yes); resolveConfirmation = null; return; }
@@ -393,13 +566,18 @@ document.addEventListener('click', async event => {
   if (target.dataset.taskMode) { taskMode = target.dataset.taskMode; render(); return; }
   if (target.dataset.list) { activeList = target.dataset.list; render(); return; }
   if (target.dataset.photoSource) { photoSource = target.dataset.photoSource; localStorage.setItem('photoSource', photoSource); photoLoaded = false; photoItems = []; render(); void loadPhotos(); return; }
-  if (target.dataset.edit) { try { editRecord(target.dataset.edit, target.dataset.id, { ...(target.dataset.date ? { startDate: target.dataset.date, fixedDate: true } : {}), ...(target.dataset.member !== undefined ? { memberId: target.dataset.member } : {}) }); } catch (error) { toast(error.message, true); } return; }
+  if (target.dataset.edit) { try { editRecord(target.dataset.edit, target.dataset.id, { ...(target.dataset.date ? { startDate: target.dataset.date, fixedDate: true } : {}), ...(target.dataset.member !== undefined ? { memberId: target.dataset.member } : {}), ...(target.dataset.planType ? { type: target.dataset.planType } : {}) }); } catch (error) { toast(error.message, true); } return; }
   if (target.dataset.recipe) { viewRecipe(target.dataset.recipe); return; }
   if (busy || target.disabled) return;
   const action = target.dataset.action;
   try {
     busy = true;
-    if (target.dataset.complete) await completeTask(target.dataset.complete, target.dataset.date);
+    if (action === 'collapse-nav') { navCollapsed = !navCollapsed; localStorage.setItem('navCollapsed', String(navCollapsed)); render(); }
+    else if (action === 'edit-nav') { navEditing = !navEditing; if (navEditing) navCollapsed = false; render(); }
+    else if (action === 'edit-templates') { templateEditing = !templateEditing; render(); }
+    else if (action === 'schedule-guide-ok') { if (scheduleGuide && Date.now() >= scheduleGuide.readyAt) finishScheduleGuide(); }
+    else if (action === 'remove-assigned-task') await removeAssignedTask(target.dataset.id);
+    else if (target.dataset.complete) { if (target.hasAttribute('data-close-task-actions')) editor.close(); await completeTask(target.dataset.complete, target.dataset.date); }
     else if (target.dataset.checkItem) { const item = S.items.find(i => i.id === target.dataset.checkItem); await mutate('/records/items/' + item.id, 'PUT', { ...item, checked: !item.checked }); }
     else if (target.dataset.redeem) {
       const memberId = $('[name=reward-member]').value, reward = S.rewards.find(r => r.id === target.dataset.redeem);
@@ -415,7 +593,8 @@ document.addEventListener('click', async event => {
     else if (action === 'prev-day' || action === 'next-day') { cursor = addDays(cursor, action === 'prev-day' ? -1 : 1); render(); }
     else if (action === 'prev' || action === 'next') {
       const direction = action === 'prev' ? -1 : 1;
-      if (route === 'calendar' && calendarMode === 'month') { const d = ds(cursor.slice(0, 8) + '01'); d.setMonth(d.getMonth() + direction); cursor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; }
+      if (route === 'calendar' && calendarMode === 'year') cursor = `${Number(cursor.slice(0,4)) + direction}-01-01`;
+      else if (route === 'calendar' && calendarMode === 'month') { const d = ds(cursor.slice(0, 8) + '01'); d.setMonth(d.getMonth() + direction); cursor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; }
       else cursor = addDays(cursor, direction * 7);
       render();
     } else if (action === 'agenda-day') { cursor = target.dataset.date; calendarMode = 'agenda'; render(); }
@@ -457,7 +636,9 @@ document.addEventListener('submit', async event => {
   const errorArea = $('#editor-error'); if (errorArea) errorArea.textContent = '';
   try {
     const data = Object.fromEntries(new FormData(form));
-    if (form.id === 'record-form') await saveEditor(form);
+    if (form.id === 'schedule-form') await saveSchedule(form);
+    else if (form.id === 'template-assign-form') { await assignTemplateTo(editing.template.id, data.memberId, editing.requestId); editor.close(); }
+    else if (form.id === 'record-form') await saveEditor(form);
     else if (form.id === 'recipe-import-form') await loadRecipeImport(data.url);
     else if (form.id === 'event-wizard-form') await advanceEventWizard(form);
     else if (form.id === 'event-edit-form') await saveEventEditor(form);
@@ -482,6 +663,9 @@ document.addEventListener('submit', async event => {
 });
 document.addEventListener('change', async event => {
   const input = event.target;
+  if (input.dataset.scheduleToggle) { scheduleSelection[input.dataset.scheduleToggle] = input.checked; localStorage.setItem('scheduleSelection', JSON.stringify(scheduleSelection)); render(); }
+  if (input.id === 'task-columns') { taskColumns = input.value; localStorage.setItem('taskColumns', taskColumns); render(); }
+  if (input.id === 'schedule-period-count') { collectSchedule($('#schedule-form')); resizeSchedule(Number(input.value)); return; }
   if (input.name === 'event-person') {
     const choices = [...editor.querySelectorAll('[name=event-person]')];
     if (input.value === 'all' && input.checked) choices.forEach(el => { if (el !== input) el.checked = false; });
@@ -581,9 +765,46 @@ async function boot() {
 setInterval(async () => {
   if (!S || busy || document.hidden) return;
   try { await refresh(); }
-  catch { if (S && online) { online = false; if (!editor.open && !document.activeElement?.closest('form')) render(); else { $('#connection')?.classList.add('offline'); if ($('#connection')) $('#connection').textContent = 'Verbindung fehlt'; updateDisabled(); } } }
+  catch { if (S && online) { online = false; if (!editor.open && !document.activeElement?.closest('form') && !document.activeElement?.matches?.('input[type=search]')) render(); else { $('#connection')?.classList.add('offline'); if ($('#connection')) $('#connection').textContent = 'Verbindung fehlt'; updateDisabled(); } } }
 }, 15000);
 setInterval(() => { document.querySelectorAll('.local-clock,.slide-clock').forEach(el => el.textContent = clockText()); }, 1000);
+document.addEventListener('input', event => {
+  const input = event.target;
+  if (input.id === 'birthday-search') {
+    birthdaySearch = input.value;
+    const wrapper = document.createElement('div'); wrapper.innerHTML = birthdaysPage();
+    $('#birthday-results').innerHTML = $('#birthday-results', wrapper).innerHTML;
+  }
+  if (input.dataset.templateSearch !== undefined) showTemplateMatches(input);
+});
+document.addEventListener('focusin', event => { if (event.target.dataset?.templateSearch !== undefined) showTemplateMatches(event.target); });
+document.addEventListener('click', event => {
+  document.querySelectorAll('.template-combobox').forEach(box => {
+    if (!box.contains(event.target)) { $('.template-results', box).hidden = true; $('input', box).setAttribute('aria-expanded', 'false'); }
+  });
+});
+document.addEventListener('keydown', event => {
+  const box = event.target.closest?.('.template-combobox'); if (!box) return;
+  const input = $('input', box), choices = [...box.querySelectorAll('[data-assign-template]')];
+  if (event.key === 'Escape') { $('.template-results', box).hidden = true; input.setAttribute('aria-expanded', 'false'); input.focus(); }
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault(); if ($('.template-results', box).hidden) showTemplateMatches(input);
+    const items = [...box.querySelectorAll('[data-assign-template]')], index = items.indexOf(document.activeElement), next = event.key === 'ArrowDown' ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+    items[next]?.focus();
+  }
+  if (event.key === 'Enter' && event.target === input) { event.preventDefault(); choices[0]?.click(); }
+});
+function cancelTaskHold() { if (taskHold) clearTimeout(taskHold.timer); taskHold = null; }
+document.addEventListener('pointerdown', event => {
+  const tile = event.target.closest('[data-task-tile]'); if (!tile || event.button !== 0 || busy) return;
+  cancelTaskHold();
+  taskHold = { id: event.pointerId, x: event.clientX, y: event.clientY, timer: setTimeout(() => { suppressTaskClickUntil = Date.now() + 1000; pointerDrag?.target?.classList.remove('drag-over'); pointerDrag = null; suppressDragClick = false; taskActions(tile.dataset.taskTile); taskHold = null; }, 650) };
+});
+document.addEventListener('pointermove', event => { if (taskHold && (taskHold.id !== event.pointerId || Math.hypot(event.clientX - taskHold.x, event.clientY - taskHold.y) >= 6)) cancelTaskHold(); });
+for (const name of ['pointerup','pointercancel','dragstart']) document.addEventListener(name, cancelTaskHold);
+document.addEventListener('contextmenu', event => { const tile = event.target.closest('[data-task-tile]'); if (tile) { event.preventDefault(); cancelTaskHold(); if (Date.now() >= suppressTaskClickUntil) taskActions(tile.dataset.taskTile); } });
+addEventListener('resize', () => { if (scheduleGuide) positionScheduleGuide(); });
+
 void boot();
 
 
@@ -776,18 +997,19 @@ setInterval(() => { void pollUpdateStatus(); }, 3000);
 function dragData(element) {
   return parsePlannerDrag(JSON.stringify({ kind: element.dataset.dragKind, id: element.dataset.dragId, rev: Number(element.dataset.dragRev) }));
 }
-function dropTarget(element, data) { return element?.closest(data?.kind === 'task' ? '[data-task-drop]' : '[data-meal-slot]'); }
+function dropTarget(element, data) { return element?.closest(['task','template'].includes(data?.kind) ? '[data-task-drop]' : '[data-meal-slot]'); }
 async function applyPlannerDrop(data, target) {
   if (!data || !target || !online || busy) return;
   busy = true;
   try {
-    if (data.kind === 'task') await api(`/tasks/${data.id}/assign`, 'POST', { memberId: target.dataset.taskDrop, date: cursor, _rev: data.rev });
+    if (data.kind === 'template') { const template = (S.taskTemplates || []).find(item => item.id === data.id); if (!template || template._rev !== data.rev) throw new Error('Die Vorlage wurde geändert. Bitte neu laden.'); await api(`/task-templates/${data.id}/assign`, 'POST', { memberId: target.dataset.taskDrop, date: cursor, _rev: data.rev, requestId: uid() }); }
+    else if (data.kind === 'task') await api(`/tasks/${data.id}/assign`, 'POST', { memberId: target.dataset.taskDrop, date: cursor, _rev: data.rev });
     else {
       const recipe = S.recipes.find(r => r.id === data.id); if (!recipe || recipe._rev !== data.rev) throw new Error('Das Rezept wurde geändert. Bitte neu laden.');
       const date = target.dataset.mealDate, slot = target.dataset.mealSlot, old = meal(date, slot);
       await api('/records/meals' + (old ? '/' + old.id : ''), old ? 'PUT' : 'POST', { date, slot, recipeId: recipe.id, servings: old?.servings || recipe.servings, ...(old ? { _rev: old._rev } : {}) });
     }
-    await refresh(false); render(); toast(data.kind === 'task' ? 'Aufgabe zugeordnet.' : 'Mahlzeit geplant.');
+    await refresh(false); render(); toast(['task','template'].includes(data.kind) ? 'Aufgabe zugeordnet.' : 'Mahlzeit geplant.');
   } catch (error) { toast(error.message, true); }
   finally { busy = false; }
 }
@@ -820,10 +1042,11 @@ document.addEventListener('pointerup', event => { if (!pointerDrag || pointerDra
 document.addEventListener('pointercancel', () => { pointerDrag?.target?.classList.remove('drag-over'); pointerDrag = null; suppressDragClick = false; });
 
 document.addEventListener('input', event => { if (event.target.matches?.('[data-appearance-color]')) previewAppearance(); });
-document.addEventListener('error', event => { if (event.target.matches?.('[data-profile-image],[data-recipe-image],[data-record-image]')) event.target.hidden = true; }, true);
+document.addEventListener('error', event => { if (event.target.matches?.('[data-profile-image],[data-recipe-image],[data-record-image]')) { event.target.hidden = true; const fallback = event.target.nextElementSibling; if (fallback?.classList.contains('task-icon-fallback')) fallback.hidden = false; } }, true);
 
 function requireLogin(version) {
   const reload = version && version !== VERSION;
+  finishScheduleGuide(false);
   S = null; changelogSeenId = ''; changelogRequest++; weatherSession++; weatherSearchSequence++;
   weatherCache.clear(); weatherPending.clear(); weatherSearchResults = []; weatherSearchQuery = ''; weatherSearchError = ''; weatherSearchBusy = false; weatherActiveId = '';
   photoLoadSequence++; photoItems = []; photoLoaded = false; photoLoading = false; albums = [];
@@ -1000,7 +1223,7 @@ function saveDeviceSettings(data) {
   if (source !== photoSource) { photoSource = source; localStorage.setItem('photoSource', source); photoLoaded = false; photoItems = []; photoLoadSequence++; photoLoading = false; }
   returnToOrganizer(); render(); toast('Einstellungen für dieses Gerät gespeichert.');
 }
-function displayBlocked() { return !!(busy || editor.open || confirmDialog.open || pointerDrag || nativeDrag || updaterState?.active || slideActive && displayMode !== 'photos' || document.activeElement?.closest('form')); }
+function displayBlocked() { return !!(busy || scheduleGuide || editor.open || confirmDialog.open || pointerDrag || nativeDrag || updaterState?.active || slideActive && displayMode !== 'photos' || document.activeElement?.closest('form')); }
 function wakeWanted() { return !!(S && displayConfig.enabled && displayConfig.keepAwake && !document.hidden && displayMode !== 'sleep'); }
 function paintWakeStatus() { const area = $('#device-wake-status'); if (area) area.textContent = wakeStatus || 'Display-Wachhalten benötigt einen unterstützten Browser und HTTPS.'; }
 async function syncWakeLock() {

@@ -1,5 +1,13 @@
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 export const releases = [
+  { version: '0.7.0', date: '2026-10-16', title: 'Aufgabenbibliothek, Stundenpläne und Jahreskalender', changes: [
+    'Geburtstage lassen sich direkt nach Namen durchsuchen. Der Kalender bietet eine Jahresansicht mit Geburtstagen und Terminen.',
+    'Wiederverwendbare Aufgabenvorlagen mit Bild oder Emoji, Punkten und optionaler Nummer: ziehen oder bei einer Person nach Name oder Nummer auswählen.',
+    'Aufgaben als Symbole: einmal tippen zeigt den Titel, doppelt tippen erledigt oder öffnet die Aufgabe, gedrückt halten bietet Bearbeiten und Entfernen. Personen werden platzsparend in mehreren Reihen angeordnet.',
+    'Stundenpläne für Montag bis Freitag mit 6, 8, 10 oder 12 Stunden und Pausenbalken. Kitapläne haben eigene Bring- und Abholzeiten.',
+    'Unterkalender pro Kind als schmale farbige Zeitbalken im Hauptkalender; eine Einführung erklärt den ersten zuschaltbaren Plan.',
+    'Die Navigation lässt sich auf Symbole einklappen und über den Stift in eine eigene Reihenfolge bringen.',
+  ] },
   { version: '0.6.0', date: '2026-10-09', title: 'Wetter, Tabletmodus und persönliche Symbole', changes: [
     'Nach einem Software-Update werden alle Geräte abgemeldet. Nach dem Anmelden erscheint diese Änderungsübersicht.',
     'Wetter neben der Uhr: aktuelle Temperatur, Wetterlage und Regenhinweis. Antippen öffnet die 14-Tage-Vorhersage mit mehreren speicherbaren Orten.',

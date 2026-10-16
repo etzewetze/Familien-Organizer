@@ -243,7 +243,7 @@ export function createApp(env = process.env, services = {}) {
             return json(res, { recipe, warnings });
           } finally { activeRecipeImports--; }
         }
-        const recordRoute = path.match(/^\/api\/records\/([a-z]+)(?:\/([a-zA-Z0-9-]{1,100}))?$/);
+        const recordRoute = path.match(/^\/api\/records\/([a-zA-Z]+)(?:\/([a-zA-Z0-9-]{1,100}))?$/);
         if (recordRoute) {
           const [, kind, id] = recordRoute;
           if (req.method === 'POST' && !id || req.method === 'PUT' && id) {
@@ -257,6 +257,8 @@ export function createApp(env = process.env, services = {}) {
             return json(res, { ok: true });
           }
         }
+        const templateRoute = path.match(/^\/api\/task-templates\/([a-zA-Z0-9-]+)\/assign$/);
+        if (templateRoute && req.method === 'POST') return json(res, model.assignTemplate(templateRoute[1], await body(req)), 201);
         const completeRoute = path.match(/^\/api\/tasks\/([a-zA-Z0-9-]+)\/complete$/);
         if (completeRoute && req.method === 'POST') { model.complete(completeRoute[1], await body(req), today()); return json(res, { ok: true }); }
         const assignRoute = path.match(/^\/api\/tasks\/([a-zA-Z0-9-]+)\/assign$/);

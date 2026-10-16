@@ -5,6 +5,36 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../server.mjs';
 import { parseRecipePage } from '../src/recipe-import.mjs';
+import { defaultPeriods } from '../public/schedules.js';
+import { VERSION } from '../public/releases.js';
+
+test('HTTP: Vorlagen und Stunden-/Kitapläne bleiben privat, synchronisiert und revisionsgeschützt', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'family-schedule-http-')), app = createApp({ DATA_DIR: directory });
+  await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { await new Promise(resolve => app.server.close(resolve)); app.store.close(); rmSync(directory, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${app.server.address().port}`; let cookie = '';
+  const request = (path, method = 'GET', data, headers = {}) => fetch(base + '/api' + path, { method, headers: { 'X-Family-Request': '1', 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...headers }, ...(data ? { body: JSON.stringify(data) } : {}) });
+  assert.equal((await request('/records/taskTemplates', 'POST', { title: 'Privat' })).status, 401);
+  assert.equal((await request('/records/schedules', 'POST', { title: 'Privat' })).status, 401);
+  assert.equal((await request('/task-templates/test/assign', 'POST', {})).status, 401);
+  const setup = await request('/setup', 'POST', { password: 'test-password-2026', names: ['Anna','Ben'] }); cookie = setup.headers.get('set-cookie').split(';')[0];
+  const state = await (await request('/state')).json(), memberId = state.members[0].id;
+  const templateResponse = await request('/records/taskTemplates', 'POST', { title: 'Küche', code: 20, points: 4, emoji: '🧹' }); assert.equal(templateResponse.status, 201);
+  const template = await templateResponse.json(), assignment = { _rev: template._rev, memberId, date: state.serverDate, requestId: '1234567890abcdef' };
+  assert.equal((await request(`/task-templates/${template.id}/assign`, 'POST', assignment, { Origin: 'https://foreign.example' })).status, 403);
+  assert.equal((await request(`/task-templates/${template.id}/assign`, 'POST', { ...assignment, _rev: 0 })).status, 409);
+  assert.equal((await request(`/task-templates/${template.id}/assign`, 'POST', assignment)).status, 201);
+  assert.equal((await request(`/task-templates/${template.id}/assign`, 'POST', assignment)).status, 201);
+  const response = await request('/records/schedules', 'POST', { title: 'Anna Schule', type: 'school', memberId, periodCount: 6, periods: defaultPeriods(), entries: [{ weekday: 1, period: 1, title: 'Mathe' }], showInCalendar: true });
+  assert.equal(response.status, 201); const plan = await response.json();
+  assert.equal((await request('/records/schedules/' + plan.id, 'PUT', { ...plan, _rev: 0 })).status, 409);
+  const login = await request('/login', 'POST', { password: 'test-password-2026' }), other = login.headers.get('set-cookie').split(';')[0];
+  const second = await (await request('/state', 'GET', null, { Cookie: other })).json();
+  assert.equal(second.schedules[0].title, 'Anna Schule'); assert.equal(second.taskTemplates[0].code, 20); assert.equal(second.tasks.length, 1);
+  const exported = await (await request('/export')).json(); assert.equal(exported.schedules[0].id, plan.id); assert.equal(exported.taskTemplates[0].id, template.id);
+  assert.equal((await request('/records/schedules/' + plan.id, 'DELETE', { _rev: plan._rev })).status, 200);
+  assert.equal((await (await request('/state')).json()).schedules.length, 0);
+});
 test('HTTP: Elternpasswort schützt Punkte und Updates; Aufgabenbilder und Mehrfachzuordnungen bleiben in der Familie', async t => {
   const directory = mkdtempSync(join(tmpdir(), 'family-admin-')); let updateStarts = 0;
   const app = createApp({ DATA_DIR: directory }, { updater: { status: async () => ({ supported: true, phase: 'idle' }), start: async () => { updateStarts++; return { supported: true, phase: 'backup', active: true }; } } });
@@ -98,7 +128,7 @@ test('HTTP: Geburtstage sind synchronisiert; Rezeptimport bleibt bis zum Speiche
   assert.equal(birthdayResponse.status, 201); const birthday = await birthdayResponse.json();
   const login = await request('/api/login', 'POST', { password: 'test-password-2026' }), secondCookie = login.headers.get('set-cookie').split(';')[0];
   const second = await (await request('/api/state', 'GET', undefined, { Cookie: secondCookie })).json(); assert.equal(second.birthdays[0].id, birthday.id); assert.equal(second.events.length, 0);
-  const exported = await (await request('/api/export')).json(); assert.equal(exported.birthdays[0].birthYear, 1990); assert.equal(exported.version, '0.6.0');
+  const exported = await (await request('/api/export')).json(); assert.equal(exported.birthdays[0].birthYear, 1990); assert.equal(exported.version, VERSION);
   assert.equal((await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }, { Origin: 'https://foreign.example' })).status, 403); assert.equal(imports, 0);
   const previewResponse = await request('/api/recipes/import', 'POST', { url: 'https://rezepte.example/pasta' }); assert.equal(previewResponse.status, 200);
   const preview = await previewResponse.json(); assert.equal(preview.recipe.sourceUrl, 'https://rezepte.example/pasta'); assert.equal(preview.recipe.ingredients[0].quantity, 400);

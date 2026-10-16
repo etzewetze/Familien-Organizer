@@ -4,7 +4,7 @@ import { resolve, join } from 'node:path';
 import { randomBytes, randomUUID, createCipheriv, createDecipheriv } from 'node:crypto';
 import { appearanceDefaults } from '../public/appearance.js';
 
-export const KINDS = ['members', 'events', 'birthdays', 'tasks', 'recipes', 'meals', 'lists', 'items', 'notes', 'rewards', 'pointAwards'];
+export const KINDS = ['members', 'events', 'birthdays', 'tasks', 'taskTemplates', 'schedules', 'recipes', 'meals', 'lists', 'items', 'notes', 'rewards', 'pointAwards'];
 export class Store {
   constructor(directory) {
     this.directory = resolve(directory);
@@ -44,6 +44,16 @@ export class Store {
     `);
     this.db.prepare("INSERT OR IGNORE INTO meta VALUES ('revision','0')").run();
     chmodSync(join(this.directory, 'family.sqlite'), 0o600);
+    if (!this.meta('taskTemplateMigration')) this.transaction(() => {
+      const known = new Set(this.all('taskTemplates').map(task => JSON.stringify([task.title, task.points, task.emoji || '', task.imageFile || '', task.description || ''])));
+      for (const task of this.all('tasks')) {
+        const fingerprint = JSON.stringify([task.title, task.points, task.emoji || '', task.imageFile || '', task.description || '']);
+        if (known.has(fingerprint)) continue;
+        this.put('taskTemplates', 'template-' + task.id, { title: task.title, points: task.points, emoji: task.emoji || '', imageFile: task.imageFile || '', description: task.description || '', code: null });
+        known.add(fingerprint);
+      }
+      this.setMeta('taskTemplateMigration', true);
+    });
   }
   meta(key, fallback = null) {
     const row = this.db.prepare('SELECT value FROM meta WHERE key=?').get(key);

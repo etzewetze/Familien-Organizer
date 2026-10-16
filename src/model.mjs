@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { KINDS } from './store.mjs';
 import { appearanceDefaults, isColor, isImageFile } from '../public/appearance.js';
 import { isEmoji } from '../public/symbols.js';
+import { periodCounts } from '../public/schedules.js';
 
 export class AppError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -108,11 +109,45 @@ export class Model {
         check(['mar1', 'feb28'].includes(leapDay), 'Bitte den Ersatztermin für den 29. Februar auswählen.');
         return { name: text(data.name, 100, true), month, day: birthdayDay, birthYear, leapDay, memberId: memberId(), notes: text(data.notes, 2000) };
       }
+      case 'taskTemplates': {
+        const code = data.code === undefined || data.code === null || data.code === '' ? null : number(data.code, 1, 999999, true);
+        check(code === null || !this.store.all('taskTemplates').some(template => template.id !== old?.id && template.code === code), 'Diese Aufgabennummer ist bereits vergeben.', 409);
+        return { title: title(), points: number(data.points || 0, 0, 1000, true), code, description: text(data.description, 2000), ...symbols() };
+      }
+      case 'schedules': {
+        check(['school', 'kita'].includes(data.type), 'Bitte Stundenplan oder Kita auswählen.');
+        const validFrom = day(data.validFrom, true), validUntil = day(data.validUntil, true);
+        check(!validFrom || !validUntil || validUntil >= validFrom, 'Das Gültigkeitsende liegt vor dem Beginn.');
+        const periodCount = data.type === 'school' ? number(data.periodCount, 6, 12, true) : 6;
+        check(periodCounts.includes(periodCount), 'Bitte 6, 8, 10 oder 12 Schulstunden auswählen.');
+        const time = value => { check(typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value), 'Ungültige Uhrzeit im Plan.'); return value; };
+        const periods = [];
+        if (data.type === 'school') {
+          check(Array.isArray(data.periods) && data.periods.length === periodCount, 'Bitte die Zeiten aller Schulstunden eingeben.');
+          for (const item of data.periods) {
+            const startTime = time(item?.startTime), endTime = time(item?.endTime);
+            check(endTime > startTime && (!periods.length || startTime >= periods.at(-1).endTime), 'Schulstunden müssen nacheinander liegen und dürfen sich nicht überschneiden.');
+            periods.push({ startTime, endTime });
+          }
+        }
+        check(Array.isArray(data.entries) && data.entries.length <= (data.type === 'school' ? 60 : 5), 'Zu viele Einträge im Plan.');
+        const used = new Set();
+        const entries = data.entries.map(entry => {
+          check(entry && typeof entry === 'object', 'Ungültiger Planeintrag.');
+          const weekday = number(entry.weekday, 1, 5, true), period = data.type === 'school' ? number(entry.period, 1, periodCount, true) : 0;
+          const key = `${weekday}:${period}`; check(!used.has(key), 'Ein Feld im Plan ist doppelt belegt.'); used.add(key);
+          if (data.type === 'school') return { weekday, period, title: text(entry.title, 80, true) };
+          const startTime = time(entry.startTime), endTime = time(entry.endTime);
+          check(endTime > startTime, 'Die Abholzeit muss nach der Bringzeit liegen.');
+          return { weekday, startTime, endTime, title: text(entry.title, 80) };
+        });
+        return { title: title(), type: data.type, memberId: this.member(data.memberId), periodCount, periods, entries, validFrom, validUntil, showInCalendar: !!data.showInCalendar };
+      }
       case 'tasks': {
         const repeat = data.repeat || 'none';
         check(['none', 'daily', 'weekdays', 'weekly'].includes(repeat), 'Ungültige Wiederholung.');
         const startDate = day(data.startDate, repeat !== 'weekly');
-        return { title: title(), memberId: memberId(), points: number(data.points || 0, 0, 1000, true), repeat, startDate, description: text(data.description, 2000), ...symbols() };
+        return { title: title(), memberId: memberId(), points: number(data.points || 0, 0, 1000, true), repeat, startDate, description: text(data.description, 2000), ...(old?.templateId ? { templateId: old.templateId } : {}), ...symbols() };
       }
       case 'recipes': {
         check(Array.isArray(data.ingredients) && data.ingredients.length <= 100, 'Maximal 100 Zutaten je Rezept.');
@@ -202,6 +237,22 @@ export class Model {
       const key = task.repeat === 'none' ? 'once' : date;
       check(!this.store.db.prepare('SELECT 1 FROM completions WHERE task_id=? AND day=?').get(taskId, key), 'Erledigte Aufgaben zuerst wieder öffnen, bevor sie verteilt werden.', 409);
       return this.store.put('tasks', taskId, { ...task, memberId: this.member(data.memberId, true) });
+    });
+  }
+  assignTemplate(templateId, data) {
+    return this.store.transaction(() => {
+      check(typeof data.requestId === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(data.requestId), 'Ungültige Zuweisungskennung.');
+      const memberId = this.member(data.memberId, true), startDate = day(data.date);
+      const id = 'assigned-' + data.requestId, existing = this.store.get('tasks', id);
+      if (existing) {
+        check(existing.templateId === templateId && existing.memberId === memberId && existing.startDate === startDate, 'Zuweisungskennung bereits verwendet.', 409);
+        return existing;
+      }
+      const template = this.store.get('taskTemplates', templateId);
+      check(template, 'Aufgabenvorlage nicht gefunden.', 404);
+      check(template._rev === data._rev, 'Die Vorlage wurde geändert. Bitte neu laden.', 409);
+      const { title, points, emoji, imageFile, description } = template;
+      return this.store.put('tasks', id, { title, points, emoji, imageFile, description, templateId, memberId, startDate, repeat: 'none' });
     });
   }
   awardPoints(data) {

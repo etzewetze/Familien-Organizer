@@ -13,6 +13,7 @@ import { VERSION } from '../public/releases.js';
 import { emojis, emojiCategories, findEmojis, isEmoji } from '../public/symbols.js';
 import { weatherCode, weatherValue, weatherTime, rainOutlook } from '../public/weather.js';
 import { deviceConfig, idleAction } from '../public/device-mode.js';
+import { schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder } from '../public/schedules.js';
 
 // Ausführung der Ansichtslogik ohne echten Browser. Ersetzt keine visuelle QA.
 function fixture(t) {
@@ -26,9 +27,10 @@ function fixture(t) {
   };
   const context = vm.createContext({
     document: { querySelector: s => element(s), querySelectorAll: () => [], createElement: s => element(s), addEventListener(name, handler) { const list = listeners.get(name) || []; list.push(handler); listeners.set(name, list); }, documentElement: { style: { setProperty: (key, value) => styleValues.set(key, value) } }, activeElement: null },
-    location: { hash: '#home' }, localStorage: { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value) }, innerWidth: 1440,
+    location: { hash: '#home' }, localStorage: { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) }, innerWidth: 1440, innerHeight: 900,
     addEventListener() {}, setInterval() {}, setTimeout() {}, clearInterval() {},
     Intl, Date, console, URL, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties, initialState: store.state(),
+    schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder, structuredClone, crypto, clearTimeout, requestAnimationFrame() {},
     VERSION, emojis, emojiCategories, findEmojis, isEmoji, weatherCode, weatherValue, weatherTime, rainOutlook, deviceConfig, idleAction,
     FormData: class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key] ?? null; } getAll(key) { return [].concat(this.fields[key] || []); } *[Symbol.iterator]() { for (const [key, value] of Object.entries(this.fields)) for (const item of [].concat(value)) yield [key, item]; } },
   });
@@ -39,10 +41,10 @@ function fixture(t) {
 }
 test('Alle zehn Ansichten und Kalenderdarstellungen erzeugen HTML ohne Laufzeitfehler', t => {
   const { run } = fixture(t);
-  for (const view of ['homePage', 'calendarPage', 'birthdaysPage', 'tasksPage', 'rewardsPage', 'mealsPage', 'listsPage', 'notesPage', 'photosPage', 'settingsPage']) {
+  for (const view of ['schedulesPage', 'homePage', 'calendarPage', 'birthdaysPage', 'tasksPage', 'rewardsPage', 'mealsPage', 'listsPage', 'notesPage', 'photosPage', 'settingsPage']) {
     const html = run(`${view}()`); assert.ok(html.includes('page-head')); assert.ok(!html.includes('undefined')); assert.ok(!html.includes('NaN'));
   }
-  for (const mode of ['week', 'month', 'agenda']) { const html = run(`calendarMode='${mode}';calendarPage()`); assert.ok(html.length > 500); }
+  for (const mode of ['week', 'month', 'year', 'agenda']) { const html = run(`calendarMode='${mode}';calendarPage()`); assert.ok(html.length > 500); }
   assert.doesNotThrow(() => run('render()'));
 });
 test('Gespeicherte Texte werden in Hauptansichten und Dialogen sicher maskiert', t => {
@@ -156,7 +158,7 @@ test('Headerfilter steuert Aufgaben; Allgemein bleibt erreichbar und die Essensa
   run("route='tasks';render()");
   const target = { dataset: { filter: run('S.members[1].id') } };
   await click({ target: { closest: () => target } });
-  assert.ok(run('tasksPage()').includes('single-column')); assert.ok(run('headerMembers()').includes('data-task-drop=')); assert.equal(run('taskBoard'), target.dataset.filter);
+  assert.ok(run('tasksPage()').includes('responsive-board')); assert.ok(run('headerMembers()').includes('data-task-drop=')); assert.equal(run('taskBoard'), target.dataset.filter);
   target.dataset = { taskBoard: '' }; await click({ target: { closest: () => target } }); assert.equal(run('taskBoard'), ''); assert.equal(run('filter'), '');
   assert.ok(run('tasksPage()').includes('Allgemein'));
   run("route='meals';setMealLayout('vertical')"); assert.equal(stored.get('mealLayout'), 'vertical'); assert.ok(run('mealsPage()').includes('meal-plan vertical'));
@@ -322,7 +324,7 @@ test('Änderungsübersicht wird erst beim Schließen quittiert und kann später 
 });
 test('Update-Abmeldung entfernt private Dialoge und Anzeigezustand und stellt das Login dar', async t => {
   const { context, run, elements } = fixture(t);
-  context.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: 'Bitte anmelden.', code: 'SESSION_EXPIRED', version: '0.6.0' }) });
+  context.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: 'Bitte anmelden.', code: 'SESSION_EXPIRED', version: VERSION }) });
   run("editRecord('notes');photoItems=[{id:'private',url:'/api/photos/private'}];displayMode='photos';weatherCache.set('private',{data:{private:true}})");
   await assert.rejects(run("api('/state')"), /Bitte anmelden/);
   assert.equal(run('S'), null); assert.equal(elements.get('#editor').open, false); assert.equal(elements.get('#editor').innerHTML, ''); assert.equal(run('photoItems.length'), 0); assert.equal(run('weatherCache.size'), 0); assert.equal(run('displayMode'), 'active'); assert.ok(elements.get('#app').innerHTML.includes('auth-form'));
@@ -353,4 +355,114 @@ test('Wake Lock wird im Ruhemodus freigegeben; ein verspätetes Ergebnis hält d
   context.navigator.wakeLock.request = async () => ({ release: async () => { released++; }, addEventListener() {} });
   run('displayMode="active"'); await run('syncWakeLock()'); assert.ok(run('wakeLock')); run('enterDisplayRest()'); await Promise.resolve(); assert.equal(released, 2);
   context.navigator.wakeLock.request = async () => { throw new Error('denied'); }; run('displayMode="active"'); await run('syncWakeLock()'); assert.match(run('wakeStatus'), /nicht erlaubt/);
+});
+
+test('Geburtstagssuche steht zwischen Titel und Hinzufügen und filtert Namen ohne Groß-/Kleinschreibung', t => {
+  const { run } = fixture(t);
+  run("S.birthdays=[{id:'anna',name:'Anna <script>',day:2,month:1},{id:'ben',name:'Ben',day:4,month:3}];birthdaySearch='ANNA'");
+  const html = run('birthdaysPage()');
+  assert.ok(html.indexOf('Unsere Geburtstage') < html.indexOf('id="birthday-search"'));
+  assert.ok(html.indexOf('id="birthday-search"') < html.indexOf('data-edit="birthdays"'));
+  assert.ok(html.includes('Anna &lt;script&gt;')); assert.ok(!html.includes('<h2>Ben</h2>'));
+  run("birthdaySearch='unbekannt'"); assert.ok(run('birthdaysPage()').includes('Kein passender Geburtstag'));
+});
+test('Jahreskalender zeigt zwölf Monate, Schaltjahr und Geburtstag; ein Tag öffnet dessen Liste', async t => {
+  const { run, listeners } = fixture(t);
+  run("route='calendar';calendarMode='year';cursor='2028-02-01';S.birthdays=[{id:'leap',name:'Anna',month:2,day:29,birthYear:2000}]");
+  const html = run('calendarPage()');
+  assert.equal((html.match(/class="year-month"/g) || []).length, 12);
+  assert.equal((html.match(/data-year-date=/g) || []).length, 366); assert.ok(html.includes('🎂 Anna · 28 Jahre'));
+  await listeners.get('click')[0]({ target: { closest: () => ({ dataset: { yearDate: '2028-02-29' } }) } });
+  assert.equal(run('cursor'), '2028-02-29'); assert.equal(run('calendarMode'), 'agenda');
+});
+test('Vorlagen haben Nummern, private Bildsymbole und Bearbeitungsmodus; Zuweisen nutzt eine eigene Kennung', async t => {
+  const { run, context, elements } = fixture(t), requests = [];
+  run("S.taskTemplates=[{id:'template-one',_rev:2,title:'Küche <b>',points:5,code:20,emoji:'🧹',imageFile:'12345678-1234-1234-1234-123456789012.png'}]");
+  let html = run('tasksPage()'); assert.ok(html.includes('data-drag-kind="template"')); assert.ok(html.includes('class="task-code">20')); assert.ok(html.includes('/api/tasks/image?file='));
+  run('templateEditing=true'); html = run('templateTile(S.taskTemplates[0])'); assert.ok(!html.includes('draggable="true"')); assert.ok(html.includes('template-pencil'));
+  run("editRecord('taskTemplates','template-one')"); assert.ok(elements.get('#editor').innerHTML.includes('Aufgabennummer')); assert.ok(elements.get('#editor').innerHTML.includes('Küche &lt;b&gt;'));
+  context.fetch = async (url, options) => { requests.push({ url, options }); return { ok: true, json: async () => url === '/api/state' ? context.initialState : {} }; };
+  await run("assignTemplateTo('template-one',S.members[0].id,'fixture1234567890')");
+  assert.equal(requests[0].url, '/api/task-templates/template-one/assign'); const payload = JSON.parse(requests[0].options.body);
+  assert.equal(payload._rev, 2); assert.equal(payload.requestId, 'fixture1234567890'); assert.equal(payload.memberId, run('S.members[0].id'));
+});
+test('Aufgabensymbol zeigt Titel beim ersten Tippen und erledigt / öffnet erst beim Doppeltippen', async t => {
+  const { run, context } = fixture(t), label = { hidden: true }, requests = [];
+  run("S.tasks[0].memberId=S.members[0].id;S.tasks[0].emoji='🧹'");
+  context.tile = { dataset: { taskTile: run('S.tasks[0].id'), date: run('cursor') }, parentElement: { querySelector: () => label } };
+  context.fetch = async (url, options) => {
+    if (url.endsWith('/complete')) {
+      const payload = JSON.parse(options.body); requests.push(payload);
+      context.initialState.completions = payload.done ? [{ task_id: context.tile.dataset.taskTile, day: run("S.tasks[0].repeat==='none'?'once':cursor") }] : [];
+    }
+    return { ok: true, json: async () => url === '/api/state' ? context.initialState : {} };
+  };
+  await run('tapTask(tile)'); assert.equal(label.hidden, false); assert.equal(requests.length, 0);
+  await run('tapTask(tile)'); assert.equal(requests.length, 1); assert.equal(requests[0].done, true);
+  assert.ok(run('assignedTaskTile(S.tasks[0],cursor)').includes('task-tile completed'));
+  await run('tapTask(tile)'); await run('tapTask(tile)'); assert.equal(requests.length, 2); assert.equal(requests[1].done, false);
+  run("S.tasks[0].emoji='';S.tasks[0].imageFile=''"); assert.ok(run('assignedTaskTile(S.tasks[0],cursor)').includes('task-text-icon'));
+});
+test('Stunden- und Kitaplanformulare behalten Fächer beim Wechsel der Stundenzahl und zeigen Pausen', t => {
+  const { run, elements } = fixture(t);
+  run("openScheduleEditor(null,{type:'school'});scheduleDraft.entries=[{weekday:1,period:8,title:'Sport'}];resizeSchedule(8)");
+  assert.ok(elements.get('#editor').innerHTML.includes('value="Sport"'));
+  assert.equal((elements.get('#editor').innerHTML.match(/class="school-break"/g) || []).length, 3);
+  run('resizeSchedule(6);resizeSchedule(8)'); assert.ok(elements.get('#editor').innerHTML.includes('value="Sport"'));
+  run("openScheduleEditor(null,{type:'kita'})"); assert.ok(elements.get('#editor').innerHTML.includes('Bringen')); assert.ok(elements.get('#editor').innerHTML.includes('Abholen')); assert.ok(!elements.get('#editor').innerHTML.includes('school-table'));
+});
+test('Unterkalender bleiben schmale nebeneinanderliegende Spuren und respektieren den Personenfilter', t => {
+  const { run } = fixture(t);
+  run("cursor='2026-10-12';S.schedules=S.members.slice(0,3).map((person,index)=>({id:'plan-'+index,title:'Kita <b>',type:'kita',memberId:person.id,showInCalendar:true,entries:[{weekday:1,startTime:'07:30',endTime:'16:00'}]}))");
+  const html = run('timeWeek(cursor)'); assert.equal((html.match(/class="schedule-bar"/g) || []).length, 3); assert.ok(html.includes('left:53px')); assert.ok(html.includes('07:30')); assert.ok(html.includes('16:00')); assert.ok(html.includes('Kita &lt;b&gt;'));
+  assert.ok(run('scheduleToggles()').includes('data-schedule-chip="plan-0"'));
+  run('filter=S.members[1].id'); assert.equal((run('scheduleToggles()').match(/data-schedule-chip=/g) || []).length, 1);
+  run('S.schedules=[]'); assert.equal(run('scheduleToggles()'), '');
+});
+test('Unterkalender-Einführung erlaubt OK erst nach fünf Sekunden und wird nach Löschen aller Pläne zurückgesetzt', async t => {
+  const { run, context, elements, stored } = fixture(t); let clock = 10000;
+  context.Date = class extends Date { static now() { return clock; } };
+  run("route='calendar';scheduleGuide={id:'plan-one',readyAt:15000}");
+  elements.set('[data-schedule-chip="plan-one"]', { getBoundingClientRect: () => ({ top: 200, left: 300, width: 150, height: 40, bottom: 240 }) });
+  elements.set('.guide-spotlight', { style: {} }); elements.set('.guide-card', { style: {} });
+  run('positionScheduleGuide()'); assert.equal(elements.get('[data-action=schedule-guide-ok]').disabled, true);
+  clock = 15000; run('positionScheduleGuide()'); assert.equal(elements.get('[data-action=schedule-guide-ok]').disabled, false);
+  run('finishScheduleGuide()'); assert.equal(stored.get('scheduleGuideSeen'), 'true');
+  context.fetch = async () => ({ ok: true, json: async () => ({ ...context.initialState, schedules: [] }) });
+  await run('refresh(false)'); assert.equal(stored.has('scheduleGuideSeen'), false);
+});
+test('Navigation lässt sich einklappen und sortieren; ungültige gespeicherte Reihenfolge verliert keine Reiter', async t => {
+  const { run, listeners, stored } = fixture(t), click = listeners.get('click')[0];
+  await click({ target: { closest: () => ({ dataset: { action: 'collapse-nav' } }) } });
+  assert.equal(stored.get('navCollapsed'), 'true'); assert.ok(run('navigation()').includes('rail collapsed'));
+  await click({ target: { closest: () => ({ dataset: { navMove: 'tasks', direction: '-1' } }) } });
+  assert.ok(JSON.parse(stored.get('navOrder')).indexOf('tasks') < JSON.parse(stored.get('navOrder')).indexOf('birthdays'));
+  assert.ok(run('navigation()').includes('data-nav="schedules"')); assert.ok(!run('navigation()').includes('Später'));
+});
+
+test('Gedrückthalten öffnet Entfernen, Bewegung bricht die Haltegeste ab und Rechtsklick bleibt erreichbar', t => {
+  const { run, listeners, context, elements } = fixture(t); let pending, cancelled = 0;
+  context.setTimeout = callback => { pending = callback; return 1; }; context.clearTimeout = () => { cancelled++; };
+  const tile = { dataset: { taskTile: run('S.tasks[0].id') } }, down = listeners.get('pointerdown')[0], move = listeners.get('pointermove')[0];
+  down({ button: 0, pointerId: 1, clientX: 0, clientY: 0, target: { closest: () => tile } });
+  move({ pointerId: 1, clientX: 6, clientY: 0 }); assert.equal(cancelled, 1); assert.equal(run('taskHold'), null);
+  down({ button: 0, pointerId: 1, clientX: 0, clientY: 0, target: { closest: () => tile } }); pending();
+  assert.ok(elements.get('#editor').innerHTML.includes('Aus verteilter Liste entfernen')); assert.ok(run('suppressTaskClickUntil>Date.now()'));
+  run('suppressTaskClickUntil=0'); let prevented = false;
+  listeners.get('contextmenu')[0]({ target: { closest: () => tile }, preventDefault() { prevented = true; } }); assert.equal(prevented, true);
+});
+test('Eine Kitaplananlage speichert Zeiten und startet nur beim ersten Plan die Einführung', async t => {
+  const { run, context, stored } = fixture(t), requests = [];
+  run("openScheduleEditor(null,{type:'kita'})");
+  context.fetch = async (url, options) => {
+    requests.push({ url, options });
+    if (url === '/api/records/schedules') { const plan = JSON.parse(options.body); context.initialState.schedules.push({ ...plan, id: 'saved-kita', _rev: 40 }); return { ok: true, json: async () => context.initialState.schedules[0] }; }
+    return { ok: true, json: async () => context.initialState };
+  };
+  context.form = { fields: { title: 'Kita', memberId: run('S.members[0].id'), showInCalendar: 'on', 'day-1': 'on', 'from-1': '07:15', 'until-1': '16:45', 'note-1': 'Turnbeutel' } };
+  await run('saveSchedule(form)'); assert.equal(requests[0].url, '/api/records/schedules');
+  const payload = JSON.parse(requests[0].options.body); assert.equal(payload.entries.length, 1); assert.equal(payload.entries[0].startTime, '07:15');
+  assert.equal(run('scheduleGuide.id'), 'saved-kita'); assert.equal(run('displayBlocked()'), true); assert.equal(run('location.hash'), 'calendar');
+  run('finishScheduleGuide()'); assert.equal(stored.get('scheduleGuideSeen'), 'true');
+  run("openScheduleEditor(null,{type:'kita'})"); await run('saveSchedule(form)'); assert.equal(run('scheduleGuide'), null);
 });

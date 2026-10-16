@@ -26,15 +26,15 @@ test('Ein Versionswechsel meldet alle Geräte ab, behält Daten und Passwort und
   const f = await fixture(t, {}, '0.5.1'), cookie = await f.setup(), device2 = await f.login();
   await f.request('/records/notes', cookie, 'POST', { title: 'Wichtig', body: 'Behalten' });
   f.app.store.db.prepare('INSERT INTO oauth_states VALUES (?,?,?)').run('fixture', 'session', Date.now() + 60000);
-  await f.close(); await f.open('0.6.0');
+  await f.close(); await f.open(VERSION);
   for (const old of [cookie, device2]) {
-    const response = await f.request('/state', old); assert.equal(response.status, 401); const result = await response.json(); assert.equal(result.code, 'SESSION_EXPIRED'); assert.equal(result.version, '0.6.0'); assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+    const response = await f.request('/state', old); assert.equal(response.status, 401); const result = await response.json(); assert.equal(result.code, 'SESSION_EXPIRED'); assert.equal(result.version, VERSION); assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
   }
   assert.equal(f.app.store.db.prepare('SELECT count(*) AS n FROM oauth_states').get().n, 0);
   assert.equal((await f.request('/changelog')).status, 401);
   const newCookie = await f.login(), state = await (await f.request('/state', newCookie)).json(); assert.equal(state.notes[0].body, 'Behalten'); assert.equal(state.settings.familyName, 'Behalten');
-  const changelog = await (await f.request('/changelog', newCookie)).json(); assert.equal(changelog.previousVersion, '0.5.1'); assert.equal(changelog.version, '0.6.0'); assert.equal(changelog.releases[0].version, '0.6.0'); assert.ok(changelog.releases[0].changes.length >= 4);
-  await f.close(); await f.open('0.6.0'); assert.equal((await f.request('/state', newCookie)).status, 200);
+  const changelog = await (await f.request('/changelog', newCookie)).json(); assert.equal(changelog.previousVersion, '0.5.1'); assert.equal(changelog.version, VERSION); assert.equal(changelog.releases[0].version, VERSION); assert.ok(changelog.releases[0].changes.length >= 4);
+  await f.close(); await f.open(VERSION); assert.equal((await f.request('/state', newCookie)).status, 200);
 });
 test('Upgrade einer älteren Datenbank ohne Versionsmarker beendet vorhandene Sitzungen', async t => {
   const f = await fixture(t), cookie = await f.setup();

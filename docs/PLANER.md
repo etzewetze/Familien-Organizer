@@ -38,15 +38,39 @@ Termine für Alle folgen der Standardfarbe aus den Einstellungen, solange keine 
 
 Eine feste Zeit ohne Ende nutzt ein 15-Minuten-Feld. Bei einer Person oder Alle blendet es nach unten aus. Bei mehreren Personen geht es durch die Personenfarben und endet mit einem deckenden Hintergrund in der letzten Farbe. Es wird kein Endzeitpunkt als Familiendatum gespeichert. Bei Google ist ein Ende erforderlich: Dort wird ein 15-Minuten-Termin mit privater Kennzeichnung übertragen; die Familienzentrale zeigt ihn weiterhin ohne Ende. Ganztägige Termine und Zeitspannen können ein anderes Enddatum erhalten.
 
-## Aufgaben und Routinen
+**Jahresansicht:** Unter **Kalender → Jahr** erscheinen alle zwölf Monate mit Markierungen für Termine, Geburtstage und aktive Unterkalender. Monatstitel öffnen den Monat, einzelne Tage die Terminliste der betreffenden Woche. Mit den Zeitraumspfeilen zwischen Jahren wechseln.
 
-**Alle Bereiche** zeigt Allgemein und alle Familienmitglieder als Spalten, auch ohne Aufgaben. Namen und verfügbare Punkte stehen in den Spaltenköpfen. Ein Profil im Header zeigt den Bereich dieser Person; **Allgemein** zeigt die noch gemeinsam zu verteilenden Aufgaben. Weitere Personenreiter im Seiteninhalt entfallen.
+**Geburtstage suchen:** Im Geburtstagsreiter steht zwischen Titel und Hinzufügen eine Namenssuche. Die Treffer werden beim Tippen aktualisiert und berücksichtigen die Auswahl im Header.
 
-Eine Aufgabe aus Allgemein in die gewünschte Personenspalte oder auf deren Profil im Header ziehen. Mit Touch den kleinen Griff verwenden; dadurch bleibt normales Scrollen auf der restlichen Karte möglich. Alternativ die Aufgabe bearbeiten und unter **Zuordnen** eine Person auswählen. Eine Rückzuordnung zu Allgemein ist ebenfalls möglich.
+## Aufgabenbibliothek und verteilte Aufgaben
 
-Aufgaben enthalten ein optionales Bild bis 5 MB, ein optionales Emoji, Titel, Punkte, Zuordnung und Wiederholung. Bilder werden für alle Geräte im Container gespeichert und mit gesichert. Bei Routinen gilt eine geänderte Zuordnung für die weiteren Wiederholungen. Bereits verdiente Punkte bleiben bei der Person, die die Aufgabe erledigt hat.
+Links neben den Personen steht die Bibliothek mit wiederverwendbaren Aufgaben. **Aufgabenvorlage** öffnet Bild (bis 5 MB), Emoji, Titel, Punkte, eine optionale eindeutige Nummer (1–999999) und Beschreibung. Über den Stift oberhalb der Bibliothek den Bearbeitungsmodus einschalten und eine Vorlage zum Bearbeiten oder Löschen antippen. Die Änderungen gelten für zukünftige Verteilungen; bereits verteilte Aufgaben bleiben unabhängig.
 
-Das Kästchen hakt die Aufgabe ab. Eine zugeordnete Aufgabe schreibt die Punkte direkt dieser Person gut; bei einer allgemeinen Aufgabe wird gefragt, wer sie erledigt hat. Eine Erledigung kann nicht doppelt Punkte erzeugen. Erledigte Aufgaben zuerst wieder öffnen, bevor sie verschoben werden.
+Eine Vorlage auf den Bereich einer Person, auf Allgemein oder auf ein Profil im Header ziehen. Mit Touch direkt am Symbol ziehen. Alternativ das Such-/Auswahlfeld unter dem Personennamen verwenden: Name eingeben oder beispielsweise **20** für die Vorlage mit Nummer 20. Die Suche nach Nummern ist exakt; 20 findet nicht 200. Das Ergebnis zeigt das Symbol und fügt die Aufgabe durch Antippen hinzu. Ein Klick auf eine Bibliotheksvorlage öffnet außerdem die Personenauswahl. Die Vorlage bleibt für weitere Verteilungen verfügbar. Jede Verteilung gilt ab dem oben ausgewählten Tag und wird getrennt erledigt und bepunktet.
+
+Die Personenbereiche stehen in mehreren Reihen. **Personen pro Reihe** bietet Automatisch sowie 2, 3 oder 4; bei zu wenig Bildschirmbreite reduziert sich die Spaltenzahl. Auf Smartphones steht eine Person pro Reihe. Allgemein enthält Aufgaben ohne feste Zuordnung. Die Profile im Header filtern die Ansicht; **Alle** zeigt wieder alle Bereiche.
+
+Verteilte Aufgaben zeigen ihr Bild oder Emoji, andernfalls den Titel. **Einmal tippen** blendet den Titel ein, **doppelt tippen** erledigt die Aufgabe und markiert sie grün. Erneutes Doppeltippen öffnet sie wieder und nimmt die Punkte zurück. Bereits eingelöste Punkte können wie bisher nicht zurückgenommen werden. **Gedrückt halten**, Rechtsklick oder die Kontextmenütaste öffnet Bearbeiten, Erledigen/Wiederöffnen und Entfernen. Entfernen einer Verteilung behält die Vorlage und bereits verdiente Punkte.
+
+**Einzelaufgabe / Routine** erlaubt weiterhin direkte Aufgaben mit Datum und Wiederholung (einmalig, täglich, Montag bis Freitag, wöchentlich). Offene Aufgaben lassen sich auch zwischen Personen verschieben. Bei Routinen gilt die neue Zuordnung für weitere Wiederholungen; historische Punkte bleiben bei der ursprünglichen Person. Beim Update werden bestehende Aufgaben zusätzlich als Vorlagen übernommen, gleiche Vorlagen nur einmal. Die alten Aufgaben und Erledigungen bleiben bestehen.
+
+## Stundenpläne, Kita und Unterkalender
+
+Im Reiter **Stundenpläne** einen **Stundenplan** oder **Kitaplan** anlegen und eine Person zuordnen. Name und optionaler Gültigkeitszeitraum, etwa das Schuljahr, gelten für den gesamten Plan.
+
+Schulpläne enthalten Montag bis Freitag und wahlweise **6, 8, 10 oder 12 Stunden**. Die Standardstunden dauern 45 Minuten ab 08:00 Uhr, nach je zwei Stunden folgen 15 Minuten Pause. Alle Anfangs-/Endzeiten lassen sich an den tatsächlichen Schulplan anpassen. Pro Tag und Stunde ein Fach eingeben; freie Felder bleiben leer. Nach jeweils zwei Stunden erscheint ein farbiger Pausenbalken. Beim Reduzieren der Stundenzahl wird vor dem Entfernen belegter späterer Felder nachgefragt.
+
+Kitapläne besitzen für jeden Wochentag ein Aktiv-Kästchen, **Bringen**, **Abholen** und einen optionalen Hinweis. Die Zeiten sind frei wählbar und nicht auf Schulstunden begrenzt. Wochenende und deaktivierte Tage bleiben frei.
+
+**Im Hauptkalender als Unterkalender anbieten** erzeugt unter den Ansichtsumschaltern einen Schalter mit Personeninitiale und Farbe. Im Kalender kann jeder angebotene Plan ein- oder ausgeblendet werden. Ohne angebotene Pläne entfällt die ganze Schalterzeile. Die Kalenderauswahl wird pro Browser gespeichert; der Personenfilter im Header gilt auch für Unterkalender.
+
+Die Wochenansicht zeigt je Kind bzw. Plan einen schmalen farbigen Balken, daneben bleiben die normalen Termine. Mehrere Pläne stehen nebeneinander. Beginn und Ende stehen am Balken, der Name läuft senkrecht. Schulpläne reichen vom ersten bis zum letzten belegten Fach des Tages; Pausen/Freistunden dazwischen gehören zur Anwesenheitszeit. Kitapläne reichen von Bringen bis Abholen. Monats- und Listenansicht zeigen eine kompakte Zeile, die Jahresansicht eine Markierung; der Gültigkeitszeitraum wird berücksichtigt. Die Pläne erzeugen keine normalen Termine und werden nicht nach Google exportiert.
+
+Beim ersten angebotenen Plan wechselt die Ansicht zum Kalender. Die Umgebung wird abgedunkelt und der neue Schalter rund markiert. Nach fünf Sekunden lässt sich **OK, verstanden** drücken. Die Einführung erscheint pro Browser einmal; nach Löschen aller Stunden-/Kitapläne ist sie wieder möglich.
+
+## Navigation anpassen
+
+Mit dem Pfeil an der Organisationsleiste zwischen Beschriftungen und einer schmalen Symbolleiste wechseln. Der Stift schaltet die Reihenfolgebearbeitung ein; mit **↑ / ↓** die Reiter verschieben. Mit erneutem Stiftklick die Bearbeitung beenden. Reihenfolge, eingeklappte Ansicht und Personen pro Reihe werden für dieses Gerät gespeichert. Im mobilen Menü bleiben die Beschriftungen sichtbar.
 
 ## Belohnungen und manuelle Punkte
 

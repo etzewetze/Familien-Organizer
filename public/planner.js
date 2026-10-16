@@ -54,7 +54,7 @@ export function layoutTimedEvents(events, date) {
 export function parsePlannerDrag(value) {
   try {
     const data = JSON.parse(value);
-    if (!data || !['task', 'recipe'].includes(data.kind) || !/^[a-zA-Z0-9-]{1,100}$/.test(data.id) || !Number.isInteger(data.rev)) return null;
+    if (!data || !['task', 'template', 'recipe'].includes(data.kind) || !/^[a-zA-Z0-9-]{1,100}$/.test(data.id) || !Number.isInteger(data.rev)) return null;
     return { kind: data.kind, id: data.id, rev: data.rev };
   } catch { return null; }
 }
