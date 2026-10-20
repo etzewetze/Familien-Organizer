@@ -2,9 +2,9 @@
 
 Eine eigenständige, deutschsprachige Familienzentrale zum Selbsthosten. Funktional an den beschriebenen Familienkalender angelehnt; eigener Quellcode, eigenes Design und keine Abhängigkeit von Dæly. Keine übernommenen Markenassets oder proprietären Programmteile.
 
-**Version 0.9.0 vereinfacht die Familienansicht: Heute mit persönlichem Fortschritt und Punkten, dauerhaft beschriftete Aufgaben zum Erledigen mit einem Tipp und eine klare Wochenübersicht. Nachtschichten erscheinen in Übersichten nur am Starttag; im Stundenraster sind Fortsetzungen ausdrücklich markiert.** Nach Updates werden alle Geräte abgemeldet; nach dem Anmelden erscheint die Änderungsübersicht. Die Familienzentrale ist für einen privaten Haushalt gedacht. Familiengeräte verwenden dasselbe Familienpasswort; manuelle Punkte und Software-Updates benötigen zusätzlich das Elternpasswort. Eine native App folgt später.
+**Version 0.8.3 vereinfacht die Familienansicht: Heute mit persönlichem Fortschritt und Punkten, dauerhaft beschriftete Aufgaben zum Erledigen mit einem Tipp und eine klare Wochenübersicht. Nachtschichten erscheinen in Übersichten nur am Starttag; im Stundenraster sind Fortsetzungen ausdrücklich markiert.** Nach Updates werden alle Geräte abgemeldet; nach dem Anmelden erscheint die Änderungsübersicht. Die Familienzentrale ist für einen privaten Haushalt gedacht. Familiengeräte verwenden dasselbe Familienpasswort; manuelle Punkte und Software-Updates benötigen zusätzlich das Elternpasswort. Eine native App folgt später.
 
-**Bereits laufender Container ab 0.3.0?** **Einstellungen → Update** verwenden. Beim Wechsel auf 0.9.0 danach den Browser neu laden, mit dem Familienpasswort anmelden und die Änderungsübersicht lesen. Bei einem älteren Stand einmal den [vollständigen Update-Befehl](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) ausführen, um den Updatedienst einzurichten. Den Container-Ersteller nur für neue LXC verwenden. Bedienung: [PLANER.md](docs/PLANER.md).
+**Bereits laufender Container ab 0.3.0?** **Einstellungen → Update** verwenden. Beim Wechsel auf 0.8.3 danach den Browser neu laden, mit dem Familienpasswort anmelden und die Änderungsübersicht lesen. Bei einem älteren Stand einmal den [vollständigen Update-Befehl](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) ausführen, um den Updatedienst einzurichten. Den Container-Ersteller nur für neue LXC verwenden. Bedienung: [PLANER.md](docs/PLANER.md).
 
 ## Neuen Proxmox-LXC automatisch anlegen
 
@@ -100,7 +100,7 @@ Im Browser `http://localhost:8080` öffnen, Familiennamen, Mitglieder und ein Pa
 
 ## Enthaltene Funktionen
 
-| Bereich | Stand in 0.9.0 |
+| Bereich | Stand in 0.8.3 |
 |---|---|
 | Kalender | Einfache Wochenübersicht (Standard), Stundenraster unter Uhrzeiten, Monats-, Jahres- und Listenansicht; Nachtschichten in Übersichten einmal am Starttag, Fortsetzungen im Stundenraster beschriftet; farbige Feiertagsflächen, kompakte Geburtstage und Arbeitstage; 24-Stunden-Raster mit wählbarer Verdichtung leerer Stunden und Tage; ausgeschriebene Tage und vollständige Daten; Termine nach Dauer, Überlappungen nebeneinander; Personenwahl mit Farbverlauf bei Mehrfachauswahl, Assistent für neue Termine und gemeinsames Bearbeitungsformular; Termine mit Zieldatum duplizieren; optionale Bild-/Emoji-Symbole; Standard- und eigene Farben für Alle; ganztägig, Zeitspanne oder feste Startzeit mit 15-Minuten-Ausblendung |
 | Geburtstage | Eigener Reiter; Name, Tag und Monat; optional Geburtsjahr und Person; jährliche Anzeige im Kalender als 🎂 Name mit optionalem Alter; Ersatzdatum für den 29. Februar wählbar |
@@ -134,7 +134,7 @@ Die vollständige Anleitung steht in [docs/LXC.md](docs/LXC.md). Ein unprivilegi
 3. `bash scripts/install-lxc.sh` ausführen; Debian-Pakete, Node.js 24 und der systemd-Dienst werden automatisch eingerichtet.
 4. `http://CONTAINER-IP:8080` öffnen und Familie einrichten.
 
-Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Anwendung und Update-Dienst starten nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf Proxmox gemeldet; 0.9.0 ist auf dem Zielsystem noch zu prüfen. Der [Update-Befehl vom Proxmox-Host](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) lädt den vollständigen neuen Stand in denselben Container.
+Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Anwendung und Update-Dienst starten nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf Proxmox gemeldet; 0.8.3 ist auf dem Zielsystem noch zu prüfen. Der [Update-Befehl vom Proxmox-Host](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) lädt den vollständigen neuen Stand in denselben Container.
 
 Anschließend unter **Einstellungen → Elternpasswort** ein eigenes Passwort anlegen. **Update** startet Sicherung, Download und Installation im Hintergrund; bei Erfolg oder Fehler erscheint der Status dort. Der separate lokale Dienst arbeitet während des Anwendungsneustarts weiter. Details und Diagnose: [Updates über die Oberfläche](docs/LXC.md#updates-über-die-oberfläche).
 

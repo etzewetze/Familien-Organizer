@@ -1,6 +1,6 @@
 # Änderungsübersicht
 
-## 0.9.0 · 2026-10-20
+## 0.8.3 · 2026-10-20
 
 Übersichtlicher Familienalltag und einfache Aufgaben für Kinder
 
