@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store.mjs';
 import { Model } from '../src/model.mjs';
-import { eventMembers, eventWindow, layoutTimedEvents, parsePlannerDrag, timeScale, hourScale } from '../public/planner.js';
+import { eventMembers, eventWindow, layoutTimedEvents, parsePlannerDrag, timeScale, hourScale, isOvernightEvent, eventOnDate, eventTimeLabel } from '../public/planner.js';
 
 function fixture(t) {
   const path = mkdtempSync(join(tmpdir(), 'family-planner-')), store = new Store(path), model = new Model(store);
@@ -87,4 +87,24 @@ test('Leere Stunden verdichten sich gemeinsam; Terminlängen und Scrollzeit blei
   const overnight=timeScale([{date,events:[{...appointment,startTime:'23:00',endDate:'2026-10-06',endTime:'01:00'}]},{date:'2026-10-06',events:[{...appointment,startTime:'23:00',endDate:'2026-10-06',endTime:'01:00'}]}],64,true);
   assert.equal(overnight.hours[0].height,64); assert.equal(overnight.hours[23].height,64);
   assert.throws(()=>hourScale([0]));
+});
+
+test('Nachtschichten zählen nur am Starttag; echte Fortsetzungen und ein Ende um Mitternacht bleiben korrekt', () => {
+  const night = { id: 'night', startDate: '2026-10-24', endDate: '2026-10-25', startTime: '22:00', endTime: '06:00' };
+  assert.equal(isOvernightEvent(night), true);
+  assert.equal(eventOnDate(night, '2026-10-24'), true);
+  assert.equal(eventOnDate(night, '2026-10-25'), false);
+  assert.equal(eventOnDate(night, '2026-10-25', true), true);
+  assert.equal(eventOnDate(night, '2026-10-26', true), false);
+  assert.equal(eventTimeLabel(night), '22:00–06:00 (morgen)');
+  assert.equal(eventTimeLabel(night, '2026-10-25', true), '00:00–06:00 · vom Vortag');
+  assert.deepEqual(eventWindow(night, '2026-10-25'), { event: night, start: 0, end: 360 });
+  const midnight = { ...night, endTime: '00:00' };
+  assert.equal(eventOnDate(midnight, '2026-10-25', true), false);
+  assert.equal(eventOnDate({ ...night, allDay: true }, '2026-10-25'), true);
+  const long = { ...night, endDate: '2026-10-26' };
+  assert.equal(isOvernightEvent(long), false); assert.equal(eventOnDate(long, '2026-10-25'), true);
+  assert.equal(eventTimeLabel(long), '22:00–06:00 (+2 Tage)');
+  assert.equal(eventOnDate({ ...night, startTime: '07:00', endTime: '09:00' }, '2026-10-25'), true);
+  assert.equal(eventTimeLabel({ ...night, startOnly: true }), '22:00 · ohne Ende');
 });

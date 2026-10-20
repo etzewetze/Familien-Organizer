@@ -1,5 +1,12 @@
-export const VERSION = '0.8.2';
+export const VERSION = '0.9.0';
 export const releases = [
+  { version: '0.9.0', date: '2026-10-20', title: 'Ein klarer Familienalltag – auch für Kinder', changes: [
+    'Heute zeigt euren Tag mit farbigen Personenkarten, persönlichem Fortschritt, Punkten und dem nächsten Belohnungsziel. Aufgaben und heutige Termine stehen im Mittelpunkt; die ganze Woche lässt sich aufklappen.',
+    'Aufgabennamen, Bilder und Punkte bleiben sichtbar. Ein Tipp erledigt die Aufgabe; ein späterer Tipp öffnet sie wieder. Der Stift bietet Optionen und ein eigener Griff verschiebt offene Aufgaben.',
+    'Die Aufgabenansicht zeigt den Fortschritt jeder Person. Vorlagen, Nummernsuche und Ansichtseinstellungen sind weiterhin unter Aufgabe hinzufügen bzw. Vorlagen & Ansicht verwalten erreichbar.',
+    'Nachtschichten erscheinen in den Übersichten nur am Starttag mit dem Hinweis morgen. Unter Uhrzeiten bleiben die tatsächlichen Stunden nach Mitternacht sichtbar, ausdrücklich als vom Vortag gekennzeichnet.',
+    'Der Kalender startet mit einer einfachen Wochenübersicht. Uhrzeiten, Monat, Jahr und Liste sind weiterhin auswählbar. Weitere Familienbereiche stehen im Menü unter Mehr entdecken.',
+  ] },
   { version: '0.8.2', date: '2026-10-16', title: 'Termine duplizieren und Einkaufsmodus', changes: [
     'Einen Termin öffnen, Duplizieren wählen und den gewünschten Tag einstellen. Uhrzeiten, Dauer, Personen und Details bleiben erhalten; das Original bleibt bestehen.',
     'Der Zielkalender der Kopie ist wählbar. Auch importierte und schreibgeschützte Termine lassen sich als eigene Termine kopieren.',
