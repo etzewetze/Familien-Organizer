@@ -1,7 +1,7 @@
 # Projektstand und Fortsetzung
 
 **Projekt:** Familien Organisierer  
-**Stand:** 2026-10-16, Version 0.8.2, Datenbankschema 1
+**Stand:** 2026-10-20, Version 0.8.3, Datenbankschema 1
 **Repository:** https://github.com/etzewetze/Familien-Organizer, öffentlich, Branch `main`
 
 ## Ziel und verbindliche Vorgaben
@@ -11,6 +11,22 @@ Eigene deutsche Familienzentrale auf Proxmox LXC, mit eigenem Quellcode und Desi
 Der Nutzer hat das Repository und das Hochladen ausdrücklich autorisiert. Keine erneute allgemeine Upload-Freigabe einholen, die Sichtbarkeit nicht eigenmächtig ändern und das andere Repository `extraitems` nicht bearbeiten. Echte Familiendaten, Fotos, Schlüssel, `.env`, SQLite-Dateien und Sicherungen gehören nicht auf GitHub.
 
 **Container 100 läuft laut Nutzer inzwischen. Diesen erhalten und aktualisieren.** Kein Neuaufbau und keine Löschung. Es besteht kein direkter Zugang zum Proxmox des Nutzers; er führt die dokumentierten Host-Befehle aus. Root-Zugang vom Host mit `pct enter 100`; ein eigenes Root-Passwort ist optional mit `pct exec 100 -- passwd root` einstellbar. Kein voreingestelltes Root-Passwort und keine Verbindung zum Familienpasswort.
+
+## Aktueller Stand 0.8.3
+
+Der Nutzer wünscht eine übersichtlichere, kinderfreundliche Bedienung und die Behebung scheinbar doppelter Nachtschichten. Die Startseite **Heute** konzentriert sich auf den tatsächlichen heutigen Tag: farbige Personenkarten, persönliche Aufgabenerledigung, verfügbare Punkte, Abstand zur günstigsten Belohnung, heutige Termine und Aufgaben. Die Wochenübersicht ist aufklappbar. Gemeinsame Aufgaben erscheinen zusätzlich, zählen aber nicht für jede Person doppelt. Der Planungsfilter für Einmalaufgaben/Routinen beeinflusst Heute nicht.
+
+Aufgabenkarten zeigen Titel, Bild/Emoji und Punkte dauerhaft. Ein Tipp erledigt, ein späterer öffnet wieder. Schnelle zweite Pointerklicks nach einer Neu-Renderung werden über Aufgabe, Datum und 450 ms abgefangen; laufende Anfragen sind gesperrt. Tastaturaktivierung benötigt einen Klick. Bei einem Schreibfehler bleibt die Erledigung unverändert. Optionen sind über einen sichtbaren Stift erreichbar, Verschieben über einen separaten Griff. Vorlagen, Nummernsuche und Layoutwahl bleiben in aufklappbaren Planungsbereichen verfügbar. Kinder stehen im Aufgabenboard zuerst. Geöffnete Planungsbereiche bleiben nach Zustandsaktualisierungen offen; die Unterkalender-Einführung öffnet ihre Filter automatisch.
+
+Kalender-Standard ist die einfache Ansicht **Woche** (`days`), das bisherige Raster bleibt unter **Uhrzeiten** (`week`). `eventOnDate` und `eventTimeLabel` in `public/planner.js` unterscheiden die Übersicht vom tatsächlichen Zeitfenster: Eine zeitgebundene Schicht bis zum nächsten Tag mit früherer Enduhrzeit zählt in Übersichten und Arbeitstagsmarkierungen nur am Anfangstag. Die Endzeit trägt **(morgen)**. Im Stundenraster bleibt der über Mitternacht laufende Teil mit **00:00–06:00 · vom Vortag** sichtbar. Ein Ende genau um Mitternacht erzeugt keinen weiteren Abschnitt. Ganztägige und längere mehrtägige Termine bleiben an ihren Tagen erhalten. Das betrifft lokale, Google- und importierte Termine sowie Arbeitstage; gespeicherte Daten werden nicht gelöscht oder zusammengeführt.
+
+Die Navigation zeigt sechs Bereiche mit Symbolen, weitere stehen unter **Mehr entdecken**. Neue ergänzende Styles in `public/family.css` beachten die vorhandenen Themenfarben und reduzierte Bewegung. Keine Fremdabhängigkeit, keine Datenmigration, kein Server-/Installerumbau. Versionsnummer und Änderungsübersicht verwenden ausdrücklich die Patchversion **0.8.3**. Der Nutzer hat die direkte Übernahme in `main` freigegeben. Die Installation auf dem LXC steht noch aus.
+
+**Prüfstand: 195 von 195 Tests bestanden, keine Fehler oder übersprungenen Tests.** Die bestehenden 189 Tests bestanden vor der Änderung; sechs zusätzliche Regressionen prüfen aufeinanderfolgende Nachtschichten, tatsächliche Fortsetzungen, Mitternacht/DST, persönliche Fortschrittszähler, einzelne und doppelte Aufgabenaktivierung, Fehler, Tagesbezug von Optionen und den Erhalt von Stundenplänen/aufgeklappter Planung. Syntaxprüfung der geänderten JavaScript-Module und `git diff --check` bestanden. Ein zusätzlicher echter lokaler HTTP-Abruf bestätigt HTML, Einbindung und MIME-Typ der neuen CSS-Datei und beider Planer-Module.
+
+**Visuelle Geräteabnahme offen.** Der verfügbare Cloud-Browser erreicht den lokalen Testserver nicht und erlaubt keine lokalen Dateivorschauen. Die vorbereiteten DOM-Vorschauen ersetzen keine Abnahme auf einem echten Handy, Tablet oder Wanddisplay. Keine geprüften Screenshots vorhanden. Keine Live-Abnahme gegen die privaten Google-Konten oder den Nutzer-LXC durchgeführt.
+
+## Bisheriger Stand bis 0.8.2 (historische Details)
 
 ## Neu in 0.8.2
 
@@ -26,7 +42,7 @@ Monatsansicht: Feiertage sind Tagesflächen in der gemeinsamen `holidayColor` (D
 
 `calendarEntries` unterstützt zusätzlich `workday`: ICS-Dienstpläne explizit als Arbeitstage importieren und einer Person zuordnen. Zeitumrechnung, Nacht-/Seriendienste und offene Endzeiten bleiben erhalten. Anzeige als 💼-Tageskennzeichnung mit Dienstzeit außerhalb des Terminrasters; Jahresansicht mit Symbol. Eigenes gemeinsames Aktivierungsfeld `calendarOptions.workday`. Arbeitstage pausieren keine Schul-/Kitapläne; ein Ende um Mitternacht markiert den Folgetag nicht zusätzlich. Bestehende importierte Termine sind manuell in Arbeitstage umstellbar. Eine andere Importart kann beim erneuten Einlesen zusätzliche Datensätze erzeugen; keine automatische Umstellung oder Synchronisierung.
 
-Neue Farb-/Aktivierungswerte werden bei alten Datenbanken ergänzt und bei älteren Speichervorgängen erhalten. Keine SQL-Schemaänderung; Sicherungen und Export enthalten Dienste und Farbe. Release bewusst **0.8.1**, nicht 0.9.0.
+Neue Farb-/Aktivierungswerte werden bei alten Datenbanken ergänzt und bei älteren Speichervorgängen erhalten. Keine SQL-Schemaänderung; Sicherungen und Export enthalten Dienste und Farbe. Release bewusst **0.8.1** als Patchversion.
 
 ## Seit 0.7.0 und 0.8.0
 

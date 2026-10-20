@@ -1,5 +1,5 @@
 import { birthdaysOnDate, nextBirthday } from './birthdays.js';
-import { eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale } from './planner.js';
+import { eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, eventOnDate, eventTimeLabel } from './planner.js';
 import { appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties } from './appearance.js';
 import { VERSION } from './releases.js';
 import { emojiCategories, findEmojis, isEmoji } from './symbols.js';
@@ -45,10 +45,10 @@ const paths = {
   cake: '<path d="M4 12h16v9H4Zm0 4c2 2 4-2 6 0s4-2 6 0 3 1 4 0M8 12V8m4 4V8m4 4V8M8 5v1m4-3v3m4-1v1"/>',
 };
 const I = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.calendar}</svg>`;
-const nav = [['home', 'Übersicht', 'home'], ['calendar', 'Kalender', 'calendar'], ['birthdays', 'Geburtstage', 'cake'], ['tasks', 'Aufgaben', 'tasks'], ['schedules', 'Stundenpläne', 'book'], ['rewards', 'Belohnungen', 'star'], ['meals', 'Essen & Rezepte', 'food'], ['lists', 'Listen & Einkauf', 'lists'], ['notes', 'Notizen', 'notes'], ['photos', 'Bilderrahmen', 'photos']];
+const nav = [['home', 'Heute', 'home'], ['calendar', 'Kalender', 'calendar'], ['birthdays', 'Geburtstage', 'cake'], ['tasks', 'Aufgaben', 'tasks'], ['schedules', 'Stundenpläne', 'book'], ['rewards', 'Belohnungen', 'star'], ['meals', 'Essen & Rezepte', 'food'], ['lists', 'Listen & Einkauf', 'lists'], ['notes', 'Notizen', 'notes'], ['photos', 'Bilderrahmen', 'photos']];
 const app = $('#app'), editor = $('#editor'), confirmDialog = $('#confirm');
 let S, status, route = location.hash.slice(1) || 'home', cursor = '', filter = '', online = true, editing = null, busy = false;
-let calendarMode = 'week', taskMode = 'all', activeList = 'shopping';
+let calendarMode = 'days', taskMode = 'all', activeList = 'shopping';
 let mealLayout = localStorage.getItem('mealLayout') === 'vertical' ? 'vertical' : 'horizontal';
 let photoSource = localStorage.getItem('photoSource') || 'local', photoItems = [], photoLoaded = false, photoLoading = false, photoAlbum = localStorage.getItem('photoAlbum') || '', albums = [], photoUrls = new Map();
 let taskBoard = 'all', updaterState = null, updateUnavailableSince = 0, updatePollBusy = false, taskPreviewUrl = '', pointerDrag = null, nativeDrag = null, suppressDragClick = false;
@@ -66,16 +66,18 @@ try { scheduleSelection = JSON.parse(localStorage.getItem('scheduleSelection') |
 if (!scheduleSelection || typeof scheduleSelection !== 'object' || Array.isArray(scheduleSelection)) scheduleSelection = {};
 navSort = navigationOrder(navSort, nav.map(item => item[0]));
 let birthdaySearch = '', templateEditing = false, taskColumns = localStorage.getItem('taskColumns') || 'auto';
-let lastTaskTap = { id: '', at: 0 }, taskHold = null, suppressTaskClickUntil = 0;
+let lastTaskTap = { id: '', date: '', at: 0 }, taskHold = null, suppressTaskClickUntil = 0;
 let lastShoppingTap = { id: '', listId: '', at: 0 }, shoppingLists;
 try { const saved = JSON.parse(localStorage.getItem('shoppingLists') || '[]'); shoppingLists = new Set(Array.isArray(saved) ? saved.filter(id => typeof id === 'string') : []); } catch { shoppingLists = new Set(); }
 let scheduleDraft = null, scheduleGuide = null, guideTimer = null;
 let calendarDataFilter = 'all';
 const calendarScrollPositions = new Map();
+const openDisclosures = new Map();
+const disclosure = (id, force = false) => `data-disclosure="${E(id)}"${force || openDisclosures.get(id) ? ' open' : ''}`;
 
 function calendarWindows(date) { return scheduleWindows(S.schedules || [], date, { selected: scheduleSelection, memberId: filter, closures: S.calendarEntries || [], calendarOptions: S.calendarOptions || {} }); }
 function scaleEvents(date) {
-  return [...visibleEvents(date), ...calendarWindows(date).map(item => ({ startDate: date, endDate: date, startTime: item.startTime, endTime: item.endTime }))];
+  return [...visibleEvents(date, true), ...calendarWindows(date).map(item => ({ startDate: date, endDate: date, startTime: item.startTime, endTime: item.endTime }))];
 }
 function scheduleToggles() {
   const plans = (S.schedules || []).filter(plan => plan.showInCalendar && (!filter || plan.memberId === filter));
@@ -104,11 +106,18 @@ function taskIcon(record) {
   return record.emoji ? `<span class="task-emoji" aria-hidden="true">${E(record.emoji)}</span>` : `<span class="task-text-icon">${E(record.title)}</span>`;
 }
 function templateTile(template) {
-  return `<button class="template-tile ${templateEditing ? 'editing' : ''}" data-template="${template.id}" ${templateEditing ? '' : `draggable="true" data-drag-kind="template" data-drag-id="${template.id}" data-drag-rev="${template._rev}" data-drag-handle`} title="${E(template.title)}${template.code ? ' · Nr. ' + template.code : ''}" aria-label="${E(template.title)}${template.code ? ', Nummer ' + template.code : ''}${templateEditing ? ' bearbeiten' : ' verteilen'}">${taskIcon(template)}${template.code ? `<small class="task-code">${template.code}</small>` : ''}${templateEditing ? `<span class="template-pencil">${I('edit')}</span>` : ''}</button>`;
+  return `<button class="template-tile ${templateEditing ? 'editing' : ''}" data-template="${template.id}" ${templateEditing ? '' : `draggable="true" data-drag-kind="template" data-drag-id="${template.id}" data-drag-rev="${template._rev}" data-drag-handle`} title="${E(template.title)}${template.code ? ' · Nr. ' + template.code : ''}" aria-label="${E(template.title)}${template.code ? ', Nummer ' + template.code : ''}${templateEditing ? ' bearbeiten' : ' verteilen'}">${taskIcon(template)}<span class="template-name">${E(template.title)}</span>${template.code ? `<small class="task-code">${template.code}</small>` : ''}${templateEditing ? `<span class="template-pencil">${I('edit')}</span>` : ''}</button>`;
 }
 function assignedTaskTile(task, date) {
   const done = !!completion(task, date);
-  return `<div class="assigned-task"><button class="task-tile ${done ? 'completed' : ''}" data-task-tile="${task.id}" data-date="${date}" aria-label="${E(task.title)}, ${task.points} Punkte, ${done ? 'erledigt' : 'offen'}. Doppeltippen zum Umschalten, gedrückt halten für Optionen." aria-pressed="${done}" ${done ? '' : `draggable="true" data-drag-kind="task" data-drag-id="${task.id}" data-drag-rev="${task._rev}" data-drag-handle`}>${taskIcon(task)}${done ? `<span class="task-done-mark">${I('check')}</span>` : ''}</button><div class="task-title-popover" hidden>${E(task.title)}${task.points ? ` · ${task.points} Punkte` : ''}</div></div>`;
+  return `<div class="assigned-task ${done ? 'is-complete' : ''}" style="${personStyle(task.memberId)}">
+    <button type="button" class="task-tile ${done ? 'completed' : ''}" data-task-tile="${task.id}" data-date="${date}" aria-label="${E(task.title)}, ${task.points} Punkte. ${done ? 'Geschafft! Wieder öffnen' : 'Als erledigt markieren'}" aria-pressed="${done}">
+      <span class="task-card-picture">${task.imageFile || task.emoji ? taskIcon(task) : '<span class="task-emoji" aria-hidden="true">⭐</span>'}</span>
+      <span class="task-card-copy"><strong>${E(task.title)}</strong><span>${E(member(task.memberId)?.name || 'Gemeinsam')}${task.points ? ` · ⭐ ${task.points} Punkte` : ''}</span></span>
+      <span class="task-card-check" aria-hidden="true">${done ? I('check') : '<span class="task-check-circle"></span>'}<span>${done ? 'Geschafft!' : 'Erledigt'}</span></span>
+    </button>
+    <div class="task-card-tools">${!done ? `<button class="task-move" draggable="true" data-drag-kind="task" data-drag-id="${task.id}" data-drag-rev="${task._rev}" data-drag-handle title="Aufgabe verschieben" aria-label="${E(task.title)} verschieben">${I('menu')}</button>` : ''}${iconBtn(`${task.title}: Optionen`, 'task-options', 'edit', `data-id="${task.id}" data-date="${date}"`)}</div>
+  </div>`;
 }
 function showTemplateMatches(input) {
   const area = $('.template-results', input.closest('.template-combobox'));
@@ -119,26 +128,32 @@ function showTemplateMatches(input) {
 function openTemplateAssign(id) {
   const template = (S.taskTemplates || []).find(item => item.id === id); if (!template) return;
   editing = { kind: 'template-assignment', template, requestId: uid() };
-  dialog(template.title, `<form id="template-assign-form"><div class="template-preview">${taskIcon(template)}<p>${template.points} Punkte${template.code ? ' · Nr. ' + template.code : ''}</p></div>${selectField('Zuordnen', 'memberId', filter || '', [['','Allgemein'], ...S.members.map(person => [person.id, person.name])])}<p class="field-hint">Für ${fullDate(cursor)}. Die Vorlage bleibt für weitere Aufgaben erhalten.</p><p id="editor-error" class="form-error" role="alert"></p><div class="form-actions"><button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit">Aufgabe hinzufügen</button></div></form>`);
+  dialog(template.title, `<form id="template-assign-form"><div class="template-preview">${taskIcon(template)}<p>${template.points} Punkte${template.code ? ' · Nr. ' + template.code : ''}</p></div>${selectField('Zuordnen', 'memberId', filter || '', [['','Gemeinsam'], ...S.members.map(person => [person.id, person.name])])}<p class="field-hint">Für ${fullDate(cursor)}. Die Vorlage bleibt für weitere Aufgaben erhalten.</p><p id="editor-error" class="form-error" role="alert"></p><div class="form-actions"><button class="button" type="button" data-action="close-editor">Abbrechen</button><button class="button primary" type="submit">Aufgabe hinzufügen</button></div></form>`);
 }
 async function assignTemplateTo(id, memberId, requestId = uid()) {
   if (!online) throw new Error('Die Verbindung fehlt. Bitte später erneut versuchen.');
   const template = (S.taskTemplates || []).find(item => item.id === id); if (!template) throw new Error('Vorlage nicht gefunden.');
   await mutate(`/task-templates/${id}/assign`, 'POST', { memberId, date: cursor, _rev: template._rev, requestId }, 'Aufgabe hinzugefügt.');
 }
-async function tapTask(target) {
+async function tapTask(target, keyboard = false) {
   if (busy || !online) return;
-  const id = target.dataset.taskTile, time = Date.now();
-  if (lastTaskTap.id === id && time - lastTaskTap.at < 450) {
-    lastTaskTap = { id: '', at: 0 }; busy = true;
-    try { await completeTask(id, target.dataset.date); } catch (error) { toast(error.message, true); } finally { busy = false; }
-  } else { lastTaskTap = { id, at: time }; const label = $('.task-title-popover', target.parentElement); if (label) label.hidden = !label.hidden; }
+  const id = target.dataset.taskTile, date = target.dataset.date;
+  const now = Date.now();
+  // A successful request replaces the card. Ignore the second pointer click
+  // even when the browser resets click.detail for the newly rendered button.
+  if (!keyboard && lastTaskTap.id === id && lastTaskTap.date === date && now - lastTaskTap.at < 450) return;
+  lastTaskTap = { id, date, at: now };
+  busy = true; target.disabled = true;
+  try {
+    await completeTask(id, date);
+    if (!editor.open) $(`[data-task-tile="${id}"][data-date="${date}"]`)?.focus?.({ preventScroll: true });
+  } catch (error) { lastTaskTap = { id: '', date: '', at: 0 }; toast(error.message, true); }
+  finally { busy = false; target.disabled = !online; }
 }
-function taskActions(id) {
+function taskActions(id, date = cursor) {
   const task = S?.tasks.find(item => item.id === id); if (!task) return;
   editing = { kind: 'task-actions', task };
-  lastTaskTap = { id: '', at: 0 };
-  dialog(task.title, `<p>${E(task.description || '')}</p><p class="small muted">${task.points} Punkte · ${E(member(task.memberId)?.name || 'Allgemein')}</p><div class="stack"><button class="button" data-complete="${task.id}" data-date="${cursor}" data-close-task-actions>${I('check')}${completion(task) ? 'Wieder öffnen' : 'Erledigt markieren'}</button><button class="button" data-edit="tasks" data-id="${task.id}">${I('edit')}Aufgabe bearbeiten</button><button class="button danger" data-action="remove-assigned-task" data-id="${task.id}">${I('trash')}Aus verteilter Liste entfernen</button></div>`);
+  dialog(task.title, `<p>${E(task.description || '')}</p><p class="small muted">${task.points} Punkte · ${E(member(task.memberId)?.name || 'Gemeinsam')}</p><div class="stack"><button class="button" data-complete="${task.id}" data-date="${date}" data-close-task-actions>${I('check')}${completion(task, date) ? 'Wieder öffnen' : 'Erledigt markieren'}</button><button class="button" data-edit="tasks" data-id="${task.id}">${I('edit')}Aufgabe bearbeiten</button><button class="button danger" data-action="remove-assigned-task" data-id="${task.id}">${I('trash')}Aufgabe entfernen</button></div>`);
 }
 async function removeAssignedTask(id) {
   const task = S.tasks.find(item => item.id === id); if (!task) return;
@@ -318,15 +333,15 @@ const btn = (label, action, icon = '', css = '', attrs = '') => `<button class="
 const iconBtn = (label, action, icon, attrs = '') => `<button class="icon-button" title="${E(label)}" aria-label="${E(label)}" data-action="${action}" ${attrs}>${I(icon)}</button>`;
 const empty = (title, description, icon = 'calendar', action = '') => `<div class="empty">${I(icon)}<h3>${E(title)}</h3><p>${E(description)}</p>${action}</div>`;
 const matchesCalendarPerson = entry => !filter || eventMembers(entry).includes(filter) || !eventMembers(entry).length;
-const visibleEvents = date => [...S.events, ...birthdaysOnDate(S.birthdays || [], date), ...calendarEntriesOnDate(S.calendarEntries || [], date, S.calendarOptions || {}).filter(entry => entry.category !== 'workday')].filter(e => e.startDate <= date && e.endDate >= date && matchesCalendarPerson(e)).sort((a, b) => (a.allDay ? '00:00' : a.startTime).localeCompare(b.allDay ? '00:00' : b.startTime));
-const visibleWorkdays = date => calendarEntriesOnDate(S.calendarEntries || [], date, S.calendarOptions || {}).filter(entry => entry.category === 'workday' && matchesCalendarPerson(entry)).sort((a,b) => (a.startTime || '').localeCompare(b.startTime || '') || a.title.localeCompare(b.title, 'de'));
+const visibleEvents = (date, continuations = false) => [...S.events, ...birthdaysOnDate(S.birthdays || [], date), ...calendarEntriesOnDate(S.calendarEntries || [], date, S.calendarOptions || {}).filter(entry => entry.category !== 'workday')].filter(e => eventOnDate(e, date, continuations) && matchesCalendarPerson(e)).sort((a, b) => (a.allDay ? '00:00' : a.startTime).localeCompare(b.allDay ? '00:00' : b.startTime));
+const visibleWorkdays = date => calendarEntriesOnDate(S.calendarEntries || [], date, S.calendarOptions || {}).filter(entry => entry.category === 'workday' && eventOnDate(entry, date) && matchesCalendarPerson(entry)).sort((a,b) => (a.startTime || '').localeCompare(b.startTime || '') || a.title.localeCompare(b.title, 'de'));
 function due(task, date) {
   if (task.startDate && date < task.startDate) return false;
   const day = ds(date).getDay();
   return task.repeat === 'daily' || task.repeat === 'weekdays' && day > 0 && day < 6 || task.repeat === 'weekly' && day === ds(task.startDate).getDay() || task.repeat === 'none';
 }
 const completion = (task, date = cursor) => S.completions.find(c => c.task_id === task.id && c.day === (task.repeat === 'none' ? 'once' : date));
-const visibleTasks = date => S.tasks.filter(t => due(t, date) && (!filter || t.memberId === filter || !t.memberId) && (taskMode === 'all' || taskMode === 'routines' && t.repeat !== 'none' || taskMode === 'todos' && t.repeat === 'none'));
+const visibleTasks = date => S.tasks.filter(t => due(t, date) && (!filter || t.memberId === filter || !t.memberId));
 const meal = (date, slot = 'dinner') => S.meals.find(m => m.date === date && (m.slot || 'dinner') === slot);
 const recipeFor = date => S.recipes.find(r => r.id === meal(date)?.recipeId);
 const quantity = n => n ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 }).format(n) : '';
@@ -374,13 +389,23 @@ function pageHead(title, subtitle, action = '') {
 }
 function navigation() {
   const ordered = navSort.map(id => nav.find(item => item[0] === id)).filter(Boolean);
-  return `<aside class="rail ${navCollapsed ? 'collapsed' : ''}" id="rail"><div class="brand"><span class="brand-mark">${I('calendar')}</span><div><strong>Familien<br>Organisierer</strong><small>Unser Alltag. Zusammen.</small></div></div><div class="rail-tools">${iconBtn(navCollapsed ? 'Navigation ausklappen' : 'Navigation einklappen', 'collapse-nav', navCollapsed ? 'right' : 'left', `aria-expanded="${!navCollapsed}"`)}${iconBtn('Reihenfolge bearbeiten', 'edit-nav', 'edit', `aria-pressed="${navEditing}"`)}</div><div><div class="rail-label">Familienzentrale</div><nav class="nav-list" aria-label="Hauptnavigation">${ordered.map(([id, label, icon], index) => `<div class="nav-row"><button class="nav-item ${route === id ? 'active' : ''}" data-nav="${id}" title="${E(label)}" aria-label="${E(label)}" ${route === id ? 'aria-current="page"' : ''}>${I(icon)}<span class="nav-text">${label}</span></button>${navEditing ? `<div class="nav-sort"><button data-nav-move="${id}" data-direction="-1" aria-label="${E(label)} nach oben" ${index === 0 ? 'disabled' : ''}>↑</button><button data-nav-move="${id}" data-direction="1" aria-label="${E(label)} nach unten" ${index === ordered.length - 1 ? 'disabled' : ''}>↓</button></div>` : ''}</div>`).join('')}</nav></div><div class="nav-bottom"><button class="nav-item ${route === 'settings' ? 'active' : ''}" data-nav="settings" title="Einstellungen" aria-label="Einstellungen">${I('settings')}<span class="nav-text">Einstellungen</span></button></div><div class="self-hosted"><strong>${I('shield')}Euer eigener Server</strong>Familien Organisierer · ${E(status?.version || VERSION)}</div></aside>`;
+  const primary = new Set(['home', 'calendar', 'tasks', 'rewards', 'meals', 'lists']);
+  const symbols = { home: '☀️', calendar: '🗓️', tasks: '✅', rewards: '🌟', meals: '🍽️', lists: '🛒', birthdays: '🎂', schedules: '🎒', notes: '📝', photos: '🖼️' };
+  const row = ([id, label], index) => `<div class="nav-row"><button class="nav-item ${route === id ? 'active' : ''}" data-nav="${id}" title="${E(label)}" aria-label="${E(label)}" ${route === id ? 'aria-current="page"' : ''}><span class="nav-symbol" aria-hidden="true">${symbols[id]}</span><span class="nav-text">${label}</span></button>${navEditing ? `<div class="nav-sort"><button data-nav-move="${id}" data-direction="-1" aria-label="${E(label)} nach oben" ${index === 0 ? 'disabled' : ''}>↑</button><button data-nav-move="${id}" data-direction="1" aria-label="${E(label)} nach unten" ${index === ordered.length - 1 ? 'disabled' : ''}>↓</button></div>` : ''}</div>`;
+  return `<aside class="rail ${navCollapsed ? 'collapsed' : ''}" id="rail">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">🏡</span><div><strong>Familien<br>Organisierer</strong><small>Unser Alltag. Zusammen.</small></div></div>
+    <div class="rail-tools">${iconBtn(navCollapsed ? 'Navigation ausklappen' : 'Navigation einklappen', 'collapse-nav', navCollapsed ? 'right' : 'left', `aria-expanded="${!navCollapsed}"`)}${iconBtn('Reihenfolge bearbeiten', 'edit-nav', 'edit', `aria-pressed="${navEditing}"`)}</div>
+    <nav class="nav-list" aria-label="Hauptnavigation">${ordered.map((item, index) => primary.has(item[0]) ? row(item, index) : '').join('')}</nav>
+    <details class="more-navigation" ${disclosure('more-navigation', navEditing || !primary.has(route) && route !== 'settings')}><summary><span aria-hidden="true">＋</span><span class="nav-text">Mehr entdecken</span></summary><nav class="nav-list" aria-label="Weitere Bereiche">${ordered.map((item, index) => !primary.has(item[0]) ? row(item, index) : '').join('')}</nav></details>
+    <div class="nav-bottom"><button class="nav-item ${route === 'settings' ? 'active' : ''}" data-nav="settings" title="Einstellungen" aria-label="Einstellungen">${I('settings')}<span class="nav-text">Einstellungen</span></button><small class="nav-version">Version ${E(status?.version || VERSION)}</small></div>
+  </aside>`;
 }
 function render() {
   if (!S) return;
   applyAppearance(S.settings);
   if (route !== 'settings' && backgroundPreviewUrl) { URL.revokeObjectURL(backgroundPreviewUrl); backgroundPreviewUrl = ''; }
   const previousGrid = $('.time-scroll');
+  document.querySelectorAll('details[data-disclosure]').forEach(element => openDisclosures.set(element.dataset.disclosure, element.open));
   if (previousGrid?.dataset.week) { const heights = previousGrid.dataset.hourHeights?.split(',').map(Number) || Array(24).fill(Number(previousGrid.dataset.hourSize) || 64); calendarScrollPositions.set(previousGrid.dataset.week, { minute: hourScale(heights).minuteAt(previousGrid.scrollTop), left: previousGrid.scrollLeft }); }
   if (!nav.some(n => n[0] === route) && !['settings', 'weather', 'calendar-data'].includes(route)) route = 'home';
   const pages = { home: homePage, calendar: calendarPage, birthdays: birthdaysPage, tasks: tasksPage, rewards: rewardsPage, meals: mealsPage, lists: listsPage, notes: notesPage, photos: photosPage, schedules: schedulesPage, 'calendar-data': calendarDataPage, settings: settingsPage, weather: weatherPage };
@@ -399,19 +424,17 @@ function render() {
 function headerMembers() {
   return `<div class="header-members" role="group" aria-label="Familienmitglieder"><div class="header-members-inner"><button class="header-person ${!filter ? 'selected' : ''}" data-filter="" aria-pressed="${!filter}" style="${personStyle('')}"><span class="member-ring">${I('people')}</span><span>Alle</span></button>${S.members.map(m => `<button class="header-person ${filter === m.id ? 'selected' : ''}" data-filter="${m.id}" ${route === 'tasks' ? `data-task-drop="${m.id}"` : ''} style="${personStyle(m.id)}" aria-pressed="${filter === m.id}">${avatar(m.id)}<span>${E(m.name)}</span>${route === 'tasks' ? `<small class="header-points">${S.points[m.id].available} Punkte</small>` : ''}</button>`).join('')}</div></div>`;
 }
-function updateDisabled() { if (!online) document.querySelectorAll('[data-edit],[data-complete],[data-check-item],[data-shopping-item],[data-action=duplicate-event],[data-redeem],[data-action=import-recipe],form button[type=submit]').forEach(el => el.disabled = true); }
+function updateDisabled() { if (!online) document.querySelectorAll('[data-edit],[data-complete],[data-task-tile],[data-action=task-options],[data-check-item],[data-shopping-item],[data-action=duplicate-event],[data-redeem],[data-action=import-recipe],form button[type=submit]').forEach(el => el.disabled = true); }
 function eventCard(e, compact = false) {
   const people = eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle';
-  const time = e.birthdayId ? 'Geburtstag · jährlich' : e.allDay ? 'Ganztägig' : e.startOnly ? `${e.startTime} · ohne Ende` : `${e.startTime}–${e.endTime}`;
+  const time = e.birthdayId ? 'Geburtstag · jährlich' : eventTimeLabel(e);
   return `<button class="event-card ${e.birthdayId ? 'birthday-event' : ''}" style="${eventStyle(e)}" data-edit="${e.birthdayId ? 'birthdays' : e.calendarEntryId ? 'calendarEntries' : 'events'}" data-id="${e.birthdayId || e.id}" title="${E(e.title)}"><span class="event-time">${E(time)}</span><strong>${recordSymbols(e)}${E(e.title)}</strong>${compact ? '' : `<span class="event-person">${E(people)}${e.googleAccountId ? ' · Google' : ''}</span>`}</button>`;
 }
 function dayHeading(date, css = '') {
   return `<div class="day-heading ${css}"><div><strong>${fullWeekday(date)}</strong><span>${fullDate(date)}</span></div><button class="icon-button day-plus" data-edit="events" data-date="${date}" aria-label="Termin am ${E(fullDate(date))} hinzufügen">${I('plus')}</button></div>`;
 }
 function workdayCaption(entry) {
-  const days = Math.round((Date.parse(entry.endDate) - Date.parse(entry.startDate)) / 86400000);
-  const time = entry.allDay ? 'Ganztägig' : entry.startOnly ? `ab ${entry.startTime}` : `${entry.startTime}–${entry.endTime}${days ? ` (+${days} ${days === 1 ? 'Tag' : 'Tage'})` : ''}`;
-  return `${member(entry.memberId)?.name || 'Alle'} · ${entry.title} · ${time}`;
+  return `${member(entry.memberId)?.name || 'Alle'} · ${entry.title} · ${eventTimeLabel(entry)}`;
 }
 function dayEntries(kind, date) {
   if (kind === 'workday') return visibleWorkdays(date);
@@ -438,14 +461,14 @@ function monthCell(date) {
 }
 function weekGrid(date, includeMeals = false) {
   return `<div class="week-scroll"><div class="week-grid">${Array.from({ length: 7 }, (_, i) => {
-    const day = addDays(monday(date), i), events = visibleEvents(day), recipe = recipeFor(day);
-    return `<div class="day-column ${day === S.serverDate ? 'today' : ''}">${dayHeading(day)}${compactDayMarker('workday', day)}${events.map(e => eventCard(e)).join('')}${includeMeals && recipe ? `<button class="day-meal" data-recipe="${recipe.id}">${I('food')}<span>${E(recipe.title)}</span></button>` : ''}</div>`;
+    const day = addDays(monday(date), i), events = visibleEvents(day), recipe = recipeFor(day), workdays = visibleWorkdays(day), schedules = scheduleDayLabels(day);
+    return `<div class="day-column ${day === S.serverDate ? 'today' : ''}">${dayHeading(day)}${compactDayMarker('workday', day, workdays)}${schedules}${events.map(e => eventCard(e)).join('')}${!events.length && !workdays.length && !schedules ? '<p class="day-free">Keine festen Termine</p>' : ''}${includeMeals && recipe ? `<button class="day-meal" data-recipe="${recipe.id}">${I('food')}<span>${E(recipe.title)}</span></button>` : ''}</div>`;
   }).join('')}</div></div>`;
 }
 
 function weekTimeScale(date) { const theme = appearanceFor(S.settings); return timeScale(Array.from({ length: 7 }, (_, i) => { const day = addDays(monday(date), i); return { date: day, events: scaleEvents(day) }; }), theme.calendarHourSize, theme.calendarCompactHours); }
 function timeWeek(date) {
-  const days = Array.from({ length: 7 }, (_, i) => addDays(monday(date), i)), events = days.map(visibleEvents), workdays = days.map(visibleWorkdays), windows = days.map(calendarWindows), theme = appearanceFor(S.settings), grid = calendarColumns(events, theme.calendarAutoWidth);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(monday(date), i)), events = days.map(day => visibleEvents(day, true)), workdays = days.map(visibleWorkdays), windows = days.map(calendarWindows), theme = appearanceFor(S.settings), grid = calendarColumns(events, theme.calendarAutoWidth);
   const scale = timeScale(days.map(date => ({ date, events: scaleEvents(date) })), theme.calendarHourSize, theme.calendarCompactHours);
   if (windows.some(items => items.length)) { const widths = events.map((list, index) => (theme.calendarAutoWidth && !list.length ? 128 : 160) + windows[index].length * 25); grid.template = '52px ' + widths.map(width => `minmax(${width}px,1fr)`).join(' '); grid.minimum = 52 + widths.reduce((a,b) => a + b, 0); }
   const headers = `<div class="time-head time-corner">${I('clock')}<span>Uhrzeit</span></div>${days.map(day => dayHeading(day, `time-head ${day === S.serverDate ? 'today' : ''}`)).join('')}`;
@@ -455,36 +478,74 @@ function timeWeek(date) {
   const rows = scale.hours.map(row => `<div class="hour-row" aria-hidden="true" style="top:${row.top / scale.total * 100}%;height:${row.height / scale.total * 100}%"></div>`).join('');
   const columns = days.map((day, index) => `<div class="time-day ${day === S.serverDate ? 'today' : ''}" aria-label="${E(fullWeekday(day) + ', ' + fullDate(day))}">${rows}${scheduleBars(windows[index], scale)}<div class="scheduled-events-area" style="left:${windows[index].length * 25}px">${layoutTimedEvents(events[index], day).map(({ event: e, start, end, column, columns }) => {
     const people = eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle';
-    const label = `${e.title}, ${e.startTime}${e.startOnly ? ', ohne Ende' : ' bis ' + e.endTime}, ${people}${e.location ? ', ' + e.location : ''}`;
-    return `<button class="time-event ${e.startOnly ? 'start-only' : ''}" data-edit="${e.calendarEntryId ? 'calendarEntries' : 'events'}" data-id="${e.id}" style="${eventStyle(e)};top:${scale.position(start) / scale.total * 100}%;height:${(scale.position(end) - scale.position(start)) / scale.total * 100}%;left:calc(${column / columns * 100}% + 3px);width:calc(${100 / columns}% - 6px)" title="${E(label)}" aria-label="${E(label)}">${e.startOnly ? `<strong>${recordSymbols(e)}${E(e.startTime)} ${E(e.title)}</strong>` : `<span class="event-time">${E(e.startTime)}${e.endDate !== e.startDate ? ' …' : '–' + E(e.endTime)}</span><strong>${recordSymbols(e)}${E(e.title)}</strong>${end - start >= 60 ? `<span class="event-person">${E(people)}</span>${e.location ? `<span class="event-person">${E(e.location)}</span>` : ''}` : ''}`}</button>`;
+    const time = eventTimeLabel(e, day, true), continuation = e.startDate < day;
+    const label = `${e.title}, ${time}, ${people}${e.location ? ', ' + e.location : ''}`;
+    return `<button class="time-event ${e.startOnly ? 'start-only' : ''} ${continuation ? 'event-continuation' : ''}" data-edit="${e.calendarEntryId ? 'calendarEntries' : 'events'}" data-id="${e.id}" style="${eventStyle(e)};top:${scale.position(start) / scale.total * 100}%;height:${(scale.position(end) - scale.position(start)) / scale.total * 100}%;left:calc(${column / columns * 100}% + 3px);width:calc(${100 / columns}% - 6px)" title="${E(label)}" aria-label="${E(label)}">${e.startOnly ? `<strong>${recordSymbols(e)}${E(e.startTime)} ${E(e.title)}</strong>` : `<span class="event-time">${E(time)}</span><strong>${recordSymbols(e)}${continuation ? '↳ ' : ''}${E(e.title)}</strong>${end - start >= 60 ? `<span class="event-person">${E(people)}</span>${e.location ? `<span class="event-person">${E(e.location)}</span>` : ''}` : ''}`}</button>`;
   }).join('')}</div></div>`).join('');
   return `<div class="time-scroll" data-week="${monday(date)}" data-hour-size="${theme.calendarHourSize}" data-hour-heights="${scale.hours.map(row => row.height).join(',')}" tabindex="0" aria-label="Wochenkalender, 24 Stunden"><div class="time-grid" style="grid-template-columns:${grid.template};min-width:${grid.minimum}px;--hour-size:${theme.calendarHourSize}px;--calendar-total:${scale.total}px">${headers}${allDay}${axis}${columns}</div></div>`;
 }
 function taskRow(task, date, compact = false) {
   const done = !!completion(task, date), repeats = { daily: 'Täglich', weekdays: 'Mo–Fr', weekly: 'Wöchentlich', none: 'Einmalig' };
-  return `<div class="todo-row ${done ? 'done' : ''}" ${compact || done ? '' : `draggable="true" data-drag-kind="task" data-drag-id="${task.id}" data-drag-rev="${task._rev}"`}>${!compact && !done ? `<button class="drag-handle" data-drag-handle aria-label="${E(task.title)} verschieben">${I('menu')}</button>` : ''}<button class="check-button ${done ? 'checked' : ''}" data-complete="${task.id}" data-date="${date}" role="checkbox" aria-checked="${done}" aria-label="${E(task.title)} ${done ? 'wieder öffnen' : 'abhaken'}">${done ? I('check') : ''}</button>${recordSymbols(task, 'tasks')}<div class="spacer"><div class="todo-title">${E(task.title)}</div><div class="todo-detail">${E(member(task.memberId)?.name || 'Allgemein')}${compact ? '' : ` · ${repeats[task.repeat]}`}</div></div>${task.points ? `<span class="points-tag">${I('star')}${task.points}</span>` : ''}${compact ? avatar(task.memberId) : iconBtn('Aufgabe bearbeiten', 'edit-task', 'edit', `data-edit="tasks" data-id="${task.id}"`)}</div>`;
+  return `<div class="todo-row ${done ? 'done' : ''}" ${compact || done ? '' : `draggable="true" data-drag-kind="task" data-drag-id="${task.id}" data-drag-rev="${task._rev}"`}>${!compact && !done ? `<button class="drag-handle" data-drag-handle aria-label="${E(task.title)} verschieben">${I('menu')}</button>` : ''}<button class="check-button ${done ? 'checked' : ''}" data-complete="${task.id}" data-date="${date}" role="checkbox" aria-checked="${done}" aria-label="${E(task.title)} ${done ? 'wieder öffnen' : 'abhaken'}">${done ? I('check') : ''}</button>${recordSymbols(task, 'tasks')}<div class="spacer"><div class="todo-title">${E(task.title)}</div><div class="todo-detail">${E(member(task.memberId)?.name || 'Gemeinsam')}${compact ? '' : ` · ${repeats[task.repeat]}`}</div></div>${task.points ? `<span class="points-tag">${I('star')}${task.points}</span>` : ''}${compact ? avatar(task.memberId) : iconBtn('Aufgabe bearbeiten', 'edit-task', 'edit', `data-edit="tasks" data-id="${task.id}"`)}</div>`;
+}
+function taskProgress(tasks, date) {
+  const total = tasks.length, done = tasks.filter(task => completion(task, date)).length;
+  return { total, done, percent: total ? Math.round(done / total * 100) : 0 };
+}
+function progressBar(done, total, label, css = '') {
+  return `<progress class="family-progress ${css}" value="${done}" max="${total || 1}" aria-label="${E(label)}">${done} von ${total}</progress>`;
+}
+function memberProgress(person, date) {
+  const tasks = S.tasks.filter(task => task.memberId === person.id && due(task, date));
+  const { total, done } = taskProgress(tasks, date), points = S.points[person.id]?.available || 0;
+  const reward = [...S.rewards].sort((a, b) => a.cost - b.cost)[0];
+  return `<button class="person-progress ${total && done === total ? 'all-done' : ''} ${filter === person.id ? 'selected' : ''}" data-filter="${person.id}" style="${personStyle(person.id)}" aria-pressed="${filter === person.id}" aria-label="${E(person.name)}, ${done} von ${total} Aufgaben geschafft, ${points} Punkte. Aufgaben anzeigen.">
+    <span class="person-progress-top">${avatar(person.id, 'large')}<strong>${E(person.name)}</strong><span class="person-stars">⭐ ${points}</span></span>
+    <span class="person-progress-count">${total ? `<b>${done} von ${total}</b> geschafft ${done === total ? '🎉' : ''}` : 'Heute noch keine Aufgaben'}</span>
+    ${progressBar(done, total, `${person.name}: ${done} von ${total} Aufgaben geschafft`)}
+    <span class="person-next-reward">${reward ? points >= reward.cost ? '🎁 Eine Belohnung ist bereit!' : `🎁 Noch ${reward.cost - points} Punkte: ${E(reward.title)}` : 'Kleine Schritte, große Freude.'}</span>
+  </button>`;
 }
 function homePage() {
-  const date = S.serverDate, tasks = visibleTasks(date), complete = tasks.filter(t => completion(t, date)).length;
-  const todayRecipe = recipeFor(date), todayMeal = meal(date);
+  const date = S.serverDate, tasks = visibleTasks(date), events = visibleEvents(date), workdays = visibleWorkdays(date);
+  const { total, done, percent } = taskProgress(tasks, date);
+  const orderedTasks = [...tasks].sort((a, b) => Number(!!completion(a, date)) - Number(!!completion(b, date)));
+  const people = S.members.filter(person => !filter || person.id === filter);
+  const todayRecipe = recipeFor(date), todayMeal = meal(date), note = S.notes.find(item => item.pinned) || S.notes[0];
   const headingDate = ds(date).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const openShopping = S.items.filter(i => i.listId === 'shopping' && !i.checked).length;
-  return `${pageHead('Alles für eure Woche.', headingDate, `<button class="button primary" data-edit="events">${I('plus')}<span>Termin</span></button>`)}<div class="summary-row"><div class="summary-card"><div class="summary-icon">${I('calendar')}</div><div><strong>${visibleEvents(date).length}</strong><span>Termine heute</span></div><span class="summary-hint">Euer Tag im Blick</span></div><div class="summary-card"><div class="summary-icon orange">${I('tasks')}</div><div><strong>${complete}<span style="display:inline;font-size:1rem"> / ${tasks.length}</span></strong><span>Aufgaben erledigt</span></div><span class="summary-hint">Schritt für Schritt</span></div><div class="summary-card"><div class="summary-icon green">${I('lists')}</div><div><strong>${openShopping}</strong><span>Auf der Einkaufsliste</span></div><span class="summary-hint">Für euren Einkauf</span></div></div><div class="panel"><div class="panel-head"><div class="flex">${I('calendar')}<h2>Euer Wochenkalender</h2></div><div class="week-toolbar"><span class="week-caption">${weekCaption(cursor)}</span><div class="day-switch">${iconBtn('Vorherige Woche', 'prev', 'left')}${iconBtn('Nächste Woche', 'next', 'right')}</div><button class="panel-link" data-nav="calendar">Öffnen</button></div></div>${weekGrid(cursor, true)}</div><div class="home-grid"><section class="panel"><div class="panel-head"><div class="flex">${I('tasks')}<h2>Heute zu erledigen</h2><span class="tag orange">${tasks.length - complete} offen</span></div><button class="panel-link" data-nav="tasks">Alle Aufgaben</button></div><div class="panel-body">${tasks.length ? `<div class="flex between small muted"><span>${complete} von ${tasks.length} geschafft</span><span>${Math.round(complete / tasks.length * 100)} %</span></div><div class="mini-progress" style="margin:10px 0 4px"><div style="width:${complete / tasks.length * 100}%"></div></div>${tasks.slice(0, 7).map(t => taskRow(t, date, true)).join('')}` : empty('Alles frei für heute', 'Legt eine Aufgabe oder Routine für eure Familie an.', 'tasks', btn('Aufgabe hinzufügen', 'new-task', 'plus', 'subtle', 'data-edit="tasks"'))}</div></section><div class="home-side stack"><section class="panel meal-preview"><div class="panel-head"><div class="flex">${I('food')}<h2>Was gibt’s heute?</h2></div><button class="panel-link" data-nav="meals">Wochenplan</button></div><div class="panel-body">${todayRecipe ? `<span class="meal-label">${E(todayRecipe.category)}</span><h3>${E(todayRecipe.title)}</h3><div class="meal-meta"><span>${I('clock')}${todayRecipe.minutes} Min.</span><span>${I('people')}${todayMeal.servings} Portionen</span></div><button class="button" data-recipe="${todayRecipe.id}">${I('book')}Zum Rezept</button>` : `<h3>Heute noch nichts geplant</h3><p class="small muted">Sucht gemeinsam etwas Leckeres aus.</p><button class="button" data-action="plan-meal" data-date="${date}">${I('plus')}Essen auswählen</button>`}</div></section>${S.notes.length ? `<section class="panel"><div class="panel-body"><div class="flex between"><h3>${E((S.notes.find(n => n.pinned) || S.notes[0]).title)}</h3>${I('pin')}</div><div class="note-preview">${E((S.notes.find(n => n.pinned) || S.notes[0]).body.slice(0, 260))}</div><button class="panel-link" data-nav="notes">Unsere Notizen</button></div></section>` : ''}</div></div>`;
+  const openShopping = S.items.filter(item => item.listId === 'shopping' && !item.checked).length;
+  return `${pageHead('Unser Tag', headingDate, `<button class="button primary" data-edit="events" data-date="${date}">${I('plus')}Termin hinzufügen</button>`)}
+    <section class="family-welcome" aria-label="Unser heutiger Fortschritt">
+      <div><span class="welcome-kicker">${E(S.settings.familyName)}</span><h2>${filter ? `Hallo ${E(member(filter)?.name || '')}!` : 'Ein Tag. Viele kleine Erfolge.'}</h2><p>${total && done === total ? 'Alles geschafft! Jetzt ist Zeit für etwas Schönes.' : 'Termine im Blick. Aufgaben gemeinsam schaffen. Zeit füreinander.'}</p></div>
+      <div class="welcome-achievement"><span class="welcome-sun" aria-hidden="true">${total && done === total ? '🎉' : '☀️'}</span><div><strong>${done}<span> / ${total}</span></strong><span>Aufgaben geschafft</span>${progressBar(done, total, `${done} von ${total} Aufgaben geschafft`)}<small>${total ? percent + ' % · Schritt für Schritt' : 'Euer Tag hat noch Platz'}</small></div></div>
+    </section>
+    <section class="family-progress-section" aria-labelledby="family-progress-title"><div class="family-section-heading"><h2 id="family-progress-title">So läuft unser Tag</h2><span>Name antippen · eigenen Fortschritt sehen</span></div><div class="family-progress-grid">${people.map(person => memberProgress(person, date)).join('')}</div></section>
+    <div class="family-today-grid">
+      <section class="panel today-tasks"><div class="panel-head"><div><span class="section-kicker">✅ Schritt für Schritt</span><h2>${filter ? 'Deine Aufgaben heute' : 'Unsere Aufgaben heute'}</h2></div><span class="task-count-badge">${total - done} offen</span></div><div class="panel-body"><p class="task-tap-hint">Fertig? Einmal auf die Aufgabe tippen.</p><div class="today-task-list">${orderedTasks.slice(0, 6).map(task => assignedTaskTile(task, date)).join('') || `<div class="friendly-empty"><span aria-hidden="true">🌈</span><h3>Heute ist noch Platz.</h3><p>Eine kleine Aufgabe hinzufügen und gemeinsam loslegen.</p><button class="button" data-edit="tasks">${I('plus')}Aufgabe hinzufügen</button></div>`}</div><button class="panel-link all-tasks-link" data-nav="tasks">${total > 6 ? `Alle ${total} Aufgaben ansehen` : 'Zu unseren Aufgaben'} ${I('right')}</button></div></section>
+      <section class="panel today-calendar"><div class="panel-head"><div><span class="section-kicker">🗓️ Das steht an</span><h2>Unsere Termine heute</h2></div><button class="panel-link" data-nav="calendar">Kalender ${I('right')}</button></div><div class="panel-body">${compactDayMarker('workday', date, workdays)}${events.length ? `<div class="today-event-list">${events.map(event => eventCard(event)).join('')}</div>` : `<div class="friendly-empty"><span aria-hidden="true">🌤️</span><h3>Keine festen Termine.</h3><p>Zeit zum Spielen, Ausruhen oder für etwas Spontanes.</p></div>`}${scheduleDayLabels(date)}</div></section>
+    </div>
+    <div class="family-extras-grid">
+      <section class="panel meal-preview"><div class="panel-head"><div class="flex"><span aria-hidden="true">🍽️</span><h2>Was gibt’s heute?</h2></div></div><div class="panel-body">${todayRecipe ? `<span class="meal-label">${E(todayRecipe.category)}</span><h3>${E(todayRecipe.title)}</h3><div class="meal-meta"><span>${I('clock')}${todayRecipe.minutes} Min.</span><span>${I('people')}${todayMeal.servings} Portionen</span></div><button class="button" data-recipe="${todayRecipe.id}">${I('book')}Zum Rezept</button>` : `<h3>Worauf habt ihr Lust?</h3><p class="small muted">Sucht gemeinsam etwas Leckeres aus.</p><button class="button" data-action="plan-meal" data-date="${date}">${I('plus')}Essen auswählen</button>`}</div></section>
+      <section class="panel shopping-preview"><div class="panel-head"><div class="flex"><span aria-hidden="true">🛒</span><h2>Unser Einkauf</h2></div></div><div class="panel-body"><span class="shopping-total">${openShopping}</span><p>${openShopping === 1 ? 'Sache steht auf dem Einkaufszettel.' : 'Sachen stehen auf dem Einkaufszettel.'}</p><button class="button" data-nav="lists">Einkaufsliste öffnen ${I('right')}</button></div></section>
+      ${note ? `<section class="panel family-note"><div class="panel-head"><div class="flex"><span aria-hidden="true">💌</span><h2>Für uns alle</h2></div></div><div class="panel-body"><h3>${E(note.title)}</h3><p class="note-preview">${E(note.body.slice(0, 220))}</p><button class="panel-link" data-nav="notes">Unsere Notizen ${I('right')}</button></div></section>` : ''}
+    </div>
+    <details class="panel weekly-overview" ${disclosure('weekly-overview')}><summary><span>🗓️ Die ganze Woche ansehen</span><span class="small muted">${weekCaption(date)}</span></summary>${weekGrid(date, true)}</details>`;
 }
 function calendarPage() {
-  const modes = [['week', 'Woche'], ['month', 'Monat'], ['year', 'Jahr'], ['agenda', 'Liste']];
+  const modes = [['days', 'Woche'], ['week', 'Uhrzeiten'], ['month', 'Monat'], ['year', 'Jahr'], ['agenda', 'Liste']];
   const caption = calendarMode === 'year' ? cursor.slice(0, 4) : calendarMode === 'month' ? ds(cursor).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }) : `${fullDate(monday(cursor))} – ${fullDate(addDays(monday(cursor), 6))}`;
   let content;
-  if (calendarMode === 'week') content = timeWeek(cursor);
+  if (calendarMode === 'days') content = weekGrid(cursor, true);
+  else if (calendarMode === 'week') content = timeWeek(cursor);
   else if (calendarMode === 'year') content = yearCalendar();
   else if (calendarMode === 'month') {
     const first = cursor.slice(0, 8) + '01', start = monday(first);
     content = `<div class="month-scroll"><div class="month-grid">${Array.from({ length: 7 }, (_, i) => `<div class="month-label">${fullWeekday(addDays(start, i))}</div>`).join('')}${Array.from({ length: 42 }, (_, i) => monthCell(addDays(start, i))).join('')}</div></div>`;
   } else content = Array.from({ length: 7 }, (_, i) => {
     const date = addDays(monday(cursor), i);
-    return `<section class="agenda-day">${dayHeading(date)}${compactDayMarker('workday', date)}${visibleEvents(date).length ? visibleEvents(date).map(e => `<button class="agenda-event" data-edit="${e.birthdayId ? 'birthdays' : e.calendarEntryId ? 'calendarEntries' : 'events'}" data-id="${e.birthdayId || e.id}"><span class="agenda-time">${e.allDay ? 'Ganztägig' : E(e.startTime) + (e.startOnly ? ' · ohne Ende' : '–' + E(e.endTime))}</span><span class="agenda-line" style="${eventStyle(e)}"></span><span class="spacer"><strong>${recordSymbols(e)}${E(e.title)}</strong><span class="todo-detail" style="display:block">${E(eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle')}${e.location ? ' · ' + E(e.location) : ''}</span></span>${e.birthdayId ? '<span class="tag">Geburtstag</span>' : ''}</button>`).join('') : '<p class="small muted">Keine Termine.</p>'}${scheduleDayLabels(date)}</section>`;
+    return `<section class="agenda-day">${dayHeading(date)}${compactDayMarker('workday', date)}${visibleEvents(date).length ? visibleEvents(date).map(e => `<button class="agenda-event" data-edit="${e.birthdayId ? 'birthdays' : e.calendarEntryId ? 'calendarEntries' : 'events'}" data-id="${e.birthdayId || e.id}"><span class="agenda-time">${E(eventTimeLabel(e))}</span><span class="agenda-line" style="${eventStyle(e)}"></span><span class="spacer"><strong>${recordSymbols(e)}${E(e.title)}</strong><span class="todo-detail" style="display:block">${E(eventMembers(e).map(id => member(id)?.name).filter(Boolean).join(', ') || 'Alle')}${e.location ? ' · ' + E(e.location) : ''}</span></span>${e.birthdayId ? '<span class="tag">Geburtstag</span>' : ''}</button>`).join('') : '<p class="small muted">Keine Termine.</p>'}${scheduleDayLabels(date)}</section>`;
   }).join('');
-  return `${pageHead('Unser Kalender', 'Platz für euren Tag. Zeit für eure Familie.', `${btn('Ferien, Feiertage & Import', 'calendar-data', 'calendar')}<button class="button primary" data-edit="events">${I('plus')}<span>Termin</span></button>`)}<div class="panel calendar-panel"><div class="panel-head"><div class="week-toolbar">${iconBtn('Vorheriger Zeitraum', 'prev', 'left')}<span class="week-caption">${E(caption)}</span>${iconBtn('Nächster Zeitraum', 'next', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><div class="view-switch">${modes.map(([id, label]) => `<button data-mode="${id}" class="${calendarMode === id ? 'active' : ''}">${label}</button>`).join('')}</div></div>${calendarDataSwitches()}${scheduleToggles()}${content}</div>${S.pendingSync.length ? '<p class="small muted section-gap">Google: Änderungen warten auf Synchronisierung.</p>' : ''}`;
+  return `${pageHead('Unser Kalender', 'Eine klare Woche für die ganze Familie.', `<button class="button primary" data-edit="events">${I('plus')}Termin hinzufügen</button>`)}<div class="panel calendar-panel"><div class="panel-head"><div class="week-toolbar">${iconBtn('Vorheriger Zeitraum', 'prev', 'left')}<span class="week-caption">${E(caption)}</span>${iconBtn('Nächster Zeitraum', 'next', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><div class="view-switch" aria-label="Kalenderansicht">${modes.map(([id, label]) => `<button data-mode="${id}" aria-pressed="${calendarMode === id}" class="${calendarMode === id ? 'active' : ''}">${label}</button>`).join('')}</div></div><details class="calendar-options" ${disclosure('calendar-options', !!scheduleGuide)}><summary>Kalender & Stundenpläne auswählen</summary>${calendarDataSwitches()}${scheduleToggles()}<div class="calendar-import-link">${btn('Ferien, Feiertage & Import', 'calendar-data', 'calendar')}</div></details>${content}</div>${S.pendingSync.length ? '<p class="small muted section-gap">Google: Änderungen warten auf Synchronisierung.</p>' : ''}`;
 }
 function birthdaysPage() {
   const upcoming = (S.birthdays || []).filter(b => (!filter || b.memberId === filter || !b.memberId) && b.name.toLocaleLowerCase('de').includes(birthdaySearch.trim().toLocaleLowerCase('de')))
@@ -494,9 +555,23 @@ function birthdaysPage() {
 }
 
 function tasksPage() {
-  const tasks = S.tasks.filter(t => due(t, cursor) && (taskMode === 'all' || taskMode === 'routines' && t.repeat !== 'none' || taskMode === 'todos' && t.repeat === 'none'));
-  const groups = [{ id: '', name: 'Allgemein' }, ...S.members].filter(group => !filter || group.id === filter);
-  return `${pageHead('Gemeinsam schaffen wir das.', 'Vorlagen ziehen oder bei einer Person nach Name oder Nummer auswählen.', `<button class="button" data-edit="tasks">${I('plus')}Einzelaufgabe / Routine</button><button class="button primary" data-edit="taskTemplates">${I('plus')}Aufgabenvorlage</button>`)}<div class="flex between wrap section-gap"><div class="week-toolbar">${iconBtn('Vorheriger Tag', 'prev-day', 'left')}<strong>${fullWeekday(cursor)}, ${fullDate(cursor)}</strong>${iconBtn('Nächster Tag', 'next-day', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><label class="task-layout-control">Personen pro Reihe<select id="task-columns" aria-label="Personen pro Reihe">${['auto','2','3','4'].map(value => `<option value="${value}" ${taskColumns === value ? 'selected' : ''}>${value === 'auto' ? 'Automatisch' : value}</option>`).join('')}</select></label><div class="view-switch">${[['all', 'Alle'], ['todos', 'To-dos'], ['routines', 'Routinen']].map(([id, name]) => `<button data-task-mode="${id}" class="${taskMode === id ? 'active' : ''}">${name}</button>`).join('')}</div></div><div class="task-workspace"><aside class="panel template-library" aria-label="Wiederverwendbare Aufgaben"><div class="template-heading"><strong>Vorlagen</strong>${iconBtn('Aufgabenvorlagen bearbeiten', 'edit-templates', 'edit', `aria-pressed="${templateEditing}"`)}</div><div class="template-icons">${(S.taskTemplates || []).map(template => templateTile(template)).join('') || '<p class="small muted">Erste Vorlage mit + anlegen.</p>'}</div>${iconBtn('Aufgabenvorlage anlegen', 'new-template', 'plus', 'data-edit="taskTemplates"')}</aside><div class="task-board responsive-board" data-columns="${E(taskColumns)}">${groups.map(group => `<section class="panel task-column" data-task-drop="${group.id}"><div class="task-column-head" style="${personStyle(group.id)}"><div class="spacer"><h2>${E(group.name)}</h2><p>${group.id ? `${S.points[group.id].available} Punkte` : 'Gemeinsame Aufgaben'}</p></div></div><div class="template-combobox" data-template-for="${group.id}"><label><span class="sr-only">Aufgabe für ${E(group.name)} nach Name oder Nummer auswählen</span><input type="search" data-template-search="${group.id}" placeholder="Aufgabe / Nr., z. B. 20" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="template-options-${group.id || 'all'}"></label><div class="template-results" id="template-options-${group.id || 'all'}" hidden></div></div><div class="task-column-body task-tiles">${tasks.filter(task => (task.memberId || '') === group.id).map(task => assignedTaskTile(task, cursor)).join('') || '<p class="task-empty">Hier ist Platz für Aufgaben.</p>'}</div></section>`).join('')}</div></div><p class="field-hint section-gap">Einmal tippen: Titel. Doppelt tippen: erledigen oder wieder öffnen. Gedrückt halten oder Rechtsklick: bearbeiten / entfernen. Vorlagen bleiben beim Verteilen erhalten.</p>`;
+  const tasks = S.tasks.filter(task => due(task, cursor) && (taskMode === 'all' || taskMode === 'routines' && task.repeat !== 'none' || taskMode === 'todos' && task.repeat === 'none'));
+  const people = [...S.members].sort((a, b) => Number(b.role === 'child') - Number(a.role === 'child'));
+  const groups = [...people, { id: '', name: 'Gemeinsam' }].filter(group => !filter || group.id === filter);
+  return `${pageHead('Unsere Aufgaben', 'Deine Aufgabe ist fertig? Einmal antippen – und dein Fortschritt wächst.', `<button class="button primary" data-edit="tasks" data-date="${cursor}" data-member="${filter}">${I('plus')}Aufgabe hinzufügen</button>`)}
+    <div class="task-day-toolbar"><div class="week-toolbar">${iconBtn('Vorheriger Tag', 'prev-day', 'left')}<strong>${fullWeekday(cursor)}, ${fullDate(cursor)}</strong>${iconBtn('Nächster Tag', 'next-day', 'right')}${btn('Heute', 'today', '', 'subtle')}</div><div class="view-switch" aria-label="Aufgaben filtern">${[['all', 'Alle Aufgaben'], ['todos', 'Einmalig'], ['routines', 'Routinen']].map(([id, name]) => `<button data-task-mode="${id}" aria-pressed="${taskMode === id}" class="${taskMode === id ? 'active' : ''}">${name}</button>`).join('')}</div></div>
+    <div class="task-board responsive-board friendly-task-board" data-columns="${E(taskColumns)}">${groups.map(group => {
+      const assigned = tasks.filter(task => (task.memberId || '') === group.id);
+      const { total, done } = taskProgress(assigned, cursor);
+      const ordered = [...assigned].sort((a, b) => Number(!!completion(a, cursor)) - Number(!!completion(b, cursor)));
+      return `<section class="panel task-column" data-task-drop="${group.id}" style="${personStyle(group.id)}">
+        <div class="task-column-head">${group.id ? avatar(group.id, 'large') : '<span class="shared-task-icon" aria-hidden="true">🤝</span>'}<div class="spacer"><h2>${E(group.name)}</h2><p>${total ? `${done} von ${total} geschafft${done === total ? ' 🎉' : ''}` : 'Bereit für kleine Erfolge'}</p></div>${group.id ? `<span class="person-stars">⭐ ${S.points[group.id]?.available || 0}</span>` : ''}</div>
+        <div class="task-column-progress">${progressBar(done, total, `${group.name}: ${done} von ${total} Aufgaben geschafft`)}</div>
+        <div class="task-column-body task-tiles">${ordered.map(task => assignedTaskTile(task, cursor)).join('') || '<div class="friendly-empty task-empty"><span aria-hidden="true">🌱</span><p>Hier ist noch Platz für eine kleine Aufgabe.</p></div>'}</div>
+        <details class="task-add-options" ${disclosure('task-add-' + group.id)}><summary>${I('plus')}Aufgabe für ${E(group.name)} hinzufügen</summary><div class="template-combobox" data-template-for="${group.id}"><label><span class="small">Vorlage nach Name oder Nummer suchen</span><input type="search" data-template-search="${group.id}" placeholder="Zum Beispiel Zimmer aufräumen" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="template-options-${group.id || 'all'}"></label><div class="template-results" id="template-options-${group.id || 'all'}" hidden></div></div><button class="button" data-edit="tasks" data-member="${group.id}" data-date="${cursor}">${I('plus')}Eigene Aufgabe anlegen</button></details>
+      </section>`;
+    }).join('')}</div>
+    <details class="panel task-management" ${disclosure('task-management', templateEditing)}><summary><span>${I('settings')}Vorlagen & Ansicht verwalten</span><span class="small muted">Für die Planung</span></summary><div class="panel-body"><div class="flex between wrap"><div class="flex wrap"><button class="button primary" data-edit="taskTemplates">${I('plus')}Aufgabenvorlage anlegen</button><button class="button" data-action="edit-templates" aria-pressed="${templateEditing}">${I('edit')}${templateEditing ? 'Bearbeiten beenden' : 'Vorlagen bearbeiten'}</button></div><label class="task-layout-control">Personen pro Reihe<select id="task-columns" aria-label="Personen pro Reihe">${['auto','2','3','4'].map(value => `<option value="${value}" ${taskColumns === value ? 'selected' : ''}>${value === 'auto' ? 'Automatisch' : value}</option>`).join('')}</select></label></div><p class="small muted section-gap">Vorlage antippen und eine Person auswählen. Zum Verschieben einer Aufgabe den Griff neben der Karte ziehen.</p><div class="template-icons friendly-templates">${(S.taskTemplates || []).map(template => templateTile(template)).join('') || '<p class="small muted">Legt eure erste Vorlage an, um Aufgaben leichter zu verteilen.</p>'}</div></div></details>`;
 }
 function rewardsPage() {
   const selected = filter || S.members[0]?.id;
@@ -583,7 +658,7 @@ function editRecord(kind, id = '', defaults = {}) {
   else if (kind === 'birthdays') {
     fields = `${field('Name', 'name', record.name, 'text', 'required maxlength="100"', true)}${field('Tag', 'day', record.day || '', 'number', 'required min="1" max="31" step="1"')}${selectField('Monat', 'month', record.month || '', [['', 'Bitte auswählen'], ...Array.from({ length: 12 }, (_, i) => [String(i + 1), ds(`2000-${String(i + 1).padStart(2, '0')}-01`).toLocaleDateString('de-DE', { month: 'long' })])])}${field('Geburtsjahr (optional)', 'birthYear', record.birthYear || '', 'number', `min="1" max="${S.serverDate.slice(0, 4)}" step="1"`)}${selectField('Zuordnung (optional)', 'memberId', record.memberId || '', [['', 'Keine Zuordnung'], ...S.members.map(m => [m.id, m.name])])}${selectField('29. Februar in Nicht-Schaltjahren', 'leapDay', record.leapDay || 'mar1', [['mar1', 'Am 1. März anzeigen'], ['feb28', 'Am 28. Februar anzeigen']], true)}${textareaField('Notizen', 'notes', record.notes, 'rows="3" maxlength="2000"')}<p class="field-hint full">Erscheint automatisch jedes Jahr im Kalender. Mit Geburtsjahr wird auch das Alter angezeigt.</p>`;
   } else if (kind === 'taskTemplates') fields = `${taskImageField(record)}${emojiField(record.emoji)}${field('Titel der Aufgabe', 'title', record.title, 'text', required, true)}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${field('Aufgabennummer (optional)', 'code', record.code ?? '', 'number', 'min="1" max="999999" step="1"')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}<p class="field-hint full">Diese Vorlage bleibt in der Bibliothek. Änderungen gelten für neue Verteilungen.</p>`;
-  else if (kind === 'tasks') fields = `${taskImageField(record)}${emojiField(record.emoji)}${field('Titel der Aufgabe', 'title', record.title, 'text', required, true)}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${selectField('Zuordnen', 'memberId', old ? record.memberId || '' : record.memberId || '', [['', 'Allgemein'], ...S.members.map(m => [m.id, m.name])])}${selectField('Wiederholung', 'repeat', record.repeat || 'none', [['none', 'Einmalig'], ['daily', 'Täglich'], ['weekdays', 'Montag bis Freitag'], ['weekly', 'Wöchentlich']])}${field('Fällig / erster Tag', 'startDate', record.startDate || S.serverDate, 'date')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}`;
+  else if (kind === 'tasks') fields = `${taskImageField(record)}${emojiField(record.emoji)}${field('Titel der Aufgabe', 'title', record.title, 'text', required, true)}${field('Punkte', 'points', record.points || 0, 'number', 'min="0" max="1000" step="1" required')}${selectField('Zuordnen', 'memberId', old ? record.memberId || '' : record.memberId || '', [['', 'Gemeinsam'], ...S.members.map(m => [m.id, m.name])])}${selectField('Wiederholung', 'repeat', record.repeat || 'none', [['none', 'Einmalig'], ['daily', 'Täglich'], ['weekdays', 'Montag bis Freitag'], ['weekly', 'Wöchentlich']])}${field('Fällig / erster Tag', 'startDate', record.startDate || S.serverDate, 'date')}${textareaField('Beschreibung', 'description', record.description, 'rows="3" maxlength="2000"')}`;
   else if (kind === 'recipes') fields = `${recipeImageField(record)}${field('Rezeptname', 'title', record.title, 'text', required, true)}${field('Portionen', 'servings', record.servings || 4, 'number', 'min="1" max="100" step="1" required')}${field('Zeit in Minuten', 'minutes', record.minutes ?? 30, 'number', 'min="0" max="1440" step="1" required')}${field('Kategorie', 'category', record.category || 'Hauptgericht', 'text', 'maxlength="60"', true)}${textareaField('Zutaten · eine pro Zeile', 'ingredientsText', (record.ingredients || []).map(i => `${i.quantity} | ${i.unit} | ${i.name} | ${i.category}`).join('\n'), 'rows="5" placeholder="500 | g | Nudeln | Vorrat"', 'Menge | Einheit | Zutat | Kategorie. Dezimalzahlen mit Punkt oder Komma sind möglich.')}${textareaField('Zubereitung', 'instructions', record.instructions, 'rows="5" maxlength="15000"')}${field('Link zur Quelle (optional)', 'sourceUrl', record.sourceUrl, 'url', '', true)}`;
   else if (kind === 'members') fields = `${memberImageField(record)}${field('Name', 'name', record.name, 'text', 'required maxlength="50"', true)}${field('Farbe', 'color', record.color || '#6366f1', 'color', 'required')}${selectField('Anzeige', 'role', record.role || 'adult', [['adult', 'Erwachsen'], ['child', 'Kind']])}`;
   else if (kind === 'lists') fields = field('Name der Liste', 'title', record.title, 'text', required, true);
@@ -680,7 +755,7 @@ document.addEventListener('click', async event => {
   const target = event.target.closest('button,a,[data-slide]'); if (!target) return;
   if (target.dataset.shoppingItem) { await tapShoppingItem(target, event.detail === 0); return; }
   if (Date.now() < suppressTaskClickUntil && target.dataset.taskTile) return;
-  if (target.dataset.taskTile) { await tapTask(target); return; }
+  if (target.dataset.taskTile) { if (!(event.detail > 1)) await tapTask(target, event.detail === 0); return; }
   if (target.dataset.template) { if (templateEditing) editRecord('taskTemplates', target.dataset.template); else openTemplateAssign(target.dataset.template); return; }
   if (target.dataset.assignTemplate) { if (busy) return; busy = true; try { await assignTemplateTo(target.dataset.assignTemplate, target.dataset.member); } catch (error) { toast(error.message, true); } finally { busy = false; } return; }
   if (target.dataset.scheduleToggle) return;
@@ -709,6 +784,7 @@ document.addEventListener('click', async event => {
     if (action === 'collapse-nav') { navCollapsed = !navCollapsed; localStorage.setItem('navCollapsed', String(navCollapsed)); render(); }
     else if (action === 'edit-nav') { navEditing = !navEditing; if (navEditing) navCollapsed = false; render(); }
     else if (action === 'edit-templates') { templateEditing = !templateEditing; render(); }
+    else if (action === 'task-options') taskActions(target.dataset.id, target.dataset.date);
     else if (action === 'shopping-mode') toggleShoppingMode();
     else if (action === 'duplicate-event') openEventDuplicate();
     else if (action === 'duplicate-event-back') editRecord(editing.sourceKind, editing.old.id);
@@ -1220,6 +1296,8 @@ function requireLogin(version) {
   returnToOrganizer(); editor.close(); editor.innerHTML = ''; confirmDialog.close(); confirmDialog.innerHTML = '';
   resolveConfirmation?.(false); resolveConfirmation = null; editing = null; pointerDrag = null; nativeDrag = null; filter = ''; taskBoard = 'all';
   lastShoppingTap = { id: '', listId: '', at: 0 };
+  lastTaskTap = { id: '', date: '', at: 0 };
+  openDisclosures.clear();
   for (const url of [taskPreviewUrl, memberPreviewUrl, recipePreviewUrl, backgroundPreviewUrl]) if (url) URL.revokeObjectURL(url);
   taskPreviewUrl = memberPreviewUrl = recipePreviewUrl = backgroundPreviewUrl = ''; clearEventPreview();
   updaterState = null; status = { ...status, configured: true, authenticated: false, version: version || status?.version || VERSION };

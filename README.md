@@ -2,9 +2,9 @@
 
 Eine eigenständige, deutschsprachige Familienzentrale zum Selbsthosten. Funktional an den beschriebenen Familienkalender angelehnt; eigener Quellcode, eigenes Design und keine Abhängigkeit von Dæly. Keine übernommenen Markenassets oder proprietären Programmteile.
 
-**Version 0.8.2 ergänzt das Duplizieren von Terminen mit Auswahl des Zieltags und einen Einkaufsmodus: Lebensmittel per Doppeltipp abhaken, durchstreichen und wieder öffnen.** Nach Updates werden alle Geräte abgemeldet; nach dem Anmelden erscheint die Änderungsübersicht. Die Familienzentrale ist für einen privaten Haushalt gedacht. Familiengeräte verwenden dasselbe Familienpasswort; manuelle Punkte und Software-Updates benötigen zusätzlich das Elternpasswort. Eine native App folgt später.
+**Version 0.8.3 vereinfacht die Familienansicht: Heute mit persönlichem Fortschritt und Punkten, dauerhaft beschriftete Aufgaben zum Erledigen mit einem Tipp und eine klare Wochenübersicht. Nachtschichten erscheinen in Übersichten nur am Starttag; im Stundenraster sind Fortsetzungen ausdrücklich markiert.** Nach Updates werden alle Geräte abgemeldet; nach dem Anmelden erscheint die Änderungsübersicht. Die Familienzentrale ist für einen privaten Haushalt gedacht. Familiengeräte verwenden dasselbe Familienpasswort; manuelle Punkte und Software-Updates benötigen zusätzlich das Elternpasswort. Eine native App folgt später.
 
-**Bereits laufender Container ab 0.3.0?** **Einstellungen → Update** verwenden. Beim Wechsel auf 0.8.2 danach den Browser neu laden, mit dem Familienpasswort anmelden und die Änderungsübersicht lesen. Bei einem älteren Stand einmal den [vollständigen Update-Befehl](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) ausführen, um den Updatedienst einzurichten. Den Container-Ersteller nur für neue LXC verwenden. Bedienung: [PLANER.md](docs/PLANER.md).
+**Bereits laufender Container ab 0.3.0?** **Einstellungen → Update** verwenden. Beim Wechsel auf 0.8.3 danach den Browser neu laden, mit dem Familienpasswort anmelden und die Änderungsübersicht lesen. Bei einem älteren Stand einmal den [vollständigen Update-Befehl](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) ausführen, um den Updatedienst einzurichten. Den Container-Ersteller nur für neue LXC verwenden. Bedienung: [PLANER.md](docs/PLANER.md).
 
 ## Neuen Proxmox-LXC automatisch anlegen
 
@@ -83,7 +83,7 @@ Ein CT-Template enthält ein komplettes Linux-Dateisystem. Das Projekt-ZIP ist Q
 
 [Host-Skript ansehen](scripts/create-proxmox-lxc.sh) · [Host-Anleitung und Optionen](docs/PROXMOX.md) · [Betrieb, Updates und Sicherung im LXC](docs/LXC.md)
 
-Ferien/Feiertage und eigene Kalender unter **Kalender → Ferien, Feiertage & Import** verwalten. **Bundesland laden** bietet eine Vorschau nach Jahr und Person. **ICS-Datei importieren** übernimmt ausgewählte Kalendereinträge als lokale Momentaufnahme. Für Dienstpläne **Import als → Arbeitstage / Dienstplan** und die Person auswählen. Die Feiertagsfarbe steht unter **Einstellungen → Darstellung**. Anleitung: [PLANER.md](docs/PLANER.md#ferien-feiertage-und-kalenderimport).
+Ferien/Feiertage und eigene Kalender unter **Kalender → Kalender & Stundenpläne auswählen → Ferien, Feiertage & Import** verwalten. **Bundesland laden** bietet eine Vorschau nach Jahr und Person. **ICS-Datei importieren** übernimmt ausgewählte Kalendereinträge als lokale Momentaufnahme. Für Dienstpläne **Import als → Arbeitstage / Dienstplan** und die Person auswählen. Die Feiertagsfarbe steht unter **Einstellungen → Darstellung**. Anleitung: [PLANER.md](docs/PLANER.md#ferien-feiertage-und-kalenderimport).
 
 ## Schnell ausprobieren
 
@@ -100,17 +100,18 @@ Im Browser `http://localhost:8080` öffnen, Familiennamen, Mitglieder und ein Pa
 
 ## Enthaltene Funktionen
 
-| Bereich | Stand in 0.8.2 |
+| Bereich | Stand in 0.8.3 |
 |---|---|
-| Kalender | Wochen-, Monats-, Jahres- und Listenansicht; farbige Feiertagsflächen, kompakte Geburtstage und Arbeitstage; 24-Stunden-Raster mit wählbarer Verdichtung leerer Stunden und Tage; ausgeschriebene Tage und vollständige Daten; Termine nach Dauer, Überlappungen nebeneinander; Personenwahl mit Farbverlauf bei Mehrfachauswahl, Assistent für neue Termine und gemeinsames Bearbeitungsformular; Termine mit Zieldatum duplizieren; optionale Bild-/Emoji-Symbole; Standard- und eigene Farben für Alle; ganztägig, Zeitspanne oder feste Startzeit mit 15-Minuten-Ausblendung |
+| Kalender | Einfache Wochenübersicht (Standard), Stundenraster unter Uhrzeiten, Monats-, Jahres- und Listenansicht; Nachtschichten in Übersichten einmal am Starttag, Fortsetzungen im Stundenraster beschriftet; farbige Feiertagsflächen, kompakte Geburtstage und Arbeitstage; 24-Stunden-Raster mit wählbarer Verdichtung leerer Stunden und Tage; ausgeschriebene Tage und vollständige Daten; Termine nach Dauer, Überlappungen nebeneinander; Personenwahl mit Farbverlauf bei Mehrfachauswahl, Assistent für neue Termine und gemeinsames Bearbeitungsformular; Termine mit Zieldatum duplizieren; optionale Bild-/Emoji-Symbole; Standard- und eigene Farben für Alle; ganztägig, Zeitspanne oder feste Startzeit mit 15-Minuten-Ausblendung |
 | Geburtstage | Eigener Reiter; Name, Tag und Monat; optional Geburtsjahr und Person; jährliche Anzeige im Kalender als 🎂 Name mit optionalem Alter; Ersatzdatum für den 29. Februar wählbar |
 | Google Kalender | Mehrere Konten über OAuth; Kalenderauswahl und Personenzuordnung; importieren und Änderungen zurückschreiben; Wiederholungsversuche bei Verbindungsfehlern |
-| Aufgaben und Routinen | Allgemein und Bereiche für alle Personen; gemeinsamer Personenfilter im Header mit Punkten unter dem Namen; Drag-and-drop auf Spalten und Headerprofile, Touch-Griff und Zuordnungsdialog; optionales Aufgabenbild und Emoji-Auswahl; einmalig, täglich, werktags oder wöchentlich |
+| Aufgaben und Routinen | Dauerhaft beschriftete Bild-/Emoji-Karten mit Punkten, Erledigung mit einem Tipp, Fortschritt pro Person; Gemeinsam und Bereiche für alle Personen; gemeinsamer Personenfilter im Header mit Punkten unter dem Namen; Drag-and-drop auf Spalten und Headerprofile, Touch-Griff und Zuordnungsdialog; optionales Aufgabenbild und Emoji-Auswahl; einmalig, täglich, werktags oder wöchentlich |
 | Punkte und Belohnungen | Eigener Belohnungsreiter; Einlösen und Historie; manuelle Punkte mit Begründung und Elternpasswort; einmalige Gutschrift pro Erledigung |
 | Essen und Rezepte | Umschaltbare waagerechte/senkrechte Woche; Frühstück, Mittag und Abendbrot für jeden Tag; Rezepte per Drag-and-drop oder Bildkarten auswählen; Vorschaubilder aus Upload oder Import; Portionen, Zutaten, Zubereitung und Rezeptlink-Import |
 | Einkauf | Einkaufsmodus mit Doppeltipp zum Abhaken/Wiederöffnen und Durchstreichen, stabile Reihenfolge und Mengen; Zutaten skalieren und zusammenführen; erneut übernehmen ohne Verdopplung; manuelle Ergänzungen und Abhaken |
 | Listen und Notizen | Eigene Checklisten, Kategorien, Mengen und angeheftete Notizen |
 | Fotos | Nur auf dem Gerät gespeicherte Bilder; Container-Ordner und Upload; Netzwerk-Bilderliste; Immich-Alben; Diashow mit Uhr |
+| Heute und Navigation | Persönliche Fortschrittskarten, heutige Aufgaben und Termine, Punkte bis zur günstigsten Belohnung; Wochenübersicht aufklappbar; sechs Hauptbereiche und weitere unter Mehr entdecken |
 | Profile und Darstellung | Mittige Profile mit Initialen oder eigenen Bildern; größere Uhr; Hintergrundbild, acht anpassbare Farben und Kalenderdichte; gemeinsame Einstellungen und gesicherte Bilder |
 | Wetter | Anzeige neben der Uhr; verborgene Wetteransicht mit aktueller Lage, nächsten Stunden und 14 Tagen; bis zu acht gespeicherte Orte und auswählbarer Headerort |
 | Geräte | Responsive Weboberfläche; manueller Vollbildmodus; pro Browser einstellbarer Inaktivitätswechsel zum dunklen Ruhebildschirm oder Bilderrahmen, Berührung zum Zurückkehren; Wake Lock auf unterstützten HTTPS-Geräten |
@@ -133,7 +134,7 @@ Die vollständige Anleitung steht in [docs/LXC.md](docs/LXC.md). Ein unprivilegi
 3. `bash scripts/install-lxc.sh` ausführen; Debian-Pakete, Node.js 24 und der systemd-Dienst werden automatisch eingerichtet.
 4. `http://CONTAINER-IP:8080` öffnen und Familie einrichten.
 
-Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Anwendung und Update-Dienst starten nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf Proxmox gemeldet; 0.8.2 ist auf dem Zielsystem noch zu prüfen. Der [Update-Befehl vom Proxmox-Host](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) lädt den vollständigen neuen Stand in denselben Container.
+Der Installer unterstützt Debian 12/13 auf x86_64 und ARM64. Node.js kommt mit SHA-256-Prüfung vom offiziellen Downloadserver und erhält einen eigenen Laufzeitordner. Anwendung und Update-Dienst starten nach einem Container-Neustart automatisch. Für ein Update im neuen Projektstand dasselbe Skript erneut ausführen: `.env`, Daten und Fotos werden erhalten; vor dem Wechsel entsteht eine vollständige Updatesicherung. Bei einem fehlgeschlagenen Start stellt das Skript vorherigen Code, Laufzeit und Datenbank wieder her. Der Nutzer hat die erfolgreiche Erstinstallation von 0.1.2 auf Proxmox gemeldet; 0.8.3 ist auf dem Zielsystem noch zu prüfen. Der [Update-Befehl vom Proxmox-Host](docs/LXC.md#update-des-öffentlichen-projekts-vom-proxmox-host) lädt den vollständigen neuen Stand in denselben Container.
 
 Anschließend unter **Einstellungen → Elternpasswort** ein eigenes Passwort anlegen. **Update** startet Sicherung, Download und Installation im Hintergrund; bei Erfolg oder Fehler erscheint der Status dort. Der separate lokale Dienst arbeitet während des Anwendungsneustarts weiter. Details und Diagnose: [Updates über die Oberfläche](docs/LXC.md#updates-über-die-oberfläche).
 

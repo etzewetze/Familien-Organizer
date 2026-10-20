@@ -9,6 +9,34 @@ export function eventWindow(event, date) {
   return Number.isFinite(start) && Number.isFinite(end) && end > start ? { event, start, end } : null;
 }
 
+// Compact calendars count a night shift on the day it starts. The time grid
+// still uses eventWindow so the occupied hours after midnight remain visible.
+export function isOvernightEvent(event) {
+  return !event.allDay && !event.startOnly &&
+    Date.parse(event.endDate) - Date.parse(event.startDate) === 86400000 &&
+    minutesOf(event.endTime || '') < minutesOf(event.startTime || '');
+}
+
+export function eventOnDate(event, date, continuations = false) {
+  if (event.startDate > date || event.endDate < date) return false;
+  if (event.allDay) return true;
+  if (!eventWindow(event, date)) return false;
+  return continuations || !isOvernightEvent(event) || event.startDate === date;
+}
+
+export function eventTimeLabel(event, date = '', timeline = false) {
+  if (event.allDay) return 'Ganztägig';
+  if (event.startOnly) return `${event.startTime} · ohne Ende`;
+  const days = Math.round((Date.parse(event.endDate) - Date.parse(event.startDate)) / 86400000);
+  if (timeline && date > event.startDate) {
+    const end = date < event.endDate ? '24:00' : event.endTime;
+    const previousDay = Date.parse(date) - Date.parse(event.startDate) === 86400000;
+    return `00:00–${end} · ${previousDay ? 'vom Vortag' : 'Fortsetzung'}`;
+  }
+  if (isOvernightEvent(event)) return `${event.startTime}–${event.endTime} (morgen)`;
+  return `${event.startTime}–${event.endTime}${days ? ` (+${days} ${days === 1 ? 'Tag' : 'Tage'})` : ''}`;
+}
+
 export function hourScale(heights) {
   if (heights.length !== 24 || heights.some(value => !Number.isFinite(value) || value <= 0)) throw new Error('Ungültiges Stundenraster.');
   let total = 0;

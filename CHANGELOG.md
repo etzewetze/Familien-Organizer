@@ -1,5 +1,16 @@
 # Änderungsübersicht
 
+## 0.8.3 · 2026-10-20
+
+Übersichtlicher Familienalltag und einfache Aufgaben für Kinder
+
+- **Heute** zeigt Aufgaben, heutige Termine, farbige Personenkarten mit eigenem Fortschritt, Punkte und den Abstand zur günstigsten Belohnung. Die Wochenübersicht ist aufklappbar. Der Aufgabenfilter der Planungsansicht verändert die Tagesübersicht nicht.
+- Aufgabennamen, Bild/Emoji und Punkte sind dauerhaft sichtbar. Ein Tipp erledigt die Aufgabe; ein späterer Tipp öffnet sie wieder. Schnelle Doppeltipps und parallele Anfragen lösen keine zweite Buchung aus. Tastaturbedienung funktioniert mit einer Aktivierung. Bei einem Schreibfehler wird keine Erledigung vorgetäuscht.
+- Jede Person hat einen eigenen Fortschrittsbalken. Kinder stehen in der Aufgabenansicht zuerst; gemeinsame Aufgaben stehen unter **Gemeinsam**. Der sichtbare Stift öffnet Optionen, der separate Griff verschiebt offene Aufgaben. Vorlagen, Nummernsuche, Zuordnung und Layoutauswahl bleiben verfügbar.
+- Nachtschichten mit Ende am nächsten Tag vor der Startuhrzeit erscheinen in Wochenübersicht, Monat, Jahr, Liste, Tagesinfos und Heute nur am Starttag. **22:00–06:00 (morgen)** zeigt das Ende an. Aufeinanderfolgende Schichten werden so nicht doppelt gezählt. Im Stundenraster bleiben die echten Fortsetzungen sichtbar, mit **00:00–06:00 · vom Vortag** gekennzeichnet. Ein Ende genau um Mitternacht erzeugt kein leeres Folgetagsereignis; ganztägige und längere mehrtägige Termine bleiben sichtbar.
+- Der Kalender startet mit der einfachen Ansicht **Woche**. Das bisherige Stundenraster steht unter **Uhrzeiten** zur Verfügung. Kalenderdaten- und Stundenplanschalter sind aufklappbar; der Import bleibt dort und in den Einstellungen erreichbar.
+- Das Menü zeigt die sechs Alltagsbereiche mit Bildsymbolen; Geburtstage, Stundenpläne, Notizen und Bilderrahmen stehen unter **Mehr entdecken**. Bestehende Farben, Familiendaten, Punkte und Aufgaben bleiben erhalten; kein Datenbankschemawechsel.
+
 ## 0.8.2 · 2026-10-16
 
 Termine duplizieren und Einkaufsmodus (LXC-Version)

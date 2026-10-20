@@ -7,7 +7,7 @@ import vm from 'node:vm';
 import { Store } from '../src/store.mjs';
 import { seed } from '../src/seed.mjs';
 import { birthdaysOnDate, nextBirthday } from '../public/birthdays.js';
-import { eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale } from '../public/planner.js';
+import { eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, eventOnDate, eventTimeLabel } from '../public/planner.js';
 import { appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties } from '../public/appearance.js';
 import { VERSION } from '../public/releases.js';
 import { emojis, emojiCategories, findEmojis, isEmoji } from '../public/symbols.js';
@@ -30,7 +30,7 @@ function fixture(t, preferences = {}) {
     document: { querySelector: s => element(s), querySelectorAll: () => [], createElement: s => element(s), addEventListener(name, handler) { const list = listeners.get(name) || []; list.push(handler); listeners.set(name, list); }, documentElement: { style: { setProperty: (key, value) => styleValues.set(key, value) } }, activeElement: null },
     location: { hash: '#home' }, localStorage: { getItem: key => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) }, innerWidth: 1440, innerHeight: 900,
     addEventListener() {}, setInterval() {}, setTimeout() {}, clearInterval() {},
-    Intl, Date, console, URL, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties, initialState: store.state(),
+    Intl, Date, console, URL, birthdaysOnDate, nextBirthday, eventMembers, layoutTimedEvents, mealSlots, parsePlannerDrag, timeScale, hourScale, eventOnDate, eventTimeLabel, appearanceDefaults, appearanceFor, eventProperties, calendarColumns, isImageFile, themeProperties, initialState: store.state(),
     calendarCategories, calendarOptionDefaults, isDayOffCategory, germanStates, planCaption, calendarEntriesOnDate, schoolDays, periodCounts, defaultPeriods, scheduleWindows, yearMonths, matchTaskTemplates, navigationOrder, structuredClone, crypto, clearTimeout, requestAnimationFrame() {},
     VERSION, emojis, emojiCategories, findEmojis, isEmoji, weatherCode, weatherValue, weatherTime, rainOutlook, deviceConfig, idleAction,
     FormData: class { constructor(form) { this.fields = form.fields; } get(key) { return this.fields[key] ?? null; } getAll(key) { return [].concat(this.fields[key] || []); } *[Symbol.iterator]() { for (const [key, value] of Object.entries(this.fields)) for (const item of [].concat(value)) yield [key, item]; } },
@@ -119,7 +119,7 @@ test('Arbeitstage stehen als Tageskennzeichnung außerhalb der Termine und beach
   assert.equal(run('visibleEvents(cursor).length'),0);
   for (const mode of ['week','month','agenda','year']) {
     const html = run(`calendarMode='${mode}';calendarPage()`);
-    assert.ok(html.includes(mode === 'year' ? 'year-workday' : 'workday-marker')); assert.ok(html.includes('Nacht &lt;b&gt;')); assert.ok(html.includes('22:00–06:00 (+1 Tag)'));
+    assert.ok(html.includes(mode === 'year' ? 'year-workday' : 'workday-marker')); assert.ok(html.includes('Nacht &lt;b&gt;')); assert.ok(html.includes('22:00–06:00 (morgen)'));
     assert.ok(!html.includes('class="time-event ')); assert.ok(!html.includes('class="event-card '));
   }
   assert.ok(run('monthCell(cursor)').includes('data-edit="calendarEntries" data-id="shift"'));
@@ -273,9 +273,9 @@ test('Terminassistent führt über Personen und Details zum Datum; Tages-Plus ü
   run("editRecord('events','',{startDate:'2026-10-07',fixedDate:true});editing.index=2;renderEventWizard()");
   assert.equal(run('editing.steps.length'), 3); assert.ok(elements.get('#editor').innerHTML.includes('7. Oktober 2026')); assert.ok(!elements.get('#editor').innerHTML.includes('An welchem Tag?'));
 });
-test('Aufgaben zeigen alle Personen und Allgemein; drei Mahlzeiten sind Drop-Ziele und Belohnungen eigenständig', t => {
+test('Aufgaben zeigen alle Personen und Gemeinsam; drei Mahlzeiten sind Drop-Ziele und Belohnungen eigenständig', t => {
   const { run } = fixture(t), tasks = run('tasksPage()'), meals = run('mealsPage()');
-  for (const name of ['Anna', 'Ben', 'Mia', 'Leo', 'Allgemein']) assert.ok(tasks.includes(name));
+  for (const name of ['Anna', 'Ben', 'Mia', 'Leo', 'Gemeinsam']) assert.ok(tasks.includes(name));
   assert.ok(tasks.includes('data-task-drop=""')); assert.ok(tasks.includes('Punkte')); assert.ok(tasks.includes('draggable="true"'));
   for (const slot of ['breakfast', 'lunch', 'dinner']) assert.equal(meals.split(`data-meal-slot="${slot}"`).length - 1, 7);
   assert.ok(run('navigation()').includes('Belohnungen')); assert.ok(run('rewardsPage()').includes('Punkte vergeben'));
@@ -303,7 +303,7 @@ test('Profile zeigen private Bilder mit Initialen als Rückfall; zusätzliche Pe
   run("S.members[0].avatarImage='../master.key'"); assert.ok(!run('avatar(S.members[0].id)').includes('<img'));
   run("editRecord('members',S.members[0].id)"); assert.ok(run("editor.innerHTML").includes('member-image-input'));
 });
-test('Headerfilter steuert Aufgaben; Allgemein bleibt erreichbar und die Essensausrichtung wird gemerkt', async t => {
+test('Headerfilter steuert Aufgaben; Gemeinsam bleibt erreichbar und die Essensausrichtung wird gemerkt', async t => {
   const { run, listeners, stored } = fixture(t);
   const click = listeners.get('click')[0];
   run("route='tasks';render()");
@@ -311,7 +311,7 @@ test('Headerfilter steuert Aufgaben; Allgemein bleibt erreichbar und die Essensa
   await click({ target: { closest: () => target } });
   assert.ok(run('tasksPage()').includes('responsive-board')); assert.ok(run('headerMembers()').includes('data-task-drop=')); assert.equal(run('taskBoard'), target.dataset.filter);
   target.dataset = { taskBoard: '' }; await click({ target: { closest: () => target } }); assert.equal(run('taskBoard'), ''); assert.equal(run('filter'), '');
-  assert.ok(run('tasksPage()').includes('Allgemein'));
+  assert.ok(run('tasksPage()').includes('Gemeinsam'));
   run("route='meals';setMealLayout('vertical')"); assert.equal(stored.get('mealLayout'), 'vertical'); assert.ok(run('mealsPage()').includes('meal-plan vertical'));
   run("setMealLayout('horizontal')"); assert.ok(run('mealsPage()').includes('meal-plan horizontal')); assert.equal(stored.get('mealLayout'), 'horizontal');
 });
@@ -537,10 +537,10 @@ test('Vorlagen haben Nummern, private Bildsymbole und Bearbeitungsmodus; Zuweise
   assert.equal(requests[0].url, '/api/task-templates/template-one/assign'); const payload = JSON.parse(requests[0].options.body);
   assert.equal(payload._rev, 2); assert.equal(payload.requestId, 'fixture1234567890'); assert.equal(payload.memberId, run('S.members[0].id'));
 });
-test('Aufgabensymbol zeigt Titel beim ersten Tippen und erledigt / öffnet erst beim Doppeltippen', async t => {
-  const { run, context } = fixture(t), label = { hidden: true }, requests = [];
+test('Aufgabenkarten zeigen Titel und Punkte dauerhaft und lassen sich mit einem Tipp erledigen und wieder öffnen', async t => {
+  const { run, context } = fixture(t), requests = [];
   run("S.tasks[0].memberId=S.members[0].id;S.tasks[0].emoji='🧹'");
-  context.tile = { dataset: { taskTile: run('S.tasks[0].id'), date: run('cursor') }, parentElement: { querySelector: () => label } };
+  context.tile = { dataset: { taskTile: run('S.tasks[0].id'), date: run('cursor') } };
   context.fetch = async (url, options) => {
     if (url.endsWith('/complete')) {
       const payload = JSON.parse(options.body); requests.push(payload);
@@ -548,11 +548,13 @@ test('Aufgabensymbol zeigt Titel beim ersten Tippen und erledigt / öffnet erst 
     }
     return { ok: true, json: async () => url === '/api/state' ? context.initialState : {} };
   };
-  await run('tapTask(tile)'); assert.equal(label.hidden, false); assert.equal(requests.length, 0);
+  const before = run('assignedTaskTile(S.tasks[0],cursor)');
+  assert.ok(before.includes(run('S.tasks[0].title'))); assert.ok(before.includes('Punkte')); assert.ok(before.includes('Erledigt'));
+  assert.ok(!before.includes('Doppeltipp')); assert.ok(!before.includes('task-title-popover')); assert.ok(before.includes('data-action="task-options"'));
   await run('tapTask(tile)'); assert.equal(requests.length, 1); assert.equal(requests[0].done, true);
   assert.ok(run('assignedTaskTile(S.tasks[0],cursor)').includes('task-tile completed'));
-  await run('tapTask(tile)'); await run('tapTask(tile)'); assert.equal(requests.length, 2); assert.equal(requests[1].done, false);
-  run("S.tasks[0].emoji='';S.tasks[0].imageFile=''"); assert.ok(run('assignedTaskTile(S.tasks[0],cursor)').includes('task-text-icon'));
+  await run('tapTask(tile,true)'); assert.equal(requests.length, 2); assert.equal(requests[1].done, false);
+  run("S.tasks[0].emoji='';S.tasks[0].imageFile=''"); assert.ok(run('assignedTaskTile(S.tasks[0],cursor)').includes('task-emoji'));
 });
 test('Stunden- und Kitaplanformulare behalten Fächer beim Wechsel der Stundenzahl und zeigen Pausen', t => {
   const { run, elements } = fixture(t);
@@ -598,7 +600,7 @@ test('Gedrückthalten öffnet Entfernen, Bewegung bricht die Haltegeste ab und R
   down({ button: 0, pointerId: 1, clientX: 0, clientY: 0, target: { closest: () => tile } });
   move({ pointerId: 1, clientX: 6, clientY: 0 }); assert.equal(cancelled, 1); assert.equal(run('taskHold'), null);
   down({ button: 0, pointerId: 1, clientX: 0, clientY: 0, target: { closest: () => tile } }); pending();
-  assert.ok(elements.get('#editor').innerHTML.includes('Aus verteilter Liste entfernen')); assert.ok(run('suppressTaskClickUntil>Date.now()'));
+  assert.ok(elements.get('#editor').innerHTML.includes('Aufgabe entfernen')); assert.ok(run('suppressTaskClickUntil>Date.now()'));
   run('suppressTaskClickUntil=0'); let prevented = false;
   listeners.get('contextmenu')[0]({ target: { closest: () => tile }, preventDefault() { prevented = true; } }); assert.equal(prevented, true);
 });
@@ -659,4 +661,102 @@ test('Verspätete Ferien-Vorschau überschreibt keinen neuen Dialog', async t =>
   const pending = run("loadCalendarPreview({fields:{}},{state:'DE-BW',year:'2026',vacations:'on',holidays:'on',memberId:''})");
   run("editRecord('notes')"); resolve({ok:true,json:async () => ({token:'old',entries:[],warnings:[],source:'Alt'})}); await pending;
   assert.equal(run('editing.kind'),'notes'); assert.ok(elements.get('#editor').innerHTML.includes('record-form'));
+});
+
+test('Drei aufeinanderfolgende Nachtschichten erscheinen pro Tag einmal, auch als ICS- oder Google-Termin', t => {
+  const { run } = fixture(t);
+  run(`cursor='2026-10-20';S.serverDate=cursor;S.birthdays=[];S.events=[];
+    S.calendarEntries=[19,20,21].map(day=>({id:'night-'+day,category:'workday',title:'Nachtschicht',memberId:S.members[0].id,startDate:'2026-10-'+day,endDate:'2026-10-'+(day+1),startTime:'22:00',endTime:'06:00',allDay:false,enabled:true}));`);
+  assert.equal(run('visibleWorkdays(cursor).length'), 1);
+  assert.equal(run('visibleWorkdays(cursor)[0].id'), 'night-20');
+  const workdayCell = run('monthCell(cursor)');
+  assert.equal((workdayCell.match(/data-id="night-20"/g) || []).length, 1);
+  assert.ok(!workdayCell.includes('night-19')); assert.ok(workdayCell.includes('(morgen)'));
+  run("S.events=S.calendarEntries.map(entry=>({...entry,googleAccountId:'google',calendarEntryId:undefined}));S.calendarEntries=[]");
+  assert.equal(run('visibleEvents(cursor).length'), 1);
+  assert.equal(run('visibleEvents(cursor,true).length'), 2);
+  const cell = run('monthCell(cursor)');
+  assert.equal((cell.match(/data-id="night-20"/g) || []).length, 1); assert.ok(!cell.includes('night-19'));
+  const timeline = run('timeWeek(cursor)');
+  assert.ok(timeline.includes('00:00–06:00 · vom Vortag')); assert.ok(timeline.includes('event-continuation'));
+  assert.ok(timeline.includes('22:00–06:00 (morgen)'));
+  run("S.calendarEntries=S.events.map(entry=>({...entry,category:'event'}));S.events=[]");
+  assert.equal(run('visibleEvents(cursor).length'), 1);
+  assert.equal(run('visibleEvents(cursor)[0].id'), 'night-20');
+  assert.equal(run('visibleEvents(cursor,true).length'), 2);
+  run('filter=S.members[1].id'); assert.equal(run('visibleEvents(cursor).length'), 0);
+});
+
+test('Heute zeigt aktuellen persönlichen Fortschritt, gemeinsame Aufgaben und keine alten Datums- oder Aufgabenfilter', t => {
+  const { run } = fixture(t);
+  run(`S.serverDate='2026-10-20';cursor='2026-10-27';taskMode='routines';filter=S.members[2].id;
+    S.tasks=[{id:'one',title:'Ranzen <b>',points:5,repeat:'daily',startDate:S.serverDate,memberId:filter},
+      {id:'two',title:'Bücher',points:5,repeat:'none',startDate:S.serverDate,memberId:filter},
+      {id:'shared',title:'Gemeinsam helfen',points:0,repeat:'daily',startDate:S.serverDate,memberId:''},
+      {id:'other',title:'Nur für andere',points:0,repeat:'daily',startDate:S.serverDate,memberId:S.members[0].id},
+      {id:'future',title:'Erst morgen',points:0,repeat:'daily',startDate:'2026-10-21',memberId:filter}];
+    S.completions=[{task_id:'one',day:S.serverDate}];`);
+  assert.equal(run('JSON.stringify(taskProgress(visibleTasks(S.serverDate),S.serverDate))'), '{"total":3,"done":1,"percent":33}');
+  const html = run('homePage()');
+  assert.ok(html.includes('Bücher')); assert.ok(html.includes('Gemeinsam helfen'));
+  assert.ok(!html.includes('Nur für andere')); assert.ok(!html.includes('Erst morgen'));
+  assert.ok(html.includes('Ranzen &lt;b&gt;')); assert.ok(!html.includes('Ranzen <b>'));
+  assert.ok(html.includes('data-task-tile="one" data-date="2026-10-20"'));
+  assert.ok(!html.includes('data-date="2026-10-27"'));
+  const personal = run('memberProgress(S.members[2],S.serverDate)');
+  assert.ok(personal.includes('1 von 2')); assert.ok(personal.includes('max="2"')); assert.ok(!personal.includes('1 von 3'));
+  run('S.tasks=[]'); const empty = run('homePage()');
+  assert.ok(!empty.includes('NaN')); assert.ok(!empty.includes('max="0"')); assert.ok(empty.includes('Heute ist noch Platz'));
+});
+
+test('Ein schneller Doppeltipp oder paralleler Tipp bucht nur einmal; Tastatur kann die Aufgabe wieder öffnen', async t => {
+  const { run, context, listeners } = fixture(t), requests = [];
+  run('S.tasks[0].memberId=S.members[0].id');
+  context.tile = { dataset: { taskTile: run('S.tasks[0].id'), date: run('cursor') } };
+  let release;
+  context.fetch = async (url, options) => {
+    if (url.endsWith('/complete')) {
+      const payload = JSON.parse(options.body); requests.push(payload);
+      if (requests.length === 1) await new Promise(resolve => { release = resolve; });
+      context.initialState.completions = payload.done ? [{ task_id: context.tile.dataset.taskTile, day: run("S.tasks[0].repeat==='none'?'once':cursor") }] : [];
+    }
+    return { ok: true, json: async () => url === '/api/state' ? context.initialState : {} };
+  };
+  const first = run('tapTask(tile)'); await run('tapTask(tile)');
+  assert.equal(requests.length, 1); assert.equal(context.tile.disabled, true);
+  release(); await first;
+  const click = listeners.get('click')[0];
+  await click({ detail: 1, target: { closest: () => ({ ...context.tile }) } });
+  assert.equal(requests.length, 1);
+  await click({ detail: 2, target: { closest: () => context.tile } });
+  assert.equal(requests.length, 1); assert.equal(run('busy'), false);
+  await click({ detail: 0, target: { closest: () => context.tile } });
+  assert.equal(requests.length, 2); assert.equal(requests[1].done, false);
+});
+
+test('Fehlgeschlagener oder offline ausgeführter Aufgabentipp verändert keine Erledigung; Optionen nutzen den angezeigten Tag', async t => {
+  const { run, context, elements, listeners } = fixture(t); let calls = 0;
+  run('S.tasks[0].memberId=S.members[0].id');
+  context.tile = { dataset: { taskTile: run('S.tasks[0].id'), date: '2026-10-20' } };
+  context.fetch = async () => { calls++; throw new Error('Keine Verbindung'); };
+  await run('tapTask(tile)');
+  assert.equal(run('S.completions.length'), 0); assert.equal(run('busy'), false); assert.equal(context.tile.disabled, false);
+  run('online=false'); await run('tapTask(tile)'); assert.equal(calls, 1);
+  run("online=true;cursor='2026-10-27'");
+  await listeners.get('click')[0]({ target: { closest: () => ({ dataset: { action: 'task-options', id: context.tile.dataset.taskTile, date: '2026-10-20' } }) } });
+  assert.ok(elements.get('#editor').innerHTML.includes('data-date="2026-10-20"'));
+});
+
+test('Die einfache Woche behält Stundenpläne; geöffnete Planung und Unterkalender-Einführung bleiben sichtbar', t => {
+  const { run, context } = fixture(t);
+  run(`cursor='2026-10-20';S.serverDate=cursor;S.schedules=[{id:'plan',memberId:S.members[2].id,title:'Mias Schule',type:'school',showInCalendar:true,periodCount:6,periods:defaultPeriods(),entries:[{weekday:2,period:1,title:'Mathe'}]}]`);
+  const simple = run("calendarMode='days';calendarPage()");
+  assert.ok(simple.includes('schedule-day-label')); assert.ok(simple.includes('Mias Schule') || simple.includes('Mia'));
+  assert.ok(!simple.includes('class="time-scroll"'));
+  context.document.querySelectorAll = selector => selector === 'details[data-disclosure]' ? [{ dataset: { disclosure: 'calendar-options' }, open: true }, { dataset: { disclosure: 'task-management' }, open: true }] : [];
+  run('render()');
+  assert.ok(run('calendarPage()').includes('data-disclosure="calendar-options" open'));
+  assert.ok(run('tasksPage()').includes('data-disclosure="task-management" open'));
+  run("openDisclosures.clear();startScheduleGuide('plan')");
+  assert.ok(run('calendarPage()').includes('data-disclosure="calendar-options" open'));
 });
